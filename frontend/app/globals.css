@@ -1,0 +1,947 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@plugin "@tailwindcss/typography";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+}
+
+/* ===== 淺色主題 - 清晰對比風格 ===== */
+:root {
+  --radius: 0.625rem;
+  /* 主色調：乾淨的淺灰背景 */
+  --background: oklch(0.94 0.008 250);
+  --foreground: oklch(0.18 0.02 260);
+  /* 卡片：純白，明顯區分 */
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.02 260);
+  /* 彈出層 */
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0.02 260);
+  /* 主要色：深邃靛藍 */
+  --primary: oklch(0.45 0.2 265);
+  --primary-foreground: oklch(0.98 0 0);
+  /* 次要色：淡灰藍 */
+  --secondary: oklch(0.92 0.015 260);
+  --secondary-foreground: oklch(0.25 0.02 260);
+  /* 柔和區域 */
+  --muted: oklch(0.94 0.01 250);
+  --muted-foreground: oklch(0.45 0.02 260);
+  /* 強調色：淡紫羅蘭 */
+  --accent: oklch(0.92 0.04 280);
+  --accent-foreground: oklch(0.3 0.12 280);
+  /* 危險色 */
+  --destructive: oklch(0.55 0.22 25);
+  /* 邊框與輸入框 - 更明顯 */
+  --border: oklch(0.85 0.015 260);
+  --input: oklch(0.88 0.015 260);
+  --ring: oklch(0.55 0.18 265);
+  /* 圖表色彩 - 活潑明亮 */
+  --chart-1: oklch(0.55 0.22 265);
+  --chart-2: oklch(0.6 0.18 175);
+  --chart-3: oklch(0.65 0.2 85);
+  --chart-4: oklch(0.55 0.24 320);
+  --chart-5: oklch(0.6 0.22 25);
+  /* 側邊欄 - 純白突出 */
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.2 0.02 260);
+  --sidebar-primary: oklch(0.45 0.2 265);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --sidebar-accent: oklch(0.94 0.03 265);
+  --sidebar-accent-foreground: oklch(0.3 0.12 265);
+  --sidebar-border: oklch(0.88 0.015 260);
+  --sidebar-ring: oklch(0.55 0.18 265);
+}
+
+/* ===== 深色主題 - 專業深邃風格 ===== */
+.dark {
+  /* 主色調：深邃灰黑 */
+  --background: oklch(0.13 0.015 265);
+  --foreground: oklch(0.95 0.01 80);
+  /* 卡片：稍亮的深灰 */
+  --card: oklch(0.18 0.015 265);
+  --card-foreground: oklch(0.95 0.01 80);
+  /* 彈出層 */
+  --popover: oklch(0.18 0.015 265);
+  --popover-foreground: oklch(0.95 0.01 80);
+  /* 主要色：明亮靛藍 */
+  --primary: oklch(0.7 0.18 265);
+  --primary-foreground: oklch(0.15 0.015 265);
+  /* 次要色：暗灰紫 */
+  --secondary: oklch(0.25 0.02 265);
+  --secondary-foreground: oklch(0.9 0.01 80);
+  /* 柔和區域 */
+  --muted: oklch(0.22 0.015 265);
+  --muted-foreground: oklch(0.65 0.01 80);
+  /* 強調色 */
+  --accent: oklch(0.28 0.03 280);
+  --accent-foreground: oklch(0.9 0.01 80);
+  /* 危險色 */
+  --destructive: oklch(0.65 0.2 22);
+  /* 邊框與輸入框 */
+  --border: oklch(0.28 0.015 265);
+  --input: oklch(0.25 0.015 265);
+  --ring: oklch(0.55 0.15 265);
+  /* 圖表色彩 */
+  --chart-1: oklch(0.65 0.2 265);
+  --chart-2: oklch(0.7 0.17 162);
+  --chart-3: oklch(0.75 0.18 70);
+  --chart-4: oklch(0.65 0.22 305);
+  --chart-5: oklch(0.68 0.2 20);
+  /* 側邊欄 */
+  --sidebar: oklch(0.16 0.015 265);
+  --sidebar-foreground: oklch(0.92 0.01 80);
+  --sidebar-primary: oklch(0.65 0.2 265);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --sidebar-accent: oklch(0.25 0.02 280);
+  --sidebar-accent-foreground: oklch(0.9 0.01 80);
+  --sidebar-border: oklch(0.25 0.015 265);
+  --sidebar-ring: oklch(0.5 0.12 265);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* ===== 主題切換過渡動畫 ===== */
+html {
+  transition: color-scheme 0.3s ease;
+}
+
+html:not(.no-transition),
+html:not(.no-transition) * {
+  transition: 
+    background-color 0.3s ease,
+    border-color 0.3s ease,
+    color 0.15s ease,
+    box-shadow 0.3s ease;
+}
+
+/* ===== 淺色主題 - 全局樣式覆蓋 ===== */
+/* 讓硬編碼的深色樣式在淺色模式下更易讀 */
+
+:root:not(.dark) {
+  /* ===== 所有深色背景強制轉換為淺色 ===== */
+  
+  /* 黑色背景 → 純白/淺灰 */
+  .bg-black { background-color: #ffffff !important; }
+  .bg-black\/50 { background-color: rgba(255, 255, 255, 0.95) !important; }
+  .bg-black\/80 { background-color: rgba(255, 255, 255, 0.98) !important; }
+  
+  /* slate-950 (最深) → 頁面底色淺灰 */
+  .bg-slate-950 { background-color: #e8eaed !important; }
+  
+  /* slate-900 → 區塊底色 */
+  .bg-slate-900 { background-color: #f1f3f5 !important; }
+  .bg-slate-900\/50 { background-color: rgba(241, 243, 245, 0.9) !important; }
+  .bg-slate-900\/80 { background-color: rgba(241, 243, 245, 0.95) !important; }
+  .bg-slate-900\/95 { background-color: rgba(248, 249, 250, 0.98) !important; }
+  
+  /* slate-800 → 卡片純白 */
+  .bg-slate-800 { background-color: #ffffff !important; }
+  .bg-slate-800\/30 { background-color: rgba(255, 255, 255, 0.85) !important; }
+  .bg-slate-800\/50 { background-color: rgba(255, 255, 255, 0.92) !important; }
+  .bg-slate-800\/60 { background-color: rgba(255, 255, 255, 0.95) !important; }
+  
+  /* slate-700 → 輕微灰底 */
+  .bg-slate-700 { background-color: #f8f9fa !important; }
+  .bg-slate-700\/30 { background-color: rgba(248, 249, 250, 0.7) !important; }
+  .bg-slate-700\/40 { background-color: rgba(248, 249, 250, 0.8) !important; }
+  .bg-slate-700\/50 { background-color: rgba(248, 249, 250, 0.85) !important; }
+  
+  /* slate-600 → 淺灰 */
+  .bg-slate-600 { background-color: #f1f3f5 !important; }
+  .bg-slate-600\/50 { background-color: rgba(241, 243, 245, 0.8) !important; }
+  .bg-slate-600\/30 { background-color: rgba(241, 243, 245, 0.6) !important; }
+  
+  /* ===== 邊框 - 清晰可見（使用 HEX 確保兼容）===== */
+  .border-slate-800 { border-color: #d1d5db !important; }
+  .border-slate-800\/50 { border-color: rgba(209, 213, 219, 0.8) !important; }
+  .border-slate-700 { border-color: #c4c9cf !important; }
+  .border-slate-700\/30 { border-color: rgba(196, 201, 207, 0.6) !important; }
+  .border-slate-700\/50 { border-color: rgba(196, 201, 207, 0.75) !important; }
+  .border-slate-600 { border-color: #a8aeb5 !important; }
+  .border-slate-600\/30 { border-color: rgba(168, 174, 181, 0.6) !important; }
+  .border-slate-600\/50 { border-color: rgba(168, 174, 181, 0.75) !important; }
+  
+  /* ===== 文字顏色 - 深色高對比 ===== */
+  .text-white { color: #1a1a2e !important; }
+  .text-slate-200 { color: #2d2d44 !important; }
+  .text-slate-300 { color: #3d3d5c !important; }
+  .text-slate-400 { color: #4a4a6a !important; }
+  .text-slate-500 { color: #5c5c7a !important; }
+  .text-slate-600 { color: #4a4a6a !important; }
+  
+  /* ===== 漸變背景 - 轉為淺色 ===== */
+  .from-slate-900 { --tw-gradient-from: #ffffff !important; }
+  .to-slate-900 { --tw-gradient-to: #f8f9fa !important; }
+  .via-slate-900 { --tw-gradient-via: #fafbfc !important; }
+  .from-slate-900\/50 { --tw-gradient-from: rgba(255, 255, 255, 0.95) !important; }
+  .via-slate-900\/50 { --tw-gradient-via: rgba(255, 255, 255, 0.9) !important; }
+  .from-slate-950 { --tw-gradient-from: #f8f9fa !important; }
+  .to-slate-950 { --tw-gradient-to: #f1f3f5 !important; }
+  .via-slate-950 { --tw-gradient-via: #f5f6f7 !important; }
+  .from-slate-800 { --tw-gradient-from: #ffffff !important; }
+  .to-slate-800 { --tw-gradient-to: #fafbfc !important; }
+  .from-slate-800\/80 { --tw-gradient-from: rgba(255, 255, 255, 0.95) !important; }
+  .to-slate-900\/80 { --tw-gradient-to: rgba(248, 249, 250, 0.95) !important; }
+  
+  /* ===== Hover 狀態 ===== */
+  .hover\:bg-slate-800:hover { background-color: #f5f6f7 !important; }
+  .hover\:bg-slate-700:hover { background-color: #eef0f2 !important; }
+  .hover\:bg-slate-700\/30:hover { background-color: rgba(238, 240, 242, 0.7) !important; }
+  .hover\:bg-slate-700\/50:hover { background-color: rgba(238, 240, 242, 0.8) !important; }
+  .hover\:bg-slate-600\/50:hover { background-color: rgba(230, 232, 235, 0.8) !important; }
+  .hover\:text-white:hover { color: #0f0f1a !important; }
+  .hover\:text-slate-300:hover { color: #2d2d44 !important; }
+  .hover\:border-slate-600:hover { border-color: #8a9099 !important; }
+  .hover\:border-slate-500:hover { border-color: #737982 !important; }
+  
+  /* ===== 陰影 - 明顯的卡片分離效果 ===== */
+  .shadow-2xl { 
+    box-shadow: 
+      0 25px 50px -12px rgba(50, 50, 80, 0.18),
+      0 0 0 1px rgba(180, 185, 195, 0.4) !important; 
+  }
+  .shadow-xl { 
+    box-shadow: 
+      0 20px 25px -5px rgba(50, 50, 80, 0.1),
+      0 8px 10px -6px rgba(50, 50, 80, 0.08),
+      0 0 0 1px rgba(190, 195, 205, 0.35) !important; 
+  }
+  .shadow-lg { 
+    box-shadow: 
+      0 10px 15px -3px rgba(50, 50, 80, 0.08),
+      0 4px 6px -4px rgba(50, 50, 80, 0.06),
+      0 0 0 1px rgba(200, 205, 215, 0.3) !important; 
+  }
+  
+  /* ===== 卡片漸變背景 - 白色漸變 ===== */
+  .bg-gradient-to-br.from-slate-800.to-slate-900 {
+    background: linear-gradient(to bottom right, #ffffff, #f8f9fa) !important;
+    box-shadow: 0 4px 12px rgba(50, 50, 80, 0.08), 0 0 0 1px rgba(190, 195, 205, 0.35) !important;
+  }
+  
+  .bg-gradient-to-b.from-slate-900 {
+    background: linear-gradient(to bottom, #f1f3f5, #e8eaed) !important;
+  }
+  
+  .bg-gradient-to-b.from-slate-950 {
+    background: linear-gradient(to bottom, #e8eaed, #f1f3f5) !important;
+  }
+  
+  /* ===== 圖標容器背景 - 明亮柔和色彩 ===== */
+  .bg-amber-500\/10 { background-color: rgba(251, 191, 36, 0.15) !important; }
+  .bg-amber-500\/20 { background-color: rgba(251, 191, 36, 0.25) !important; }
+  .bg-purple-500\/10 { background-color: rgba(168, 85, 247, 0.12) !important; }
+  .bg-purple-500\/20 { background-color: rgba(168, 85, 247, 0.2) !important; }
+  .bg-blue-500\/10 { background-color: rgba(59, 130, 246, 0.12) !important; }
+  .bg-blue-500\/20 { background-color: rgba(59, 130, 246, 0.2) !important; }
+  .bg-emerald-500\/10 { background-color: rgba(16, 185, 129, 0.12) !important; }
+  .bg-emerald-500\/20 { background-color: rgba(16, 185, 129, 0.2) !important; }
+  .bg-pink-500\/10 { background-color: rgba(236, 72, 153, 0.12) !important; }
+  .bg-pink-500\/20 { background-color: rgba(236, 72, 153, 0.2) !important; }
+  .bg-cyan-500\/10 { background-color: rgba(6, 182, 212, 0.12) !important; }
+  .bg-cyan-500\/20 { background-color: rgba(6, 182, 212, 0.2) !important; }
+  .bg-rose-500\/10 { background-color: rgba(244, 63, 94, 0.12) !important; }
+  .bg-rose-500\/20 { background-color: rgba(244, 63, 94, 0.2) !important; }
+  .bg-indigo-500\/10 { background-color: rgba(99, 102, 241, 0.12) !important; }
+  .bg-indigo-500\/20 { background-color: rgba(99, 102, 241, 0.2) !important; }
+  .bg-violet-500\/10 { background-color: rgba(139, 92, 246, 0.12) !important; }
+  .bg-violet-500\/20 { background-color: rgba(139, 92, 246, 0.2) !important; }
+  .bg-teal-500\/10 { background-color: rgba(20, 184, 166, 0.12) !important; }
+  .bg-teal-500\/20 { background-color: rgba(20, 184, 166, 0.2) !important; }
+  .bg-orange-500\/10 { background-color: rgba(249, 115, 22, 0.12) !important; }
+  .bg-orange-500\/20 { background-color: rgba(249, 115, 22, 0.2) !important; }
+  .bg-red-500\/10 { background-color: rgba(239, 68, 68, 0.12) !important; }
+  .bg-red-500\/20 { background-color: rgba(239, 68, 68, 0.2) !important; }
+  .bg-amber-900\/20 { background-color: rgba(251, 191, 36, 0.15) !important; }
+  .bg-orange-900\/20 { background-color: rgba(249, 115, 22, 0.15) !important; }
+  
+  /* ===== 快捷卡片漸變 ===== */
+  .bg-gradient-to-r.from-pink-500\/10 { --tw-gradient-from: oklch(0.96 0.08 350 / 0.5) !important; }
+  .bg-gradient-to-r.from-blue-500\/10 { --tw-gradient-from: oklch(0.96 0.08 260 / 0.5) !important; }
+  .bg-gradient-to-r.from-purple-500\/10 { --tw-gradient-from: oklch(0.96 0.08 300 / 0.5) !important; }
+  .bg-gradient-to-r.from-emerald-500\/10 { --tw-gradient-from: oklch(0.96 0.08 165 / 0.5) !important; }
+  .bg-gradient-to-r.from-amber-500\/10 { --tw-gradient-from: oklch(0.96 0.08 85 / 0.5) !important; }
+  .bg-gradient-to-r.from-cyan-500\/10 { --tw-gradient-from: oklch(0.96 0.08 200 / 0.5) !important; }
+  .bg-gradient-to-r.from-cyan-600\/20 { --tw-gradient-from: oklch(0.94 0.1 200 / 0.6) !important; }
+  .bg-gradient-to-r.from-pink-600\/20 { --tw-gradient-from: oklch(0.94 0.1 350 / 0.6) !important; }
+  
+  .to-rose-500\/10 { --tw-gradient-to: oklch(0.96 0.08 15 / 0.5) !important; }
+  .to-cyan-500\/10 { --tw-gradient-to: oklch(0.96 0.08 200 / 0.5) !important; }
+  .to-indigo-500\/10 { --tw-gradient-to: oklch(0.96 0.08 270 / 0.5) !important; }
+  .to-teal-500\/10 { --tw-gradient-to: oklch(0.96 0.08 180 / 0.5) !important; }
+  .to-orange-500\/10 { --tw-gradient-to: oklch(0.96 0.08 55 / 0.5) !important; }
+  .to-blue-600\/20 { --tw-gradient-to: oklch(0.94 0.1 260 / 0.6) !important; }
+  .to-violet-600\/20 { --tw-gradient-to: oklch(0.94 0.1 290 / 0.6) !important; }
+  
+  /* ===== 邊框強調 ===== */
+  .border-pink-500\/20 { border-color: oklch(0.65 0.18 350 / 0.5) !important; }
+  .border-pink-500\/30 { border-color: oklch(0.6 0.2 350 / 0.6) !important; }
+  .border-blue-500\/20 { border-color: oklch(0.65 0.18 260 / 0.5) !important; }
+  .border-blue-500\/40 { border-color: oklch(0.55 0.22 260 / 0.7) !important; }
+  .border-purple-500\/20 { border-color: oklch(0.65 0.18 300 / 0.5) !important; }
+  .border-purple-500\/40 { border-color: oklch(0.55 0.22 300 / 0.7) !important; }
+  .border-emerald-500\/20 { border-color: oklch(0.65 0.18 165 / 0.5) !important; }
+  .border-emerald-500\/40 { border-color: oklch(0.55 0.22 165 / 0.7) !important; }
+  .border-amber-500\/20 { border-color: oklch(0.65 0.18 85 / 0.5) !important; }
+  .border-amber-500\/40 { border-color: oklch(0.55 0.22 85 / 0.7) !important; }
+  .border-cyan-500\/20 { border-color: oklch(0.65 0.18 200 / 0.5) !important; }
+  .border-cyan-500\/50 { border-color: oklch(0.55 0.22 200 / 0.7) !important; }
+  
+  /* ===== 特殊組件調整 ===== */
+  /* 圓角容器添加陰影邊框 */
+  [class*="rounded-"][class*="bg-slate-800"],
+  [class*="rounded-"][class*="bg-slate-900"] {
+    box-shadow: 0 2px 6px rgba(50, 50, 80, 0.06), 0 0 0 1px rgba(190, 195, 205, 0.3) !important;
+  }
+  
+  /* 輸入框樣式 */
+  input, textarea, select {
+    background-color: #ffffff !important;
+    border-color: #c4c9cf !important;
+    color: #1a1a2e !important;
+  }
+  
+  input::placeholder, textarea::placeholder {
+    color: #6b7280 !important;
+  }
+  
+  input:focus, textarea:focus, select:focus {
+    border-color: #6366f1 !important;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2) !important;
+  }
+  
+  /* 按鈕 outline 變體 */
+  .border-slate-700[class*="hover:bg-slate-800"] {
+    border-color: #b8bcc4 !important;
+  }
+  
+  .border-slate-700[class*="hover:bg-slate-800"]:hover {
+    background-color: #f5f6f7 !important;
+  }
+  
+  /* ===== 額外深色背景覆蓋 ===== */
+  .bg-indigo-600\/10 { background-color: rgba(99, 102, 241, 0.12) !important; }
+  .bg-indigo-600\/20 { background-color: rgba(99, 102, 241, 0.2) !important; }
+  .bg-pink-600\/10 { background-color: rgba(219, 39, 119, 0.12) !important; }
+  .bg-pink-600\/20 { background-color: rgba(219, 39, 119, 0.2) !important; }
+  .bg-cyan-600\/10 { background-color: rgba(8, 145, 178, 0.12) !important; }
+  .bg-cyan-600\/20 { background-color: rgba(8, 145, 178, 0.2) !important; }
+  .bg-cyan-600\/30 { background-color: rgba(8, 145, 178, 0.25) !important; }
+  .bg-rose-600\/10 { background-color: rgba(225, 29, 72, 0.12) !important; }
+  .bg-violet-600\/10 { background-color: rgba(124, 58, 237, 0.12) !important; }
+  .bg-violet-600\/20 { background-color: rgba(124, 58, 237, 0.2) !important; }
+  
+  /* 完成狀態背景 */
+  .bg-emerald-500\/20 { background-color: rgba(16, 185, 129, 0.2) !important; }
+  .bg-emerald-600\/20 { background-color: rgba(5, 150, 105, 0.2) !important; }
+  
+  /* 警告/錯誤狀態 */
+  .bg-red-500\/20 { background-color: rgba(239, 68, 68, 0.15) !important; }
+  .bg-red-600\/10 { background-color: rgba(220, 38, 38, 0.12) !important; }
+  .bg-rose-500\/10 { background-color: rgba(244, 63, 94, 0.12) !important; }
+  .bg-rose-500\/20 { background-color: rgba(244, 63, 94, 0.18) !important; }
+  
+  /* 彈窗/對話框背景 */
+  .bg-black\/80 { background-color: rgba(255, 255, 255, 0.95) !important; }
+  [class*="backdrop-blur"] {
+    background-color: rgba(255, 255, 255, 0.9) !important;
+  }
+  
+  /* 確保所有 pre 和 code 區塊可讀 */
+  pre {
+    background-color: #f8f9fa !important;
+    border: 1px solid #d1d5db !important;
+    color: #1a1a2e !important;
+  }
+  
+  code {
+    background-color: #f1f3f5 !important;
+    color: #b45309 !important;
+  }
+  
+  /* 載入動畫背景 */
+  .animate-pulse {
+    background-color: #e8eaed !important;
+  }
+  
+  /* ===== 彈窗/對話框覆蓋 ===== */
+  .bg-black\/70 { background-color: rgba(255, 255, 255, 0.92) !important; }
+  .bg-black\/60 { background-color: rgba(255, 255, 255, 0.9) !important; }
+  .bg-black\/50 { background-color: rgba(255, 255, 255, 0.88) !important; }
+  .bg-black\/40 { background-color: rgba(255, 255, 255, 0.85) !important; }
+  .bg-black\/30 { background-color: rgba(248, 249, 250, 0.85) !important; }
+  .bg-black\/20 { background-color: rgba(248, 249, 250, 0.75) !important; }
+  .bg-black\/10 { background-color: rgba(248, 249, 250, 0.6) !important; }
+
+  /* ===== slate-800/80 類型覆蓋 ===== */
+  .bg-slate-800\/80 { background-color: rgba(255, 255, 255, 0.95) !important; }
+  .bg-slate-800\/90 { background-color: rgba(255, 255, 255, 0.97) !important; }
+  .bg-slate-800\/40 { background-color: rgba(255, 255, 255, 0.8) !important; }
+  .bg-slate-800\/20 { background-color: rgba(255, 255, 255, 0.7) !important; }
+  
+  /* ===== slate-900/70 類型覆蓋 ===== */
+  .bg-slate-900\/70 { background-color: rgba(241, 243, 245, 0.92) !important; }
+  .bg-slate-900\/60 { background-color: rgba(241, 243, 245, 0.88) !important; }
+  .bg-slate-900\/40 { background-color: rgba(241, 243, 245, 0.8) !important; }
+  .bg-slate-900\/30 { background-color: rgba(241, 243, 245, 0.7) !important; }
+  .bg-slate-900\/20 { background-color: rgba(241, 243, 245, 0.6) !important; }
+
+  /* ===== 漸變 from-slate-700/600 類型覆蓋 ===== */
+  .from-slate-700 { --tw-gradient-from: #f8f9fa !important; }
+  .to-slate-700 { --tw-gradient-to: #f8f9fa !important; }
+  .via-slate-700 { --tw-gradient-via: #f8f9fa !important; }
+  .from-slate-600 { --tw-gradient-from: #f1f3f5 !important; }
+  .to-slate-600 { --tw-gradient-to: #f1f3f5 !important; }
+  .via-slate-600 { --tw-gradient-via: #f1f3f5 !important; }
+  .from-slate-700\/50 { --tw-gradient-from: rgba(248, 249, 250, 0.8) !important; }
+  .to-slate-700\/50 { --tw-gradient-to: rgba(248, 249, 250, 0.8) !important; }
+  .from-slate-600\/50 { --tw-gradient-from: rgba(241, 243, 245, 0.8) !important; }
+  .to-slate-600\/50 { --tw-gradient-to: rgba(241, 243, 245, 0.8) !important; }
+
+  /* ===== 更多文字顏色覆蓋 ===== */
+  .text-slate-100 { color: #1a1a2e !important; }
+  .text-gray-100 { color: #1a1a2e !important; }
+  .text-gray-200 { color: #2d2d44 !important; }
+  .text-gray-300 { color: #3d3d5c !important; }
+  .text-gray-400 { color: #4a4a6a !important; }
+  .text-gray-500 { color: #5c5c7a !important; }
+  .placeholder\:text-slate-400::placeholder { color: #6b7280 !important; }
+  .placeholder\:text-slate-500::placeholder { color: #6b7280 !important; }
+  
+  /* ===== 淺色文字 → 深色（高對比）===== */
+  /* 黃色系 */
+  .text-amber-200 { color: #92400e !important; }
+  .text-amber-300 { color: #b45309 !important; }
+  .text-amber-400 { color: #d97706 !important; }
+  .text-yellow-200 { color: #a16207 !important; }
+  .text-yellow-300 { color: #ca8a04 !important; }
+  .text-yellow-400 { color: #eab308 !important; }
+  .text-orange-200 { color: #c2410c !important; }
+  .text-orange-300 { color: #ea580c !important; }
+  .text-orange-400 { color: #f97316 !important; }
+  
+  /* 綠色系 */
+  .text-green-200 { color: #166534 !important; }
+  .text-green-300 { color: #16a34a !important; }
+  .text-green-400 { color: #22c55e !important; }
+  .text-emerald-200 { color: #065f46 !important; }
+  .text-emerald-300 { color: #059669 !important; }
+  .text-emerald-400 { color: #10b981 !important; }
+  .text-teal-200 { color: #115e59 !important; }
+  .text-teal-300 { color: #0d9488 !important; }
+  .text-teal-400 { color: #14b8a6 !important; }
+  .text-lime-200 { color: #3f6212 !important; }
+  .text-lime-300 { color: #65a30d !important; }
+  .text-lime-400 { color: #84cc16 !important; }
+  
+  /* 藍綠色系 */
+  .text-cyan-200 { color: #155e75 !important; }
+  .text-cyan-300 { color: #0891b2 !important; }
+  .text-cyan-400 { color: #06b6d4 !important; }
+  .text-sky-200 { color: #075985 !important; }
+  .text-sky-300 { color: #0284c7 !important; }
+  .text-sky-400 { color: #0ea5e9 !important; }
+  
+  /* 藍紫色系 */
+  .text-blue-200 { color: #1e40af !important; }
+  .text-blue-300 { color: #2563eb !important; }
+  .text-blue-400 { color: #3b82f6 !important; }
+  .text-indigo-200 { color: #3730a3 !important; }
+  .text-indigo-300 { color: #4f46e5 !important; }
+  .text-indigo-400 { color: #6366f1 !important; }
+  .text-violet-200 { color: #5b21b6 !important; }
+  .text-violet-300 { color: #7c3aed !important; }
+  .text-violet-400 { color: #8b5cf6 !important; }
+  .text-purple-200 { color: #6b21a8 !important; }
+  .text-purple-300 { color: #9333ea !important; }
+  .text-purple-400 { color: #a855f7 !important; }
+  
+  /* 粉紅色系 */
+  .text-pink-200 { color: #9d174d !important; }
+  .text-pink-300 { color: #db2777 !important; }
+  .text-pink-400 { color: #ec4899 !important; }
+  .text-rose-200 { color: #9f1239 !important; }
+  .text-rose-300 { color: #e11d48 !important; }
+  .text-rose-400 { color: #f43f5e !important; }
+  .text-fuchsia-200 { color: #86198f !important; }
+  .text-fuchsia-300 { color: #c026d3 !important; }
+  .text-fuchsia-400 { color: #d946ef !important; }
+  
+  /* 紅色系 */
+  .text-red-200 { color: #991b1b !important; }
+  .text-red-300 { color: #dc2626 !important; }
+  .text-red-400 { color: #ef4444 !important; }
+  
+  /* Hover 狀態的淺色文字 */
+  .hover\:text-amber-300:hover { color: #b45309 !important; }
+  .hover\:text-amber-400:hover { color: #d97706 !important; }
+  .hover\:text-yellow-300:hover { color: #ca8a04 !important; }
+  .hover\:text-yellow-400:hover { color: #eab308 !important; }
+  .hover\:text-green-300:hover { color: #16a34a !important; }
+  .hover\:text-green-400:hover { color: #22c55e !important; }
+  .hover\:text-emerald-300:hover { color: #059669 !important; }
+  .hover\:text-emerald-400:hover { color: #10b981 !important; }
+  .hover\:text-cyan-300:hover { color: #0891b2 !important; }
+  .hover\:text-cyan-400:hover { color: #06b6d4 !important; }
+  .hover\:text-blue-300:hover { color: #2563eb !important; }
+  .hover\:text-blue-400:hover { color: #3b82f6 !important; }
+  .hover\:text-indigo-300:hover { color: #4f46e5 !important; }
+  .hover\:text-violet-400:hover { color: #8b5cf6 !important; }
+  .hover\:text-pink-300:hover { color: #db2777 !important; }
+  .hover\:text-pink-400:hover { color: #ec4899 !important; }
+  .hover\:text-red-400:hover { color: #ef4444 !important; }
+  
+  /* Group-hover 狀態 */
+  .group-hover\:text-amber-400:hover { color: #d97706 !important; }
+  .group-hover\:text-emerald-400:hover { color: #10b981 !important; }
+  .group-hover\:text-yellow-400:hover { color: #eab308 !important; }
+  .group-hover\:text-green-400:hover { color: #22c55e !important; }
+  
+  /* ===== 帶透明度的淺色文字 → 深色不透明 ===== */
+  /* 黃色系帶透明度 */
+  .text-amber-200\/60 { color: #92400e !important; }
+  .text-amber-200\/70 { color: #92400e !important; }
+  .text-amber-200\/80 { color: #92400e !important; }
+  .text-amber-300\/60 { color: #b45309 !important; }
+  .text-amber-300\/70 { color: #b45309 !important; }
+  .text-amber-300\/80 { color: #b45309 !important; }
+  .text-amber-400\/60 { color: #d97706 !important; }
+  .text-amber-400\/70 { color: #d97706 !important; }
+  .text-amber-400\/80 { color: #d97706 !important; }
+  .text-yellow-300\/70 { color: #ca8a04 !important; }
+  .text-yellow-400\/70 { color: #eab308 !important; }
+  .text-orange-300\/70 { color: #ea580c !important; }
+  .text-orange-400\/70 { color: #f97316 !important; }
+  
+  /* 綠色系帶透明度 */
+  .text-green-300\/70 { color: #16a34a !important; }
+  .text-green-400\/70 { color: #22c55e !important; }
+  .text-emerald-300\/70 { color: #059669 !important; }
+  .text-emerald-400\/70 { color: #10b981 !important; }
+  .text-teal-300\/70 { color: #0d9488 !important; }
+  .text-teal-400\/70 { color: #14b8a6 !important; }
+  
+  /* 藍綠色系帶透明度 */
+  .text-cyan-300\/70 { color: #0891b2 !important; }
+  .text-cyan-400\/70 { color: #06b6d4 !important; }
+  .text-sky-300\/70 { color: #0284c7 !important; }
+  .text-sky-400\/70 { color: #0ea5e9 !important; }
+  
+  /* 藍紫色系帶透明度 */
+  .text-blue-300\/70 { color: #2563eb !important; }
+  .text-blue-400\/70 { color: #3b82f6 !important; }
+  .text-indigo-300\/70 { color: #4f46e5 !important; }
+  .text-indigo-400\/70 { color: #6366f1 !important; }
+  .text-violet-300\/70 { color: #7c3aed !important; }
+  .text-violet-400\/70 { color: #8b5cf6 !important; }
+  .text-purple-300\/70 { color: #9333ea !important; }
+  .text-purple-400\/70 { color: #a855f7 !important; }
+  
+  /* 粉紅色系帶透明度 */
+  .text-pink-300\/70 { color: #db2777 !important; }
+  .text-pink-400\/70 { color: #ec4899 !important; }
+  .text-rose-300\/70 { color: #e11d48 !important; }
+  .text-rose-400\/70 { color: #f43f5e !important; }
+  
+  /* 紅色系帶透明度 */
+  .text-red-300\/70 { color: #dc2626 !important; }
+  .text-red-400\/70 { color: #ef4444 !important; }
+
+  /* ===== 更多邊框覆蓋 ===== */
+  .border-slate-500 { border-color: #9ca3af !important; }
+  .border-slate-500\/20 { border-color: rgba(156, 163, 175, 0.4) !important; }
+  .border-slate-500\/30 { border-color: rgba(156, 163, 175, 0.5) !important; }
+  .border-slate-500\/50 { border-color: rgba(156, 163, 175, 0.7) !important; }
+  .border-white\/10 { border-color: rgba(209, 213, 219, 0.5) !important; }
+  .border-white\/20 { border-color: rgba(209, 213, 219, 0.6) !important; }
+  .border-white\/30 { border-color: rgba(209, 213, 219, 0.7) !important; }
+
+  /* ===== Hover 狀態補充 ===== */
+  .hover\:bg-slate-800\/80:hover { background-color: rgba(248, 249, 250, 0.9) !important; }
+  .hover\:bg-slate-700\/80:hover { background-color: rgba(241, 243, 245, 0.85) !important; }
+  .hover\:bg-slate-700\/40:hover { background-color: rgba(241, 243, 245, 0.75) !important; }
+  .hover\:bg-slate-900:hover { background-color: #eef0f2 !important; }
+  .hover\:bg-slate-900\/50:hover { background-color: rgba(238, 240, 242, 0.85) !important; }
+  .hover\:bg-black\/50:hover { background-color: rgba(248, 249, 250, 0.9) !important; }
+  .hover\:bg-black\/80:hover { background-color: rgba(248, 249, 250, 0.95) !important; }
+  .hover\:bg-black\/90:hover { background-color: rgba(248, 249, 250, 0.97) !important; }
+
+  /* ===== 更多色彩背景覆蓋 ===== */
+  .bg-green-500\/5 { background-color: rgba(16, 185, 129, 0.08) !important; }
+  .bg-green-500\/10 { background-color: rgba(16, 185, 129, 0.12) !important; }
+  .bg-green-500\/20 { background-color: rgba(16, 185, 129, 0.18) !important; }
+  .bg-blue-500\/5 { background-color: rgba(59, 130, 246, 0.08) !important; }
+  .bg-purple-500\/5 { background-color: rgba(168, 85, 247, 0.08) !important; }
+  .bg-pink-500\/5 { background-color: rgba(236, 72, 153, 0.08) !important; }
+  .bg-amber-500\/5 { background-color: rgba(251, 191, 36, 0.1) !important; }
+  .bg-indigo-500\/5 { background-color: rgba(99, 102, 241, 0.08) !important; }
+  .bg-slate-500\/10 { background-color: rgba(100, 116, 139, 0.1) !important; }
+  .bg-slate-500\/20 { background-color: rgba(100, 116, 139, 0.15) !important; }
+  .bg-slate-400\/10 { background-color: rgba(148, 163, 184, 0.12) !important; }
+  .bg-slate-400\/20 { background-color: rgba(148, 163, 184, 0.18) !important; }
+
+  /* ===== 複合漸變覆蓋 ===== */
+  .bg-gradient-to-br.from-slate-600.to-slate-700 {
+    background: linear-gradient(to bottom right, #f8f9fa, #f1f3f5) !important;
+  }
+  .bg-gradient-to-br.from-slate-700.to-slate-800 {
+    background: linear-gradient(to bottom right, #f8f9fa, #ffffff) !important;
+    box-shadow: 0 2px 8px rgba(50, 50, 80, 0.06), 0 0 0 1px rgba(190, 195, 205, 0.3) !important;
+  }
+  .bg-gradient-to-r.from-slate-700\/50.to-slate-600\/50 {
+    background: linear-gradient(to right, rgba(248, 249, 250, 0.85), rgba(241, 243, 245, 0.85)) !important;
+  }
+  .bg-gradient-to-r.from-slate-800\/80.to-slate-800\/50 {
+    background: linear-gradient(to right, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.9)) !important;
+  }
+  .bg-gradient-to-r.from-slate-900.to-slate-700 {
+    background: linear-gradient(to right, #f1f3f5, #f8f9fa) !important;
+  }
+  .bg-gradient-to-b.from-slate-700.to-slate-800 {
+    background: linear-gradient(to bottom, #f8f9fa, #ffffff) !important;
+    box-shadow: 0 4px 12px rgba(50, 50, 80, 0.08), 0 0 0 1px rgba(190, 195, 205, 0.35) !important;
+  }
+
+  /* ===== 遮罩層/Badge 特殊處理 ===== */
+  /* 圖片上的 Badge 保持深色以保證可讀性 */
+  .bg-black\/70.backdrop-blur-md {
+    background-color: rgba(30, 41, 59, 0.85) !important;
+    color: #ffffff !important;
+  }
+  .hover\:bg-black\/80.backdrop-blur-md:hover {
+    background-color: rgba(30, 41, 59, 0.9) !important;
+  }
+
+  /* ===== Focus 狀態 ===== */
+  .focus\:bg-slate-800:focus { background-color: #f8f9fa !important; }
+  .focus\:bg-slate-700:focus { background-color: #f1f3f5 !important; }
+  .focus\:border-slate-600:focus { border-color: #9ca3af !important; }
+  .focus\:border-slate-500:focus { border-color: #6b7280 !important; }
+
+  /* ===== Ring/Outline 狀態 ===== */
+  .ring-slate-700 { --tw-ring-color: #d1d5db !important; }
+  .ring-slate-700\/50 { --tw-ring-color: rgba(209, 213, 219, 0.7) !important; }
+  .ring-slate-800 { --tw-ring-color: #c4c9cf !important; }
+
+  /* ===== 分割線覆蓋 ===== */
+  .divide-slate-700 > * + * { border-color: #d1d5db !important; }
+  .divide-slate-800 > * + * { border-color: #c4c9cf !important; }
+
+  /* ===== 額外的 backdrop-blur 組合 ===== */
+  .backdrop-blur-sm.bg-black\/80 {
+    background-color: rgba(255, 255, 255, 0.92) !important;
+  }
+  .backdrop-blur.bg-black\/70 {
+    background-color: rgba(255, 255, 255, 0.9) !important;
+  }
+  .backdrop-blur-xl.bg-slate-800\/80 {
+    background-color: rgba(255, 255, 255, 0.95) !important;
+    box-shadow: 0 4px 16px rgba(50, 50, 80, 0.1), 0 0 0 1px rgba(190, 195, 205, 0.35) !important;
+  }
+}
+
+/* ===== 部落格文章預覽樣式 ===== */
+.blog-article-preview {
+  /* 主標題 H1 */
+  & h1 {
+    @apply text-3xl md:text-4xl font-extrabold mb-6 pb-4 border-b-2;
+  }
+  .dark & h1 {
+    @apply text-white border-indigo-500/30;
+    background: linear-gradient(to right, #fff, #cbd5e1);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  :not(.dark) & h1 {
+    @apply text-slate-800 border-indigo-300/50;
+    background: linear-gradient(to right, #1e293b, #475569);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* 章節標題 H2 */
+  & h2 {
+    @apply text-2xl font-bold mt-10 mb-4 pb-2 flex items-center gap-3;
+    &::before {
+      content: '';
+      @apply w-1 h-6 bg-indigo-500 rounded-full;
+    }
+  }
+  .dark & h2 {
+    @apply text-white border-b border-slate-700/50;
+  }
+  :not(.dark) & h2 {
+    @apply text-slate-800 border-b border-slate-200;
+  }
+
+  /* 小節標題 H3 */
+  & h3 {
+    @apply text-xl font-semibold mt-8 mb-3;
+  }
+  .dark & h3 {
+    @apply text-slate-200;
+  }
+  :not(.dark) & h3 {
+    @apply text-slate-700;
+  }
+
+  /* H4-H6 */
+  & h4, & h5, & h6 {
+    @apply text-lg font-medium mt-6 mb-2;
+  }
+  .dark & h4, .dark & h5, .dark & h6 {
+    @apply text-slate-300;
+  }
+  :not(.dark) & h4, :not(.dark) & h5, :not(.dark) & h6 {
+    @apply text-slate-600;
+  }
+
+  /* 段落 */
+  & p {
+    @apply text-base md:text-lg leading-relaxed md:leading-8 mb-5;
+    text-align: justify;
+  }
+  .dark & p {
+    @apply text-slate-300;
+  }
+  :not(.dark) & p {
+    @apply text-slate-600;
+  }
+
+  /* 強調文字 */
+  .dark & strong {
+    @apply text-white font-semibold;
+  }
+  :not(.dark) & strong {
+    @apply text-slate-900 font-semibold;
+  }
+  .dark & em {
+    @apply text-indigo-300 not-italic font-medium;
+  }
+  :not(.dark) & em {
+    @apply text-indigo-600 not-italic font-medium;
+  }
+
+  /* 連結 */
+  & a {
+    @apply font-medium no-underline border-b transition-colors;
+  }
+  .dark & a {
+    @apply text-indigo-400 border-indigo-400/30;
+    &:hover {
+      @apply text-indigo-300 border-indigo-300;
+    }
+  }
+  :not(.dark) & a {
+    @apply text-indigo-600 border-indigo-400/30;
+    &:hover {
+      @apply text-indigo-500 border-indigo-500;
+    }
+  }
+
+  /* 列表 */
+  & ul, & ol {
+    @apply my-6 pl-6;
+  }
+  .dark & ul, .dark & ol {
+    @apply text-slate-300;
+  }
+  :not(.dark) & ul, :not(.dark) & ol {
+    @apply text-slate-600;
+  }
+  & li {
+    @apply text-base md:text-lg leading-relaxed mb-2;
+  }
+  .dark & li::marker {
+      @apply text-indigo-400 font-bold;
+    }
+  :not(.dark) & li::marker {
+    @apply text-indigo-500 font-bold;
+  }
+
+  /* 引用區塊 */
+  & blockquote {
+    @apply border-l-4 border-indigo-500 py-4 px-6 my-8 rounded-r-lg not-italic text-lg font-medium shadow-lg;
+  }
+  .dark & blockquote {
+    @apply text-slate-200;
+    background: linear-gradient(to right, rgba(99, 102, 241, 0.1), transparent);
+  }
+  :not(.dark) & blockquote {
+    @apply text-slate-700;
+    background: linear-gradient(to right, rgba(99, 102, 241, 0.08), transparent);
+  }
+
+  /* 程式碼 */
+  & code {
+    @apply px-2 py-1 rounded-md text-sm border;
+  }
+  .dark & code {
+    @apply text-amber-400 bg-slate-800/80 border-slate-700/50;
+  }
+  :not(.dark) & code {
+    @apply text-amber-700 bg-amber-50 border-amber-200/50;
+  }
+  & pre {
+    @apply rounded-xl shadow-xl my-8 p-4 overflow-x-auto;
+    & code {
+      @apply bg-transparent border-0 p-0;
+    }
+  }
+  .dark & pre {
+    @apply bg-slate-800/50 border border-slate-700;
+  }
+  :not(.dark) & pre {
+    @apply bg-slate-100 border border-slate-200;
+  }
+
+  /* 圖片 */
+  & img {
+    @apply rounded-xl shadow-2xl my-8;
+  }
+
+  /* 水平線 */
+  .dark & hr {
+    @apply border-slate-700 my-10;
+  }
+  :not(.dark) & hr {
+    @apply border-slate-200 my-10;
+  }
+
+  /* 表格 */
+  & table {
+    @apply w-full my-8 border-collapse;
+  }
+  .dark & th {
+    @apply bg-slate-800 text-white font-semibold p-3 text-left;
+  }
+  :not(.dark) & th {
+    @apply bg-slate-100 text-slate-900 font-semibold p-3 text-left;
+  }
+  .dark & td {
+    @apply border-b border-slate-700 p-3 text-slate-300;
+  }
+  :not(.dark) & td {
+    @apply border-b border-slate-200 p-3 text-slate-600;
+  }
+}
+
+/* 自定義動畫 */
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s ease-in-out infinite;
+}
+
+/* 閃爍呼吸效果 */
+@keyframes glow {
+  0%, 100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.animate-glow {
+  animation: glow 2s ease-in-out infinite;
+}
+
+/* 調色盤滑桿樣式 */
+input[type="range"].color-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 12px;
+  border-radius: 9999px;
+  cursor: pointer;
+}
+
+input[type="range"].color-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: white;
+  border: 2px solid rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+input[type="range"].color-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+input[type="range"].color-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: white;
+  border: 2px solid rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+input[type="range"].color-slider::-moz-range-thumb:hover {
+  transform: scale(1.15);
+}

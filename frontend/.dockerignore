@@ -1,0 +1,65 @@
+# =============================================================================
+# King Jam AI Frontend - Docker 忽略檔案
+# =============================================================================
+
+# 依賴目錄
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Next.js 建置輸出
+.next
+out
+
+# 測試
+coverage
+.nyc_output
+
+# 開發工具
+.git
+.gitignore
+.env*.local
+.env.development
+.env.test
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+.DS_Store
+
+# 文件
+README.md
+CHANGELOG.md
+docs/
+
+# 測試檔案
+__tests__
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+jest.config.*
+cypress/
+e2e/
+
+# Storybook
+.storybook
+storybook-static
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# CI/CD
+.github
+.gitlab-ci.yml
+.travis.yml
+
+# 其他
+*.log
+*.md
+!README.md

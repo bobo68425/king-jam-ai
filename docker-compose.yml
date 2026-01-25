@@ -11,7 +11,7 @@ x-backend-env: &backend-env
   GOOGLE_CLIENT_ID: 563981454510-5aht48hb5i0nhb8fk3vjfin0min5ovm4.apps.googleusercontent.com
   GOOGLE_CLIENT_SECRET: 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
   GOOGLE_REDIRECT_URI: http://localhost:8000/oauth/google/callback
-  GOOGLE_GEMINI_KEY: AIzaSyBLPMu70eH0F9tnCMy7OYVJamn-XsNKgDY
+  GOOGLE_GEMINI_KEY: AIzaSyBh4uNnnoRcGXE7N5WmCMG9cyBQisnJEZw
   # Replicate API (Kling AI)
   REPLICATE_API_TOKEN: r8_OwpJaEdZWROXq6mu4lD8pJ0KmOh4J9X3fd1EU
   # ============================================================
