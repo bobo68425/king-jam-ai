@@ -1,0 +1,217 @@
+version: '3.8'
+
+# ============================================================
+# 共用環境變數
+# ============================================================
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql://kingjam:kingjam_pass@db:5432/kingjam_db
+  REDIS_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/0
+  CELERY_RESULT_BACKEND: redis://redis:6379/0
+  SECRET_KEY: dev_secret_key_change_this
+  # Google AI
+  GOOGLE_CLIENT_ID: your_google_client_id
+  GOOGLE_CLIENT_SECRET: your_google_client_secret
+  GOOGLE_GEMINI_KEY: AIzaSyBLPMu70eH0F9tnCMy7OYVJamn-XsNKgDY
+  # Vertex AI / Veo 設定
+  GOOGLE_CLOUD_PROJECT: gen-lang-client-0390714167
+  GOOGLE_CLOUD_LOCATION: us-central1
+  GOOGLE_APPLICATION_CREDENTIALS: /app/secrets/google-credentials.json
+  # 雲端儲存 (Cloudflare R2)
+  CLOUD_STORAGE_PROVIDER: r2
+  R2_ENDPOINT_URL: https://0ad0f476c65e7b6c58fd6016d577b6f6.r2.cloudflarestorage.com
+  R2_ACCESS_KEY_ID: 2a1e21b4a2ff9aaa612e3c01da18a8e6
+  R2_SECRET_ACCESS_KEY: a32081dfc5b00f2d082dc3e6e6284e5744ec771054833ba377b301b14ce7644d
+  R2_BUCKET_NAME: kingjam-assets
+  R2_PUBLIC_URL: https://pub-dd448be937ca4aaab1aacd75dcb601b4.r2.dev
+  # 社群平台 OAuth
+  LINE_CHANNEL_ID: your_line_channel_id
+  LINE_CHANNEL_SECRET: your_line_channel_secret
+  FACEBOOK_APP_ID: your_fb_app_id
+  FACEBOOK_APP_SECRET: your_fb_app_secret
+  FACEBOOK_REDIRECT_URI: http://localhost:3000/auth/callback/facebook
+  # 郵件服務（開發模式使用 console）
+  EMAIL_PROVIDER: console
+
+services:
+  # ============================================================
+  # 後端 API
+  # ============================================================
+  backend:
+    build: ./backend
+    container_name: kingjam_backend
+    volumes:
+      - ./backend:/app  # Hot Reload
+      - ./secrets:/app/secrets:ro  # Google Cloud 金鑰
+    ports:
+      - "8000:8000"
+    environment:
+      <<: *backend-env
+    depends_on:
+      - db
+      - redis
+    networks:
+      - kingjam_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================================
+  # Celery Worker - 高優先級佇列
+  # 處理：驗證碼發送、即時通知、緊急 Token 刷新
+  # ============================================================
+  celery-worker-high:
+    build: ./backend
+    container_name: kingjam_celery_high
+    command: celery -A app.celery_app worker -Q queue_high -c 2 -l info --hostname=worker-high@%h
+    volumes:
+      - ./backend:/app
+      - ./secrets:/app/secrets:ro
+    environment:
+      <<: *backend-env
+    depends_on:
+      - db
+      - redis
+    networks:
+      - kingjam_net
+    restart: unless-stopped
+
+  # ============================================================
+  # Celery Worker - 預設佇列
+  # 處理：社群發布、排程任務、Token 批次刷新
+  # ============================================================
+  celery-worker-default:
+    build: ./backend
+    container_name: kingjam_celery_default
+    command: celery -A app.celery_app worker -Q queue_default -c 4 -l info --hostname=worker-default@%h
+    volumes:
+      - ./backend:/app
+      - ./secrets:/app/secrets:ro
+    environment:
+      <<: *backend-env
+    depends_on:
+      - db
+      - redis
+    networks:
+      - kingjam_net
+    restart: unless-stopped
+
+  # ============================================================
+  # Celery Worker - 影片佇列
+  # 處理：Veo 影片渲染（耗時任務，獨立隔離）
+  # ============================================================
+  celery-worker-video:
+    build: ./backend
+    container_name: kingjam_celery_video
+    command: celery -A app.celery_app worker -Q queue_video -c 2 -l info --hostname=worker-video@%h
+    volumes:
+      - ./backend:/app
+      - ./secrets:/app/secrets:ro
+      - ./backend/static/videos:/app/static/videos  # 影片輸出目錄
+      - ./backend/static/thumbnails:/app/static/thumbnails  # 縮圖目錄
+    environment:
+      <<: *backend-env
+    depends_on:
+      - db
+      - redis
+    networks:
+      - kingjam_net
+    restart: unless-stopped
+    # 影片渲染需要更多資源
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
+
+  # ============================================================
+  # Celery Beat - 排程任務掃描器
+  # 定時觸發：掃描待發布排程、Token 過期檢查、日誌清理
+  # ============================================================
+  celery-beat:
+    build: ./backend
+    container_name: kingjam_celery_beat
+    command: celery -A app.celery_app beat -l info --scheduler celery.beat:PersistentScheduler --schedule=/app/celerybeat-schedule
+    volumes:
+      - ./backend:/app
+      - ./secrets:/app/secrets:ro
+      - celery-beat-data:/app  # 持久化 schedule 資料
+    environment:
+      <<: *backend-env
+    depends_on:
+      - db
+      - redis
+    networks:
+      - kingjam_net
+    restart: unless-stopped
+
+  # ============================================================
+  # Flower - Celery 監控面板（可選）
+  # ============================================================
+  flower:
+    build: ./backend
+    container_name: kingjam_flower
+    command: celery -A app.celery_app flower --port=5555 --broker=redis://redis:6379/0
+    ports:
+      - "5555:5555"
+    environment:
+      <<: *backend-env
+      FLOWER_BASIC_AUTH: admin:kingjam123  # 設定登入密碼
+    depends_on:
+      - redis
+      - celery-worker-default
+    networks:
+      - kingjam_net
+    restart: unless-stopped
+
+  # ============================================================
+  # 資料庫
+  # ============================================================
+  db:
+    image: postgres:15-alpine
+    container_name: kingjam_db
+    restart: always
+    environment:
+      - POSTGRES_USER=kingjam
+      - POSTGRES_PASSWORD=kingjam_pass
+      - POSTGRES_DB=kingjam_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./.docker_data/postgres:/var/lib/postgresql/data
+    networks:
+      - kingjam_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kingjam -d kingjam_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================
+  # Redis - 快取 & 訊息佇列
+  # ============================================================
+  redis:
+    image: redis:7-alpine
+    container_name: kingjam_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./.docker_data/redis:/data
+    networks:
+      - kingjam_net
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  kingjam_net:
+    driver: bridge
+
+volumes:
+  celery-beat-data:

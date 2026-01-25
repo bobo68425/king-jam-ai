@@ -1,0 +1,50 @@
+# 影片和上傳檔案（大型二進制檔案）
+backend/static/videos/
+backend/static/uploads/
+
+# Docker 資料
+.docker_data/
+
+# Python 快取
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+backend/venv/
+
+# Node.js
+**/node_modules/
+
+# 備份資料夾
+backups/
+
+# 編譯輸出
+frontend/.next/
+frontend/out/
+
+# 日誌檔案
+*.log
+
+# 臨時檔案
+*.tmp
+*.temp
+.DS_Store
+
+# 二進制和媒體檔案
+*.mp4
+*.mp3
+*.wav
+*.avi
+*.mov
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.ico
+*.pdf
+
+# 資料庫檔案
+*.sql
+*.db
+*.sqlite

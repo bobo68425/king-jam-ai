@@ -1,0 +1,320 @@
+# ============================================================
+# 共用環境變數
+# ============================================================
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql://kingjam:kingjam_pass@db:5432/kingjam_db
+  REDIS_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/0
+  CELERY_RESULT_BACKEND: redis://redis:6379/0
+  SECRET_KEY: dev_secret_key_change_this
+  # Google AI / OAuth (GA4)
+  GOOGLE_CLIENT_ID: 563981454510-5aht48hb5i0nhb8fk3vjfin0min5ovm4.apps.googleusercontent.com
+  GOOGLE_CLIENT_SECRET: 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
+  GOOGLE_REDIRECT_URI: http://localhost:8000/oauth/google/callback
+  GOOGLE_GEMINI_KEY: AIzaSyBLPMu70eH0F9tnCMy7OYVJamn-XsNKgDY
+  # Replicate API (Kling AI)
+  REPLICATE_API_TOKEN: r8_OwpJaEdZWROXq6mu4lD8pJ0KmOh4J9X3fd1EU
+  # ============================================================
+  # 告警通知配置（可選，設定後自動啟用）
+  # ============================================================
+  # Slack Webhook URL（建議設定）
+  SLACK_WEBHOOK_URL: ""
+  # 告警 Email（多個用逗號分隔）
+  ALERT_EMAIL: ""
+  # Line Notify Token
+  LINE_NOTIFY_TOKEN: ""
+  # Vertex AI / Veo 設定
+  GOOGLE_CLOUD_PROJECT: gen-lang-client-0390714167
+  GOOGLE_CLOUD_LOCATION: us-central1
+  GOOGLE_APPLICATION_CREDENTIALS: /app/secrets/google-credentials.json
+  # 雲端儲存 (Cloudflare R2)
+  CLOUD_STORAGE_PROVIDER: r2
+  R2_ENDPOINT_URL: https://0ad0f476c65e7b6c58fd6016d577b6f6.r2.cloudflarestorage.com
+  R2_ACCESS_KEY_ID: 2a1e21b4a2ff9aaa612e3c01da18a8e6
+  R2_SECRET_ACCESS_KEY: a32081dfc5b00f2d082dc3e6e6284e5744ec771054833ba377b301b14ce7644d
+  R2_BUCKET_NAME: kingjam-assets
+  R2_PUBLIC_URL: https://pub-dd448be937ca4aaab1aacd75dcb601b4.r2.dev
+  # ============================================================
+  # 社群平台 OAuth 設定
+  # ============================================================
+  # Meta (Instagram/Facebook/Threads) - 需在 Meta Developer Console 創建應用
+  META_APP_ID: your_meta_app_id
+  META_APP_SECRET: your_meta_app_secret
+  META_REDIRECT_URI: http://localhost:8000/oauth/meta/callback
+  # TikTok - 需在 TikTok for Developers 創建應用
+  TIKTOK_CLIENT_KEY: your_tiktok_client_key
+  TIKTOK_CLIENT_SECRET: your_tiktok_client_secret
+  TIKTOK_REDIRECT_URI: http://localhost:8000/oauth/tiktok/callback
+  # LinkedIn - 需在 LinkedIn Developer Console 創建應用
+  LINKEDIN_CLIENT_ID: your_linkedin_client_id
+  LINKEDIN_CLIENT_SECRET: your_linkedin_client_secret
+  LINKEDIN_REDIRECT_URI: http://localhost:8000/oauth/linkedin/callback
+  # YouTube - 使用 Google Cloud Console (與 GOOGLE_CLIENT 共用)
+  YOUTUBE_REDIRECT_URI: http://localhost:8000/oauth/youtube/callback
+  # LINE - 需在 LINE Developers Console 創建 Channel
+  LINE_CHANNEL_ID: your_line_channel_id
+  LINE_CHANNEL_SECRET: your_line_channel_secret
+  LINE_REDIRECT_URI: http://localhost:8000/oauth/line/callback
+  LINE_CHANNEL_ACCESS_TOKEN: your_line_channel_access_token
+  # 郵件服務（開發模式使用 console）
+  EMAIL_PROVIDER: console
+  # PicWish 去背 API
+  PICWISH_API_KEY: wx65g7jrbsla2frr5
+
+services:
+  # ============================================================
+  # 後端 API
+  # ============================================================
+  backend:
+    build: ./backend
+    container_name: kingjam_backend
+    volumes:
+      - ./backend:/app  # Hot Reload
+      - ./secrets:/app/secrets:ro  # Google Cloud 金鑰
+    ports:
+      - "8000:8000"
+    environment:
+      <<: *backend-env
+    depends_on:
+      - db
+      - redis
+    networks:
+      - kingjam_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================================
+  # Celery Worker - 高優先級佇列
+  # 處理：驗證碼發送、即時通知、緊急 Token 刷新、健康檢查
+  # ============================================================
+  celery-worker-high:
+    build: ./backend
+    container_name: kingjam_celery_high
+    command: celery -A app.celery_app worker -Q queue_high -c 2 -l info --hostname=worker-high@%h
+    volumes:
+      - ./backend:/app
+      - ./secrets:/app/secrets:ro
+    environment:
+      <<: *backend-env
+    depends_on:
+      - db
+      - redis
+    networks:
+      - kingjam_net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "/app/scripts/celery_healthcheck.py", "worker-high"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 30s
+
+  # ============================================================
+  # Celery Worker - 預設佇列
+  # 處理：社群發布、排程任務、Token 批次刷新
+  # ============================================================
+  celery-worker-default:
+    build: ./backend
+    container_name: kingjam_celery_default
+    command: celery -A app.celery_app worker -Q queue_default -c 4 -l info --hostname=worker-default@%h
+    volumes:
+      - ./backend:/app
+      - ./secrets:/app/secrets:ro
+    environment:
+      <<: *backend-env
+    depends_on:
+      - db
+      - redis
+    networks:
+      - kingjam_net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "/app/scripts/celery_healthcheck.py", "worker-default"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 30s
+
+  # ============================================================
+  # Celery Worker - 影片佇列（主節點）
+  # 處理：Veo/Kling 影片渲染（耗時任務，獨立隔離）
+  # 
+  # 彈性化架構：
+  # - 使用獨立 Redis (redis-video) 隔離，避免影響驗證碼/登入
+  # - 支援水平擴展：docker-compose up --scale celery-worker-video=N
+  # - 自動擴展腳本：scripts/video_autoscaler.py
+  # 
+  # OOM 預防措施：
+  # - 並發數限制為 1（單一任務執行）
+  # - 每處理 10 個任務後自動重啟（防止記憶體洩漏）
+  # ============================================================
+  celery-worker-video:
+    build: ./backend
+    # 移除固定 container_name 以支持擴展
+    # container_name: kingjam_celery_video
+    command: >
+      celery -A app.celery_app worker 
+      -Q queue_video 
+      -c 1 
+      -l info 
+      --hostname=worker-video-${HOSTNAME:-1}@%h
+      --max-tasks-per-child=10
+      --prefetch-multiplier=1
+    volumes:
+      - ./backend:/app
+      - ./secrets:/app/secrets:ro
+      - ./backend/static/videos:/app/static/videos  # 影片輸出目錄
+      - ./backend/static/thumbnails:/app/static/thumbnails  # 縮圖目錄
+    environment:
+      <<: *backend-env
+      # 🔑 影片任務使用獨立 Redis（隔離）
+      VIDEO_REDIS_URL: redis://redis-video:6379/0
+      VIDEO_BROKER_URL: redis://redis-video:6379/0
+      VIDEO_RESULT_BACKEND: redis://redis-video:6379/1
+      # OOM 保護相關環境變數
+      MALLOC_ARENA_MAX: 2  # 減少 glibc 記憶體碎片
+      PYTHONMALLOC: malloc
+      # Worker 標識（用於監控）
+      WORKER_TYPE: video
+    depends_on:
+      - db
+      - redis
+      - redis-video
+    networks:
+      - kingjam_net
+    restart: unless-stopped
+    # 影片渲染資源限制（OOM 預防）
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+      # 🔑 Docker Swarm 自動擴展配置（可選）
+      # replicas: 1
+      # update_config:
+      #   parallelism: 1
+      #   delay: 10s
+      # restart_policy:
+      #   condition: on-failure
+    healthcheck:
+      test: ["CMD", "python", "/app/scripts/celery_healthcheck.py", "worker-video"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 60s
+
+  # ============================================================
+  # Celery Beat - 排程任務掃描器
+  # 定時觸發：掃描待發布排程、Token 過期檢查、日誌清理
+  # ============================================================
+  celery-beat:
+    build: ./backend
+    container_name: kingjam_celery_beat
+    command: celery -A app.celery_app beat -l info --scheduler celery.beat:PersistentScheduler --schedule=/app/celerybeat-schedule
+    volumes:
+      - ./backend:/app
+      - ./secrets:/app/secrets:ro
+      - celery-beat-data:/app  # 持久化 schedule 資料
+    environment:
+      <<: *backend-env
+    depends_on:
+      - db
+      - redis
+    networks:
+      - kingjam_net
+    restart: unless-stopped
+
+  # ============================================================
+  # Flower - Celery 監控面板（可選）
+  # ============================================================
+  flower:
+    build: ./backend
+    container_name: kingjam_flower
+    command: celery -A app.celery_app flower --port=5555 --broker=redis://redis:6379/0
+    ports:
+      - "5555:5555"
+    environment:
+      <<: *backend-env
+      FLOWER_BASIC_AUTH: admin:kingjam123  # 設定登入密碼
+    depends_on:
+      - redis
+      - celery-worker-default
+    networks:
+      - kingjam_net
+    restart: unless-stopped
+
+  # ============================================================
+  # 資料庫
+  # ============================================================
+  db:
+    image: postgres:15-alpine
+    container_name: kingjam_db
+    restart: always
+    environment:
+      - POSTGRES_USER=kingjam
+      - POSTGRES_PASSWORD=kingjam_pass
+      - POSTGRES_DB=kingjam_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./.docker_data/postgres:/var/lib/postgresql/data
+    networks:
+      - kingjam_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kingjam -d kingjam_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================
+  # Redis - 主要快取 & 訊息佇列
+  # 用途：驗證碼、Token 快取、一般任務佇列
+  # ============================================================
+  redis:
+    image: redis:7-alpine
+    container_name: kingjam_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./.docker_data/redis:/data
+    networks:
+      - kingjam_net
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================
+  # Redis Video - 影片任務專用（隔離避免影響核心服務）
+  # 用途：影片渲染佇列、影片任務結果
+  # ============================================================
+  redis-video:
+    image: redis:7-alpine
+    container_name: kingjam_redis_video
+    ports:
+      - "6380:6379"
+    volumes:
+      - ./.docker_data/redis-video:/data
+    networks:
+      - kingjam_net
+    command: redis-server --appendonly yes --maxmemory 1gb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  kingjam_net:
+    driver: bridge
+
+volumes:
+  celery-beat-data:

@@ -1,0 +1,72 @@
+功能區塊,子功能,描述,後端路由,前端頁面,點數消耗,狀態
+
+AI 內容生成,部落格文章生成,AI 生成部落格文章,/blog/generate,/dashboard/blog,5-20點,✅
+AI 內容生成,部落格封面草稿,草稿品質封面,/blog/generate,/dashboard/blog,5點,✅
+AI 內容生成,部落格封面標準,標準品質封面,/blog/generate,/dashboard/blog,10點,✅
+AI 內容生成,部落格封面精緻,精緻品質封面,/blog/generate,/dashboard/blog,20點,✅
+
+AI 內容生成,社群圖文草稿,草稿品質圖文,/social/generate,/dashboard/social,10點,✅
+AI 內容生成,社群圖文標準,標準品質圖文,/social/generate,/dashboard/social,20點,✅
+AI 內容生成,社群圖文精緻,精緻品質圖文,/social/generate,/dashboard/social,50點,✅
+
+AI 內容生成,短影音腳本15秒,15秒影片腳本,/video/generate-script,/dashboard/video,20點,✅
+AI 內容生成,短影音腳本30秒,30秒影片腳本,/video/generate-script,/dashboard/video,40點,✅
+AI 內容生成,短影音腳本60秒,60秒影片腳本,/video/generate-script,/dashboard/video,60點,✅
+
+AI 內容生成,影片渲染 Standard 15秒,Imagen 圖片合成影片,/video/render,/dashboard/video,50點,✅
+AI 內容生成,影片渲染 Standard 30秒,Imagen 圖片合成影片,/video/render,/dashboard/video,100點,✅
+AI 內容生成,影片渲染 Standard 60秒,Imagen 圖片合成影片,/video/render,/dashboard/video,200點,✅
+AI 內容生成,影片渲染 Veo 3 Fast,快速 Veo 等級影片 8秒,/video/render,/dashboard/video,200點,✅
+AI 內容生成,影片渲染 Veo 3 Ultra,Ultra Veo 等級影片 8秒,/video/render,/dashboard/video,350點,✅
+
+排程發布,建立排程,排程單一貼文發布,/scheduler/posts,/dashboard/scheduler,0,✅
+排程發布,批量排程,批次排程多篇貼文,/scheduler/batch,/dashboard/scheduler,0,✅
+排程發布,智慧時間建議,建議最佳發布時間,/scheduler/smart-times,/dashboard/scheduler,0,✅
+排程發布,排程管理,查看/編輯/刪除排程,/scheduler/posts,/dashboard/scheduler,0,✅
+排程發布,發布日誌,查看發布結果記錄,/scheduler/logs,-,0,✅
+
+社群帳號,帳號連結,OAuth 連結社群帳號,/oauth/{platform},/dashboard/accounts,0,✅
+社群帳號,帳號管理,查看/解除連結帳號,/social/accounts,/dashboard/accounts,0,✅
+社群帳號,Token 刷新,自動刷新過期 Token,/tasks/refresh-token,-,0,✅
+
+會員系統,會員註冊,新用戶註冊,/auth/register,/login,0,✅
+會員系統,會員登入,用戶登入取得 Token,/auth/login,/login,0,✅
+會員系統,會員資料,查看/編輯個人資料,/users/me,/dashboard/profile,0,✅
+會員系統,頭像上傳,上傳/更換頭像,/users/avatar,/dashboard/profile,0,✅
+會員系統,變更密碼,修改登入密碼,/users/change-password,/dashboard/profile,0,✅
+會員系統,變更郵件,修改登入信箱,/users/change-email/*,/dashboard/profile,0,✅
+會員系統,通知設定,管理通知偏好,/users/notification-settings,/dashboard/profile,0,✅
+
+點數系統,餘額查詢,查詢各類別點數餘額,/credits/balance,/dashboard/credits,0,✅
+點數系統,交易記錄,查看點數流水帳,/credits/transactions,/dashboard/credits,0,✅
+點數系統,功能定價,查看各功能點數消耗,/credits/pricing,/dashboard/credits,0,✅
+點數系統,點數購買,購買點數包,/credits/packages,/dashboard/credits,0,✅
+點數系統,提領申請,申請獎金點數提領,/credits/withdraw,/dashboard/credits,0,✅
+點數系統,提領記錄,查看提領申請狀態,/credits/withdrawals,/dashboard/credits,0,✅
+
+推薦系統,推薦碼,取得/分享個人推薦碼,/referral/my-code,/dashboard/referral,0,✅
+推薦系統,夥伴統計,查看推薦成效數據,/referral/stats,/dashboard/referral,0,✅
+推薦系統,推薦歷史,查看被推薦人列表,/referral/history,/dashboard/referral,0,✅
+推薦系統,升級進度,查看夥伴等級升級條件,/referral/stats,/dashboard/referral,0,✅
+推薦系統,獎金規則,查看分潤獎金規則,/referral/bonus-table,/dashboard/referral,0,✅
+
+安全認證,手機認證-發送,發送 SMS 驗證碼,/verification/phone/send,/dashboard/profile,0,✅
+安全認證,手機認證-驗證,輸入驗證碼確認,/verification/phone/verify,/dashboard/profile,0,✅
+安全認證,身份認證-上傳,上傳身分證照片,/verification/identity/upload-image,/dashboard/profile,0,✅
+安全認證,身份認證-提交,提交身份資料審核,/verification/identity/submit,/dashboard/profile,0,✅
+安全認證,2FA-設定,取得 TOTP Secret & QR Code,/verification/2fa/setup,/dashboard/profile,0,✅
+安全認證,2FA-啟用,確認 TOTP 驗證碼啟用,/verification/2fa/enable,/dashboard/profile,0,✅
+安全認證,2FA-驗證,每次提領時驗證,/verification/2fa/verify,/dashboard/credits,0,✅
+安全認證,驗證狀態,查詢各項驗證狀態,/verification/status,/dashboard/profile,0,✅
+
+通知系統,通知列表,查看所有站內通知,/notifications,/dashboard/notifications,0,✅
+通知系統,未讀計數,顯示未讀通知數量,/notifications/unread-count,導航欄,0,✅
+通知系統,標記已讀,標記單一/全部已讀,/notifications/*/read,/dashboard/notifications,0,✅
+通知系統,刪除通知,刪除單一/全部通知,/notifications/*,/dashboard/notifications,0,✅
+
+生成紀錄,紀錄查詢,查詢歷史生成內容,/history,/dashboard/history,0,✅
+生成紀錄,紀錄篩選,依類型/日期篩選,/history,/dashboard/history,0,✅
+
+管理功能,身份審核,審核用戶身份認證,/verification/identity/review,-,0,✅
+管理功能,提領審核,審核用戶提領申請,/credits/admin/*,-,0,✅
+管理功能,點數調整,手動調整用戶點數,/credits/admin/adjust,-,0,✅

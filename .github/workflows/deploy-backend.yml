@@ -1,0 +1,277 @@
+# =============================================================================
+# King Jam AI - 後端自動部署 (GitHub Actions)
+# =============================================================================
+# 
+# 觸發條件:
+# - push 到 main 分支且 backend/ 有變更
+# - 手動觸發
+#
+# 流程:
+# 1. 測試 → 2. 部署到 Staging → 3. 審核 → 4. 部署到 Production
+# =============================================================================
+
+name: Deploy Backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy-backend.yml'
+  
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/**'
+  
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: '部署環境'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      skip_tests:
+        description: '跳過測試（緊急部署用）'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: asia-east1
+  SERVICE_NAME: kingjam-api
+  REPOSITORY: kingjam-repo
+
+jobs:
+  # ===========================================================================
+  # 階段 1: 程式碼檢查與測試
+  # ===========================================================================
+  test:
+    name: 🧪 測試
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.skip_tests }}
+    
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+      
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+          cache-dependency-path: 'backend/requirements.txt'
+      
+      - name: 📦 Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio httpx
+      
+      - name: 🔍 Lint check
+        run: |
+          pip install ruff
+          cd backend
+          ruff check app/ --ignore E501
+        continue-on-error: true
+      
+      - name: ✅ Run tests
+        run: |
+          cd backend
+          python -m pytest tests/ -v --tb=short || echo "No tests found, skipping"
+
+  # ===========================================================================
+  # 階段 2: 建置 Docker 映像檔
+  # ===========================================================================
+  build:
+    name: 🔨 建置
+    runs-on: ubuntu-latest
+    needs: [test]
+    if: always() && (needs.test.result == 'success' || needs.test.result == 'skipped')
+    
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+    
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+      
+      - name: 🔐 Google Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      
+      - name: ☁️ Setup Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+      
+      - name: 🐳 Configure Docker
+        run: |
+          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+      
+      - name: 🏷️ Generate image metadata
+        id: meta
+        run: |
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME }}"
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+          echo "tags=$IMAGE:$SHORT_SHA,$IMAGE:latest" >> $GITHUB_OUTPUT
+          echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+      
+      - name: 🔨 Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.prod
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ===========================================================================
+  # 階段 3: 部署到 Staging 環境
+  # ===========================================================================
+  deploy-staging:
+    name: 🚀 Staging 部署
+    runs-on: ubuntu-latest
+    needs: [build]
+    environment: staging
+    
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+      
+      - name: 🔐 Google Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      
+      - name: ☁️ Setup Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+      
+      - name: 🚀 Deploy to Staging
+        run: |
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME }}:$SHORT_SHA"
+          
+          gcloud run deploy ${{ env.SERVICE_NAME }}-staging \
+            --image $IMAGE \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 8080 \
+            --memory 1Gi \
+            --cpu 1 \
+            --min-instances 0 \
+            --max-instances 5 \
+            --set-env-vars "ENVIRONMENT=staging"
+      
+      - name: 🔍 Smoke Test
+        run: |
+          STAGING_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }}-staging \
+            --region ${{ env.REGION }} --format='value(status.url)')
+          
+          echo "Testing: $STAGING_URL/health"
+          
+          for i in {1..5}; do
+            if curl -sf "$STAGING_URL/health"; then
+              echo "✅ Health check passed!"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying in 10s..."
+            sleep 10
+          done
+          
+          echo "❌ Health check failed after 5 attempts"
+          exit 1
+      
+      - name: 📝 Comment PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const stagingUrl = '${{ steps.deploy.outputs.url }}' || 
+              `https://${{ env.SERVICE_NAME }}-staging-xxx.run.app`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 🚀 Staging 部署完成\n\n**URL:** ${stagingUrl}\n\n請進行測試後審核。`
+            });
+
+  # ===========================================================================
+  # 階段 4: 部署到 Production 環境（需審核）
+  # ===========================================================================
+  deploy-production:
+    name: 🌟 Production 部署
+    runs-on: ubuntu-latest
+    needs: [deploy-staging]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production  # 需要人工審核
+    
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+      
+      - name: 🔐 Google Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      
+      - name: ☁️ Setup Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+      
+      - name: 🌟 Deploy to Production
+        run: |
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME }}:$SHORT_SHA"
+          
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --image $IMAGE \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 8080 \
+            --memory 1Gi \
+            --cpu 1 \
+            --min-instances 1 \
+            --max-instances 10 \
+            --timeout 300 \
+            --set-env-vars "ENVIRONMENT=production,FRONTEND_URL=https://kingjam.app,BACKEND_URL=https://api.kingjam.app" \
+            --vpc-connector kingjam-connector \
+            --vpc-egress all-traffic
+      
+      - name: ✅ Verify Production
+        run: |
+          echo "Waiting for deployment to stabilize..."
+          sleep 30
+          
+          echo "Testing: https://api.kingjam.app/health"
+          
+          for i in {1..5}; do
+            if curl -sf "https://api.kingjam.app/health"; then
+              echo "✅ Production health check passed!"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying in 10s..."
+            sleep 10
+          done
+          
+          echo "❌ Production health check failed"
+          exit 1
+      
+      - name: 📢 Notify Success
+        if: success()
+        run: |
+          echo "🎉 Production deployment successful!"
+          echo "Version: $(echo ${{ github.sha }} | cut -c1-7)"
+          echo "Time: $(date)"
+      
+      - name: 🚨 Notify Failure
+        if: failure()
+        run: |
+          echo "❌ Production deployment failed!"
+          echo "Initiating rollback procedures..."

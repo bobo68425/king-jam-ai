@@ -1,0 +1,108 @@
+# =============================================================================
+# King Jam AI - 資料庫遷移 (手動觸發)
+# =============================================================================
+#
+# 使用方式:
+# 1. 前往 GitHub Actions
+# 2. 選擇 "Database Migration" workflow
+# 3. 點擊 "Run workflow"
+# 4. 選擇環境和操作
+# =============================================================================
+
+name: Database Migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: '目標環境'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      action:
+        description: '遷移動作'
+        required: true
+        default: 'upgrade'
+        type: choice
+        options:
+          - upgrade        # 升級到最新版本
+          - downgrade      # 回滾一個版本
+          - current        # 顯示當前版本
+          - history        # 顯示遷移歷史
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: asia-east1
+
+jobs:
+  migrate:
+    name: 🗄️ 資料庫遷移
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+      
+      - name: 🔐 Google Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      
+      - name: ☁️ Setup Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+      
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      
+      - name: 📦 Install dependencies
+        run: |
+          pip install sqlalchemy alembic psycopg2-binary
+      
+      - name: ☁️ Setup Cloud SQL Proxy
+        run: |
+          wget https://dl.google.com/cloudsql/cloud_sql_proxy.linux.amd64 -O cloud_sql_proxy
+          chmod +x cloud_sql_proxy
+      
+      - name: 🔗 Start Cloud SQL Proxy
+        run: |
+          ./cloud_sql_proxy -instances=${{ env.PROJECT_ID }}:${{ env.REGION }}:kingjam-db=tcp:5432 &
+          sleep 5
+      
+      - name: 🗄️ Run Migration
+        run: |
+          cd backend
+          
+          export DATABASE_URL="postgresql://kingjam:${{ secrets.DB_PASSWORD }}@localhost:5432/kingjam_db"
+          
+          case "${{ inputs.action }}" in
+            upgrade)
+              echo "📈 升級資料庫到最新版本..."
+              alembic upgrade head
+              ;;
+            downgrade)
+              echo "📉 回滾資料庫一個版本..."
+              alembic downgrade -1
+              ;;
+            current)
+              echo "📍 當前資料庫版本:"
+              alembic current
+              ;;
+            history)
+              echo "📜 遷移歷史:"
+              alembic history --verbose
+              ;;
+          esac
+      
+      - name: ✅ Verify
+        if: inputs.action == 'upgrade' || inputs.action == 'downgrade'
+        run: |
+          cd backend
+          export DATABASE_URL="postgresql://kingjam:${{ secrets.DB_PASSWORD }}@localhost:5432/kingjam_db"
+          echo "📍 當前版本:"
+          alembic current

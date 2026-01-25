@@ -1,0 +1,242 @@
+# =============================================================================
+# King Jam AI - 前端自動部署到 Google Cloud Run
+# =============================================================================
+#
+# 觸發條件:
+# - push 到 main 分支且 frontend/ 有變更
+# - 手動觸發 (workflow_dispatch)
+#
+# 流程:
+# 1. Checkout 代碼
+# 2. 認證 Google Cloud
+# 3. 建置 Docker 映像檔
+# 4. 推送到 Artifact Registry
+# 5. 部署到 Cloud Run
+# 6. 健康檢查驗證
+#
+# 需要設定的 GitHub Secrets:
+# - GCP_PROJECT_ID: GCP 專案 ID
+# - GCP_SA_KEY: 服務帳戶 JSON 金鑰 (需有 Cloud Run、Artifact Registry 權限)
+# =============================================================================
+
+name: Deploy Frontend to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/deploy-frontend-cloudrun.yml'
+  
+  # 允許手動觸發
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: '部署環境'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+# 環境變數
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: asia-east1
+  SERVICE_NAME: kingjam-frontend
+  REPOSITORY: kingjam-repo
+  
+  # 應用程式設定
+  NEXT_PUBLIC_API_URL: https://api.kingjam.app
+  NEXT_PUBLIC_SITE_URL: https://kingjam.app
+
+jobs:
+  # ===========================================================================
+  # 建置並部署
+  # ===========================================================================
+  build-and-deploy:
+    name: 🚀 Build & Deploy
+    runs-on: ubuntu-latest
+    
+    # 設定權限
+    permissions:
+      contents: read
+      id-token: write
+    
+    steps:
+      # -----------------------------------------
+      # Step 1: Checkout 代碼
+      # -----------------------------------------
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      # -----------------------------------------
+      # Step 2: 認證 Google Cloud
+      # -----------------------------------------
+      - name: 🔐 Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      # -----------------------------------------
+      # Step 3: 設定 Google Cloud SDK
+      # -----------------------------------------
+      - name: ☁️ Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      # -----------------------------------------
+      # Step 4: 配置 Docker 認證
+      # -----------------------------------------
+      - name: 🐳 Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      # -----------------------------------------
+      # Step 5: 建立映像檔標籤
+      # -----------------------------------------
+      - name: 🏷️ Generate image tags
+        id: meta
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          IMAGE_BASE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME }}"
+          
+          echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT
+          echo "image_base=${IMAGE_BASE}" >> $GITHUB_OUTPUT
+          echo "image_sha=${IMAGE_BASE}:${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "image_latest=${IMAGE_BASE}:latest" >> $GITHUB_OUTPUT
+          echo "image_timestamped=${IMAGE_BASE}:${TIMESTAMP}" >> $GITHUB_OUTPUT
+
+      # -----------------------------------------
+      # Step 6: 建置 Docker 映像檔
+      # -----------------------------------------
+      - name: 🔨 Build Docker image
+        working-directory: ./frontend
+        run: |
+          echo "📦 Building Docker image..."
+          echo "   Image: ${{ steps.meta.outputs.image_sha }}"
+          
+          docker build \
+            --build-arg NEXT_PUBLIC_API_URL=${{ env.NEXT_PUBLIC_API_URL }} \
+            --build-arg NEXT_PUBLIC_SITE_URL=${{ env.NEXT_PUBLIC_SITE_URL }} \
+            --tag ${{ steps.meta.outputs.image_sha }} \
+            --tag ${{ steps.meta.outputs.image_latest }} \
+            --tag ${{ steps.meta.outputs.image_timestamped }} \
+            --file Dockerfile \
+            .
+          
+          echo "✅ Build completed!"
+          
+          # 顯示映像檔大小
+          docker images ${{ steps.meta.outputs.image_base }} --format "table {{.Tag}}\t{{.Size}}"
+
+      # -----------------------------------------
+      # Step 7: 推送映像檔到 Artifact Registry
+      # -----------------------------------------
+      - name: 📤 Push to Artifact Registry
+        run: |
+          echo "📤 Pushing images to Artifact Registry..."
+          
+          docker push ${{ steps.meta.outputs.image_sha }}
+          docker push ${{ steps.meta.outputs.image_latest }}
+          docker push ${{ steps.meta.outputs.image_timestamped }}
+          
+          echo "✅ Push completed!"
+
+      # -----------------------------------------
+      # Step 8: 部署到 Cloud Run
+      # -----------------------------------------
+      - name: 🚀 Deploy to Cloud Run
+        id: deploy
+        run: |
+          echo "🚀 Deploying to Cloud Run..."
+          
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --image ${{ steps.meta.outputs.image_sha }} \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 8080 \
+            --memory 512Mi \
+            --cpu 1 \
+            --min-instances 0 \
+            --max-instances 10 \
+            --timeout 60 \
+            --concurrency 100 \
+            --set-env-vars "NODE_ENV=production" \
+            --set-env-vars "NEXT_PUBLIC_API_URL=${{ env.NEXT_PUBLIC_API_URL }}" \
+            --set-env-vars "NEXT_PUBLIC_SITE_URL=${{ env.NEXT_PUBLIC_SITE_URL }}" \
+            --labels "managed-by=github-actions,commit-sha=${{ steps.meta.outputs.short_sha }}"
+          
+          # 取得服務 URL
+          SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+            --region ${{ env.REGION }} \
+            --format 'value(status.url)')
+          
+          echo "service_url=${SERVICE_URL}" >> $GITHUB_OUTPUT
+          echo "✅ Deployment completed!"
+          echo "🌐 Service URL: ${SERVICE_URL}"
+
+      # -----------------------------------------
+      # Step 9: 健康檢查
+      # -----------------------------------------
+      - name: ✅ Health check
+        run: |
+          echo "🔍 Running health check..."
+          SERVICE_URL="${{ steps.deploy.outputs.service_url }}"
+          
+          # 等待服務穩定
+          sleep 10
+          
+          # 嘗試 5 次健康檢查
+          for i in {1..5}; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${SERVICE_URL}" || echo "000")
+            
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Health check passed! (HTTP ${HTTP_CODE})"
+              exit 0
+            fi
+            
+            echo "⏳ Attempt ${i}/5: HTTP ${HTTP_CODE}, retrying in 10s..."
+            sleep 10
+          done
+          
+          echo "❌ Health check failed after 5 attempts"
+          exit 1
+
+      # -----------------------------------------
+      # Step 10: 部署摘要
+      # -----------------------------------------
+      - name: 📋 Deployment summary
+        if: always()
+        run: |
+          echo "========================================"
+          echo "         Deployment Summary"
+          echo "========================================"
+          echo ""
+          echo "📦 Image: ${{ steps.meta.outputs.image_sha }}"
+          echo "🌐 URL: ${{ steps.deploy.outputs.service_url }}"
+          echo "📅 Time: $(date)"
+          echo "🔖 Commit: ${{ github.sha }}"
+          echo "👤 Actor: ${{ github.actor }}"
+          echo ""
+          echo "========================================"
+
+      # -----------------------------------------
+      # Step 11: 失敗時通知 (可選)
+      # -----------------------------------------
+      - name: 🚨 Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Deployment failed!"
+          echo "Please check the logs for more details."
+          # 這裡可以加入 Slack/Discord/Email 通知
+          # curl -X POST -H 'Content-type: application/json' \
+          #   --data '{"text":"❌ Frontend deployment failed!"}' \
+          #   ${{ secrets.SLACK_WEBHOOK_URL }}

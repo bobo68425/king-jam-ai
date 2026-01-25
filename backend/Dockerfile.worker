@@ -1,0 +1,48 @@
+# =============================================================================
+# King Jam AI - Celery Worker Dockerfile
+# 用於 Google Cloud Run Jobs 執行背景任務
+# =============================================================================
+
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# 環境變數
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# 安裝系統依賴
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        gcc \
+        libpq-dev \
+        ffmpeg \
+        curl \
+        ca-certificates \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安裝 Python 依賴
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 複製應用程式代碼
+COPY . .
+
+# 建立非 root 用戶
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
+# 建立必要目錄
+RUN mkdir -p /app/static/uploads /app/static/videos /app/static/thumbnails
+
+# 預設啟動 Celery Worker（可透過環境變數覆蓋）
+# CELERY_QUEUE 可設為: queue_high, queue_default, queue_video
+ENV CELERY_QUEUE=queue_default
+ENV CELERY_CONCURRENCY=2
+
+CMD celery -A app.celery_app worker \
+    -Q ${CELERY_QUEUE} \
+    -c ${CELERY_CONCURRENCY} \
+    -l info \
+    --max-tasks-per-child=100

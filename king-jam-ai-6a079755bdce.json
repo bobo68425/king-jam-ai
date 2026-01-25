@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "king-jam-ai",
+  "private_key_id": "6a079755bdced0449973fda4e12274179979de36",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCo17ozE6TVMDZU\nSwG4Ufx1BHK7f/qb3hjH27EAMGfsWBxaXzcWnBNv6C6gifUKcJeS8ieXSV5zHA0+\nxIXyv0HmjZX0SrC4GyL3+cmmQDxIjoXNGIl5JaNOxAJbaSCHeq4vnCUpfh+Vb9lf\n2Dw/Ke0arkIJYf0ZwxvxvHrSZ6k8EGsTos+/F0t7CzWer8WhqM+OdCDmdLrvzVoz\nmmeG2WaclbgmwU4EEn2VkvCP9C4yCDUbTryqi+3obf4sfC5IZbPJ6duNvZZ3cQRM\nGbXqNAQlRdA8SeyUZaHv5xJiedHxWLQ1zP+r8pDJiWk7gsTYjhCNkLly3fxh3n/K\n5rNCQ0GHAgMBAAECggEAMdMDR+pOlHi3N5Wwyr8q5C8tWkZQYmmeX2/lohwmtrhj\nmYmKfJoPJFFcXRSI4o1KNVtPMpY8kHRhNjoRGwq0fEAg1aeq0ZF0dr/X8T74ayLf\nuh+5Ba6FLAusdGQn7MLXnwYRc1acJGGOwHlTggIxzVNJ+nHXmiAY4XOQvQFJEAd+\nyC+/+gsaqQMYv6DBGDbsW0lQoYQ+OT1igOaeHh4qFAJsmIks9/cFR1r3O5+RQx4l\nuRc3jC/01gZRmcAcOxiNcMkHVLL6vvc2ucsTwxTq2nV/o6r6/I2fs/hR70m31BBr\nTud7nQxH6VHFFAp0SRTB2hICJYkTan9D2T7FJhNBeQKBgQDpEw2k9NkvQAsB2IqH\nUBswwbThRB/X/bQKWvVpYI6wApDGUT4YTJTRVjpkd7iYkiQPtFl4Z0Q/oBRtIr54\nSG/p8tzGjIWbv/D/aSxhXStGT7a93lDFf+NP08klEuLWpzWRfO54ARntZRIOg2hE\nyPmXq2Mf9jAtXHGYM+7VKtTZPwKBgQC5c0hAH9pVH0rBz/X2x10ZO+4n0OoxHICv\nK3zWbamxpFuFWXT5JERztpOLSTgwztTTgeIcU9wHgFWZsbly5eEQr/0YvcIM3ZxC\nDiRy9g/e4DQZG/U9MT0lhp27pnhGxwG2qAVoQVPgcN32qynsf8pw4/rwJm3me6uo\nTYAcxYH9uQKBgEht4VmXtT5XupPyROpT3H9EUv+F+hdXAfIN3iHHHdBYm8DlUlSe\nx8hd8XtzMOxIzegLdZpTDQRwrKhVmbcrW4vqKu2QkZybAzt75YzENUR+VR2fzp3x\nZiRSfjmFKvTltWHm3vxv6yy4senMsERf6CBX5E/0Y3hVN//Cc7/OtaJlAoGBAJBb\ne8dmxCb0x9Wck0N5JzBIZXea+WInZMh2mqO0E58TaKah3xs9Lwe//JQ098eOiT7n\nYOJaKPGx5XBRVyFobkz2IZdLxy0KqOMGbTsL7Yi5j/RnvfvXQ1jdtBTpXcECkoPj\nwOnJyIfyc+XakTTmuOgtnx2nXG9In3PQeERtPmYJAoGBAKN/S1odk9CaoMzdwH7m\ngm5B9wJkBQ55XY20qRN+/4H7Mn+5dU/5PwZx15omyol2BE8BOYWGls20IC4Imz7j\nqyJdB8m8IklaJWYu+whFs+dGgx39oJFX+de0S18slxga6BJfH0HqhBF4W+7BvHc2\nBAVcsyVMikiBoGZThI0enPTG\n-----END PRIVATE KEY-----\n",
+  "client_email": "github-action-deployer@king-jam-ai.iam.gserviceaccount.com",
+  "client_id": "112129410963488934399",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/github-action-deployer%40king-jam-ai.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

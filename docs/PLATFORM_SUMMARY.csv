@@ -1,0 +1,108 @@
+分類,項目,說明,狀態
+平台概覽,平台名稱,King Jam AI,✅ 已完成
+平台概覽,後端 API 端點,123+,✅ 已完成
+平台概覽,資料庫表,21,✅ 已完成
+平台概覽,前端頁面,15,✅ 已完成
+平台概覽,背景任務佇列,3,✅ 已完成
+
+技術棧-後端,Python,3.11+,✅ 已部署
+技術棧-後端,FastAPI,Web 框架,✅ 已部署
+技術棧-後端,SQLAlchemy,ORM,✅ 已部署
+技術棧-後端,PostgreSQL,資料庫,✅ 已部署
+技術棧-後端,Redis,快取/佇列,✅ 已部署
+技術棧-後端,Celery,背景任務,✅ 已部署
+
+技術棧-前端,Next.js 14,React 框架,✅ 已部署
+技術棧-前端,TypeScript,型別安全,✅ 已部署
+技術棧-前端,Tailwind CSS,樣式框架,✅ 已部署
+技術棧-前端,shadcn/ui,UI 元件庫,✅ 已部署
+
+功能模組-AI 生成,部落格文章生成,根據主題生成完整文章,✅ 已完成
+功能模組-AI 生成,社群圖文生成,AI 生成文案+圖片,✅ 已完成
+功能模組-AI 生成,短影音生成,腳本+影片渲染,✅ 已完成
+
+功能模組-排程,排程發布系統,跨平台統一排程,✅ 已完成
+功能模組-排程,智慧發布時間,建議最佳發布時間,✅ 已完成
+功能模組-排程,批量排程,批次處理多篇貼文,✅ 已完成
+功能模組-排程,Token 自動刷新,社群平台 Token 管理,✅ 已完成
+
+功能模組-點數,點數類別,PROMO/SUB/PAID/BONUS,✅ 已完成
+功能模組-點數,消耗順序,PROMO→SUB→PAID→BONUS,✅ 已完成
+功能模組-點數,提領機制,10點=NT$1 最低3000點,✅ 已完成
+功能模組-點數,交易記錄,完整點數流水帳,✅ 已完成
+
+功能模組-會員,免費方案,NT$0 + 200活動點數,✅ 已完成
+功能模組-會員,入門方案,NT$299/月,✅ 已完成
+功能模組-會員,標準方案,NT$699/月 + 月費點數,✅ 已完成
+功能模組-會員,企業方案,NT$3699/月 + 專屬客服,✅ 已完成
+
+功能模組-推薦,銅牌夥伴,預設 10%分潤,✅ 已完成
+功能模組-推薦,銀牌夥伴,10人+NT$5000 15%分潤,✅ 已完成
+功能模組-推薦,金牌夥伴,50人+NT$50000 20%分潤,✅ 已完成
+
+功能模組-安全,手機認證,SMS OTP 驗證,✅ 已完成
+功能模組-安全,身份認證,台灣身分證+浮水印,✅ 已完成
+功能模組-安全,雙重認證,TOTP Authenticator,✅ 已完成
+
+功能模組-通知,站內通知,即時通知+未讀計數,✅ 已完成
+功能模組-通知,通知類型,系統/點數/推薦/安全/內容,✅ 已完成
+
+前端頁面,登入頁,/login,✅ 已完成
+前端頁面,儀表板,/dashboard,✅ 已完成
+前端頁面,部落格生成,/dashboard/blog,✅ 已完成
+前端頁面,社群圖文,/dashboard/social,✅ 已完成
+前端頁面,短影音生成,/dashboard/video,✅ 已完成
+前端頁面,排程管理,/dashboard/scheduler,✅ 已完成
+前端頁面,社群帳號,/dashboard/accounts,✅ 已完成
+前端頁面,會員資料,/dashboard/profile,✅ 已完成
+前端頁面,推薦獎勵,/dashboard/referral,✅ 已完成
+前端頁面,點數錢包,/dashboard/credits,✅ 已完成
+前端頁面,生成紀錄,/dashboard/history,✅ 已完成
+前端頁面,訊息中心,/dashboard/notifications,✅ 已完成
+前端頁面,帳號設定,/dashboard/settings,✅ 已完成
+前端頁面,幫助中心,/dashboard/help,✅ 已完成
+
+API 模組,認證模組,/auth,✅ 已完成
+API 模組,用戶模組,/users,✅ 已完成
+API 模組,部落格模組,/blog,✅ 已完成
+API 模組,社群模組,/social,✅ 已完成
+API 模組,影片模組,/video,✅ 已完成
+API 模組,排程模組,/scheduler,✅ 已完成
+API 模組,點數模組,/credits,✅ 已完成
+API 模組,推薦模組,/referral,✅ 已完成
+API 模組,驗證模組,/verification,✅ 已完成
+API 模組,通知模組,/notifications,✅ 已完成
+API 模組,任務模組,/tasks,✅ 已完成
+API 模組,OAuth 模組,/oauth,✅ 已完成
+API 模組,上傳模組,/upload,✅ 已完成
+API 模組,歷史模組,/history,✅ 已完成
+
+資料庫表,users,用戶主表,✅ 已建立
+資料庫表,social_accounts,社群帳號,✅ 已建立
+資料庫表,posts,貼文內容,✅ 已建立
+資料庫表,scheduled_posts,排程貼文,✅ 已建立
+資料庫表,publish_logs,發布日誌,✅ 已建立
+資料庫表,credit_transactions,點數交易,✅ 已建立
+資料庫表,credit_pricing,功能定價,✅ 已建立
+資料庫表,credit_packages,點數包,✅ 已建立
+資料庫表,subscription_plans,訂閱方案,✅ 已建立
+資料庫表,withdrawal_requests,提領申請,✅ 已建立
+資料庫表,referral_records,推薦記錄,✅ 已建立
+資料庫表,partner_tiers,夥伴等級,✅ 已建立
+資料庫表,phone_verifications,手機驗證,✅ 已建立
+資料庫表,identity_verifications,身份驗證,✅ 已建立
+資料庫表,two_factor_auth,雙重認證,✅ 已建立
+資料庫表,notifications,站內通知,✅ 已建立
+資料庫表,generation_history,生成歷史,✅ 已建立
+資料庫表,verification_codes,驗證碼,✅ 已建立
+資料庫表,withdrawal_config,提領設定,✅ 已建立
+資料庫表,referral_bonus_config,推薦獎金設定,✅ 已建立
+
+Docker 服務,backend,FastAPI 後端,✅ 運行中
+Docker 服務,frontend,Next.js 前端,✅ 運行中
+Docker 服務,db,PostgreSQL 資料庫,✅ 運行中
+Docker 服務,redis,Redis 快取,✅ 運行中
+Docker 服務,celery_worker_high,高優先級佇列,✅ 運行中
+Docker 服務,celery_worker_default,預設佇列,✅ 運行中
+Docker 服務,celery_worker_video,影片渲染佇列,✅ 運行中
+Docker 服務,celery_beat,定時任務排程,✅ 運行中

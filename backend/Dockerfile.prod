@@ -1,0 +1,59 @@
+# =============================================================================
+# King Jam AI - 生產環境 Dockerfile
+# 用於 Google Cloud Run 部署
+# =============================================================================
+
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# 環境變數
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PORT=8080
+
+# 安裝系統依賴
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        gcc \
+        libpq-dev \
+        ffmpeg \
+        curl \
+        ca-certificates \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安裝 Python 依賴
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 複製應用程式代碼
+COPY . .
+
+# 建立非 root 用戶（安全性）
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
+# 建立必要目錄
+RUN mkdir -p /app/static/uploads /app/static/videos /app/static/thumbnails
+
+# 健康檢查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/health || exit 1
+
+# 生產環境啟動命令
+# 使用 gunicorn + uvicorn worker，支援多 worker 處理高併發
+CMD exec gunicorn \
+    --bind :${PORT} \
+    --workers 2 \
+    --threads 4 \
+    --timeout 120 \
+    --keep-alive 5 \
+    --max-requests 1000 \
+    --max-requests-jitter 50 \
+    --graceful-timeout 30 \
+    --access-logfile - \
+    --error-logfile - \
+    --capture-output \
+    -k uvicorn.workers.UvicornWorker \
+    app.main:app
