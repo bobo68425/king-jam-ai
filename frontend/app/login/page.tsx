@@ -372,7 +372,11 @@ export default function LoginPage() {
             </div>
             <Button
               className="w-full mt-2"
-              onClick={() => setShowErrorDialog(false)}
+              onClick={() => {
+                setShowErrorDialog(false);
+                setEmail("");
+                setPassword("");
+              }}
             >
               再試一次
             </Button>
