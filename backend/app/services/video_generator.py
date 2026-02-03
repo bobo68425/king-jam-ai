@@ -33,19 +33,23 @@ REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN", "")
 genai_client = None
 vertexai_client = None
 
-# 方法 1: 使用 Vertex AI SDK（服務帳戶認證）
-if GOOGLE_CLOUD_PROJECT and GOOGLE_APPLICATION_CREDENTIALS:
+# 檢查是否在 Cloud Run 環境（有預設服務帳戶）
+IS_CLOUD_RUN = os.getenv("K_SERVICE") is not None
+GOOGLE_CLOUD_PROJECT_ACTUAL = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT") or "king-jam-ai"
+
+# 方法 1: 使用 Vertex AI SDK（Cloud Run 自動有服務帳戶認證）
+if IS_CLOUD_RUN or GOOGLE_APPLICATION_CREDENTIALS:
     try:
         from google import genai
         from google.genai import types
         
-        # 使用 Vertex AI 模式
+        # 使用 Vertex AI 模式（Cloud Run 會自動使用服務帳戶）
         vertexai_client = genai.Client(
             vertexai=True,
-            project=GOOGLE_CLOUD_PROJECT,
+            project=GOOGLE_CLOUD_PROJECT_ACTUAL,
             location=GOOGLE_CLOUD_LOCATION,
         )
-        print(f"[VideoGenerator] ✓ Vertex AI Client 初始化成功 (專案: {GOOGLE_CLOUD_PROJECT})")
+        print(f"[VideoGenerator] ✓ Vertex AI Client 初始化成功 (專案: {GOOGLE_CLOUD_PROJECT_ACTUAL}, Cloud Run: {IS_CLOUD_RUN})")
     except Exception as e:
         print(f"[VideoGenerator] Vertex AI 初始化失敗: {e}")
 
