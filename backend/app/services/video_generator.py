@@ -515,8 +515,31 @@ class VideoGeneratorService:
                             with open(static_path, "wb") as f:
                                 f.write(video_bytes)
                             
-                            video_url = f"/video/download/{video_filename}"
                             print(f"[VideoGenerator] 📁 Veo 影片已保存: {static_path}")
+                            
+                            # 上傳到雲端儲存
+                            video_url = f"/video/download/{video_filename}"
+                            try:
+                                from app.services.cloud_storage import cloud_storage
+                                if cloud_storage.is_configured():
+                                    print(f"[VideoGenerator] ☁️ 正在上傳 Veo 影片到雲端儲存...")
+                                    upload_result = cloud_storage.upload_file(
+                                        file_path=str(static_path),
+                                        user_id=0,
+                                        file_type="videos",
+                                        original_filename=video_filename
+                                    )
+                                    if upload_result.get("success"):
+                                        video_url = upload_result["url"]
+                                        print(f"[VideoGenerator] ✅ Veo 雲端上傳成功: {video_url}")
+                                        try:
+                                            os.remove(static_path)
+                                        except:
+                                            pass
+                                    else:
+                                        print(f"[VideoGenerator] ⚠️ Veo 雲端上傳失敗: {upload_result.get('error')}")
+                            except Exception as e:
+                                print(f"[VideoGenerator] ⚠️ Veo 雲端儲存異常: {e}")
                             
                             return VideoResult(
                                 video_url=video_url,
@@ -726,10 +749,37 @@ static image, no motion, frozen frame, glitch, artifact"""
                 video_filename = os.path.basename(final_video_path)
                 final_size = os.path.getsize(final_video_path)
                 print(f"[VideoGenerator] 🔊 音訊已添加，最終影片: {final_video_path}, 大小: {final_size / 1024 / 1024:.2f} MB")
+                upload_path = final_video_path
             else:
                 final_size = len(video_bytes)
+                upload_path = str(static_path)
             
+            # 上傳到雲端儲存
             video_url = f"/video/download/{video_filename}"
+            try:
+                from app.services.cloud_storage import cloud_storage
+                if cloud_storage.is_configured():
+                    print(f"[VideoGenerator] ☁️ 正在上傳 Kling 影片到雲端儲存...")
+                    upload_result = cloud_storage.upload_file(
+                        file_path=upload_path,
+                        user_id=0,
+                        file_type="videos",
+                        original_filename=f"kling_{project_id}.mp4"
+                    )
+                    if upload_result.get("success"):
+                        video_url = upload_result["url"]
+                        print(f"[VideoGenerator] ✅ Kling 雲端上傳成功: {video_url}")
+                        # 刪除本地檔案
+                        try:
+                            os.remove(upload_path)
+                            if upload_path != str(static_path) and os.path.exists(static_path):
+                                os.remove(static_path)
+                        except:
+                            pass
+                    else:
+                        print(f"[VideoGenerator] ⚠️ Kling 雲端上傳失敗: {upload_result.get('error')}")
+            except Exception as e:
+                print(f"[VideoGenerator] ⚠️ Kling 雲端儲存異常: {e}")
             
             return VideoResult(
                 video_url=video_url,
