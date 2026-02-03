@@ -46,4 +46,3 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
-# Redeployed on Wed Feb  4 00:14:11 CST 2026
