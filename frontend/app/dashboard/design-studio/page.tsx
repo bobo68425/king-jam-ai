@@ -401,7 +401,7 @@ export default function DesignStudioPage() {
               </TabsContent>
               
               <TabsContent value="templates" className="flex-1 mt-0 min-h-0 overflow-hidden">
-                <TemplatesPanel onClose={() => setShowTemplates(false)} />
+                <TemplatesPanel />
               </TabsContent>
               
               <TabsContent value="assets" className="flex-1 mt-0 min-h-0 overflow-hidden">
