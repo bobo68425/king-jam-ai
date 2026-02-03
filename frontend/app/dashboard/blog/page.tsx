@@ -1164,10 +1164,10 @@ export default function BlogPage() {
   const isAnyLoading = loading || imageLoading || autoGenerating;
 
   return (
-    <div className="grid gap-6 md:grid-cols-[1fr_320px]">
+    <div className="flex flex-col lg:grid lg:grid-cols-[1fr_320px] gap-6">
       
       {/* --- 左側：主要工作區 --- */}
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4 min-w-0">
         
         {/* 步驟指示器 */}
         <StepIndicator 
@@ -1185,7 +1185,7 @@ export default function BlogPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <Input 
                 placeholder="輸入文章主題..." 
                 value={topic}
@@ -1195,7 +1195,7 @@ export default function BlogPage() {
                 className="flex-1 bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:border-indigo-500"
               />
               <Select value={tone} onValueChange={setTone} disabled={isAnyLoading}>
-                <SelectTrigger className="w-[130px] bg-slate-800 border-slate-600 text-white">
+                <SelectTrigger className="w-full sm:w-[130px] bg-slate-800 border-slate-600 text-white">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-600">
@@ -1213,7 +1213,7 @@ export default function BlogPage() {
             </div>
             
             {/* 生成按鈕組 */}
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <Button 
                 variant="outline"
                 className="flex-1 border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white"
@@ -1257,42 +1257,42 @@ export default function BlogPage() {
         </Card>
 
         {/* 文章預覽區 */}
-        <Card className="overflow-hidden flex flex-col bg-slate-900 border-slate-700">
+        <Card className="overflow-hidden flex flex-col bg-slate-900 border-slate-700 min-w-0">
           <CardHeader className="border-b border-slate-700 py-3 bg-slate-800 shrink-0">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base flex items-center text-white">
-                <FileText className="w-4 h-4 mr-2 text-indigo-400"/>
-                {currentPost ? currentPost.title : "文章預覽"}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <CardTitle className="text-base flex items-center gap-2 text-white min-w-0">
+                <FileText className="w-4 h-4 shrink-0 text-indigo-400"/>
+                <span className="truncate">{currentPost ? currentPost.title : "文章預覽"}</span>
                 {currentPost?.cover_image && (
-                  <Badge className="ml-2 text-xs bg-green-500/20 text-green-400 border-0">
+                  <Badge className="shrink-0 text-xs bg-green-500/20 text-green-400 border-0">
                     <CheckCircle2 className="w-3 h-3 mr-1"/>
                     已完成
                   </Badge>
                 )}
               </CardTitle>
               {currentPost && (
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={handleCopy}
-                    className="h-8 px-3 text-slate-400 hover:text-white hover:bg-slate-700"
+                    className="h-8 px-2 sm:px-3 text-slate-400 hover:text-white hover:bg-slate-700"
                     title="複製純文字"
                   >
                     {copied ? (
-                      <><Check className="w-4 h-4 mr-1.5 text-green-400"/>已複製</>
+                      <><Check className="w-4 h-4 sm:mr-1.5 text-green-400"/><span className="hidden sm:inline">已複製</span></>
                     ) : (
-                      <><Copy className="w-4 h-4 mr-1.5"/>複製</>
+                      <><Copy className="w-4 h-4 sm:mr-1.5"/><span className="hidden sm:inline">複製</span></>
                     )}
                   </Button>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={handleCopyHtml}
-                    className="h-8 px-3 text-slate-400 hover:text-white hover:bg-slate-700"
+                    className="h-8 px-2 sm:px-3 text-slate-400 hover:text-white hover:bg-slate-700"
                     title="複製 HTML 原始碼"
                   >
-                    <Code className="w-4 h-4 mr-1.5"/>原始碼
+                    <Code className="w-4 h-4 sm:mr-1.5"/><span className="hidden sm:inline">原始碼</span>
                   </Button>
                   {/* 排程上架按鈕 */}
                   <Button
@@ -1314,18 +1314,18 @@ export default function BlogPage() {
                       });
                       setShowScheduleDialog(true);
                     }}
-                    className="h-8 px-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white"
+                    className="h-8 px-2 sm:px-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white"
                   >
-                    <Clock className="w-4 h-4 mr-1.5"/>排程上架
+                    <Clock className="w-4 h-4 sm:mr-1.5"/><span className="hidden sm:inline">排程上架</span>
                   </Button>
                   
                   {/* WordPress 發布按鈕 */}
                   <Button
                     size="sm"
                     onClick={handleOpenWordPressDialog}
-                    className="h-8 px-3 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white"
+                    className="h-8 px-2 sm:px-3 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white"
                   >
-                    <Globe className="w-4 h-4 mr-1.5"/>WordPress
+                    <Globe className="w-4 h-4 sm:mr-1.5"/><span className="hidden sm:inline">WordPress</span>
                   </Button>
                 </div>
               )}
@@ -2072,11 +2072,11 @@ export default function BlogPage() {
 
                   {/* 內容區域 */}
                   {viewMode === "preview" ? (
-                    <div className="p-6 md:p-10 lg:p-12 bg-gradient-to-b from-slate-900 to-slate-950">
+                    <div className="p-4 sm:p-6 md:p-10 lg:p-12 bg-gradient-to-b from-slate-900 to-slate-950">
                       {/* 專業文章預覽容器 - 模擬真實部落格排版 */}
-                      <div className="max-w-3xl mx-auto">
+                      <div className="max-w-3xl mx-auto w-full">
                         <article 
-                          className="blog-article-preview"
+                          className="blog-article-preview break-words"
                           dangerouslySetInnerHTML={{ __html: currentPost.content }} 
                         />
                         
@@ -2145,7 +2145,7 @@ export default function BlogPage() {
       </div>
 
       {/* --- 右側：歷史紀錄 Sidebar --- */}
-      <Card className="flex flex-col max-h-[calc(100vh-8rem)] sticky top-4 overflow-hidden bg-gradient-to-b from-slate-900 to-slate-950 border-slate-700/50 shadow-xl">
+      <Card className="hidden lg:flex flex-col max-h-[calc(100vh-8rem)] sticky top-4 overflow-hidden bg-gradient-to-b from-slate-900 to-slate-950 border-slate-700/50 shadow-xl">
         {/* 標題區域 - 漸層背景 */}
         <CardHeader className="py-4 px-4 border-b border-slate-700/50 bg-gradient-to-r from-slate-800/80 to-slate-900/80 backdrop-blur shrink-0">
           <div className="flex items-center justify-between">

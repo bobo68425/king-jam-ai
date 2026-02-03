@@ -691,9 +691,15 @@ html:not(.no-transition) * {
 
 /* ===== 部落格文章預覽樣式 ===== */
 .blog-article-preview {
+  @apply w-full min-w-0;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  
   /* 主標題 H1 */
   & h1 {
-    @apply text-3xl md:text-4xl font-extrabold mb-6 pb-4 border-b-2;
+    @apply text-xl sm:text-2xl md:text-3xl lg:text-4xl font-extrabold mb-4 sm:mb-6 pb-3 sm:pb-4 border-b-2;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
   }
   .dark & h1 {
     @apply text-white border-indigo-500/30;
@@ -712,10 +718,12 @@ html:not(.no-transition) * {
 
   /* 章節標題 H2 */
   & h2 {
-    @apply text-2xl font-bold mt-10 mb-4 pb-2 flex items-center gap-3;
+    @apply text-lg sm:text-xl md:text-2xl font-bold mt-6 sm:mt-10 mb-3 sm:mb-4 pb-2 flex items-center gap-2 sm:gap-3;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
     &::before {
       content: '';
-      @apply w-1 h-6 bg-indigo-500 rounded-full;
+      @apply w-1 h-5 sm:h-6 bg-indigo-500 rounded-full shrink-0;
     }
   }
   .dark & h2 {
@@ -749,8 +757,9 @@ html:not(.no-transition) * {
 
   /* 段落 */
   & p {
-    @apply text-base md:text-lg leading-relaxed md:leading-8 mb-5;
-    text-align: justify;
+    @apply text-sm sm:text-base md:text-lg leading-relaxed md:leading-8 mb-4 sm:mb-5;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
   }
   .dark & p {
     @apply text-slate-300;
