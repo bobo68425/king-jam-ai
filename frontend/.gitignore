@@ -40,5 +40,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-*.json
+# 忽略敏感 JSON 檔案，但保留必要的設定檔
 secrets/
+*.secret.json
