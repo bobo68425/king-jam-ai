@@ -1427,20 +1427,35 @@ STRICTLY AVOID (NEGATIVE PROMPTS EMBEDDED)
             file_size = os.path.getsize(video_path)
             print(f"[VideoGenerator] 🎉 影片合成成功，大小: {file_size / 1024 / 1024:.2f} MB")
             
-            # 移動到靜態目錄供下載
-            static_dir = Path("/app/static/videos")
-            static_dir.mkdir(parents=True, exist_ok=True)
-            
-            video_filename = f"video_{project_id}.mp4"
-            static_path = static_dir / video_filename
-            
-            import shutil
-            shutil.move(video_path, static_path)
-            
-            # 返回可下載的 URL（相對路徑，前端會透過 API 請求）
-            video_url = f"/video/download/{video_filename}"
-            
-            print(f"[VideoGenerator] 📁 影片已保存: {static_path}")
+            # 嘗試上傳到雲端儲存
+            try:
+                from app.services.cloud_storage import cloud_storage
+                if cloud_storage.is_configured():
+                    print(f"[VideoGenerator] ☁️ 正在上傳到雲端儲存...")
+                    upload_result = cloud_storage.upload_file(
+                        file_path=video_path,
+                        user_id=0,  # 系統生成，使用 0 作為 user_id
+                        file_type="videos",
+                        original_filename=f"video_{project_id}.mp4"
+                    )
+                    if upload_result.get("success"):
+                        video_url = upload_result["url"]
+                        print(f"[VideoGenerator] ✅ 雲端上傳成功: {video_url}")
+                        # 刪除本地檔案
+                        try:
+                            os.remove(video_path)
+                        except:
+                            pass
+                    else:
+                        print(f"[VideoGenerator] ⚠️ 雲端上傳失敗: {upload_result.get('error')}")
+                        # 回退到本地儲存
+                        video_url = self._save_to_local(video_path, project_id)
+                else:
+                    print(f"[VideoGenerator] ⚠️ 雲端儲存未設定，使用本地儲存")
+                    video_url = self._save_to_local(video_path, project_id)
+            except Exception as e:
+                print(f"[VideoGenerator] ⚠️ 雲端儲存異常: {e}，使用本地儲存")
+                video_url = self._save_to_local(video_path, project_id)
         else:
             video_url = scene_images[0] if scene_images else ""
             generation_method = "placeholder"
@@ -1957,6 +1972,20 @@ Format: Authentic photography aesthetic
             import traceback
             traceback.print_exc()
             return video_path
+    
+    def _save_to_local(self, video_path: str, project_id: str) -> str:
+        """保存影片到本地靜態目錄"""
+        import shutil
+        static_dir = Path("/app/static/videos")
+        static_dir.mkdir(parents=True, exist_ok=True)
+        
+        video_filename = f"video_{project_id}.mp4"
+        static_path = static_dir / video_filename
+        
+        shutil.move(video_path, static_path)
+        print(f"[VideoGenerator] 📁 影片已保存: {static_path}")
+        
+        return f"/video/download/{video_filename}"
     
     async def _download_external_music(
         self,

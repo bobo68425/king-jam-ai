@@ -1,11 +1,14 @@
 """
 雲端儲存服務
-支援 Cloudflare R2 (推薦) 和 AWS S3
+支援 Google Cloud Storage (GCS)、Cloudflare R2 和 AWS S3
+
+GCS 優勢：
+- 與 GCP 整合，使用服務帳戶自動認證
+- 全球 CDN
 
 R2 優勢：
 - 影片流量零費用（egress free）
 - S3 相容 API
-- 全球 CDN
 """
 import os
 import boto3
@@ -15,44 +18,78 @@ from datetime import datetime
 import mimetypes
 import hashlib
 
+# GCS 支援
+try:
+    from google.cloud import storage as gcs_storage
+    GCS_AVAILABLE = True
+except ImportError:
+    GCS_AVAILABLE = False
+    print("[CloudStorage] google-cloud-storage 未安裝，GCS 功能不可用")
+
 
 class CloudStorageService:
     """
     雲端儲存服務
-    使用 S3 相容 API，同時支援 R2 和 S3
+    支援 GCS、R2 和 S3
     """
     
     def __init__(self):
-        self.provider = os.getenv("CLOUD_STORAGE_PROVIDER", "r2")  # r2 或 s3
+        # 優先使用 GCS（如果有設定 bucket）
+        self.gcs_bucket_name = os.getenv("GCS_BUCKET_NAME")
         
-        if self.provider == "r2":
-            # Cloudflare R2 設定
-            self.endpoint_url = os.getenv("R2_ENDPOINT_URL")  # https://<account_id>.r2.cloudflarestorage.com
-            self.access_key = os.getenv("R2_ACCESS_KEY_ID")
-            self.secret_key = os.getenv("R2_SECRET_ACCESS_KEY")
-            self.bucket_name = os.getenv("R2_BUCKET_NAME", "kingjam-media")
-            self.public_url = os.getenv("R2_PUBLIC_URL")  # https://media.kingjam.ai 或 R2 公開 URL
+        if self.gcs_bucket_name and GCS_AVAILABLE:
+            self.provider = "gcs"
+            self.bucket_name = self.gcs_bucket_name
+            self.public_url = f"https://storage.googleapis.com/{self.bucket_name}"
+            self._gcs_client = None
+            self._gcs_bucket = None
+            print(f"[CloudStorage] 使用 GCS: {self.bucket_name}")
         else:
-            # AWS S3 設定
-            self.endpoint_url = None
-            self.access_key = os.getenv("AWS_ACCESS_KEY_ID")
-            self.secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
-            self.bucket_name = os.getenv("S3_BUCKET_NAME", "kingjam-media")
-            self.region = os.getenv("AWS_REGION", "ap-northeast-1")
-            self.public_url = os.getenv("S3_PUBLIC_URL")  # CloudFront URL 或 S3 公開 URL
+            # 回退到 R2 或 S3
+            self.provider = os.getenv("CLOUD_STORAGE_PROVIDER", "r2")  # r2 或 s3
+            
+            if self.provider == "r2":
+                # Cloudflare R2 設定
+                self.endpoint_url = os.getenv("R2_ENDPOINT_URL")
+                self.access_key = os.getenv("R2_ACCESS_KEY_ID")
+                self.secret_key = os.getenv("R2_SECRET_ACCESS_KEY")
+                self.bucket_name = os.getenv("R2_BUCKET_NAME", "kingjam-media")
+                self.public_url = os.getenv("R2_PUBLIC_URL")
+            else:
+                # AWS S3 設定
+                self.endpoint_url = None
+                self.access_key = os.getenv("AWS_ACCESS_KEY_ID")
+                self.secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+                self.bucket_name = os.getenv("S3_BUCKET_NAME", "kingjam-media")
+                self.region = os.getenv("AWS_REGION", "ap-northeast-1")
+                self.public_url = os.getenv("S3_PUBLIC_URL")
         
         self._client = None
     
     @property
+    def gcs_client(self):
+        """懶加載 GCS 客戶端"""
+        if self._gcs_client is None and GCS_AVAILABLE:
+            self._gcs_client = gcs_storage.Client()
+        return self._gcs_client
+    
+    @property
+    def gcs_bucket(self):
+        """懶加載 GCS bucket"""
+        if self._gcs_bucket is None and self.gcs_client:
+            self._gcs_bucket = self.gcs_client.bucket(self.bucket_name)
+        return self._gcs_bucket
+    
+    @property
     def client(self):
-        """懶加載 S3 客戶端"""
-        if self._client is None:
+        """懶加載 S3 客戶端（用於 R2/S3）"""
+        if self._client is None and self.provider != "gcs":
             if not self.access_key or not self.secret_key:
                 raise ValueError("雲端儲存憑證未設定")
             
             config = Config(
                 signature_version='s3v4',
-                s3={'addressing_style': 'path'}  # R2 需要 path style
+                s3={'addressing_style': 'path'}
             )
             
             self._client = boto3.client(
@@ -115,7 +152,7 @@ class CloudStorageService:
             {
                 "success": True,
                 "key": "videos/1/2026/01/abc123_120000.mp4",
-                "url": "https://media.kingjam.ai/videos/1/2026/01/abc123_120000.mp4",
+                "url": "https://storage.googleapis.com/bucket/videos/...",
                 "size": 12345678
             }
         """
@@ -134,23 +171,35 @@ class CloudStorageService:
             content_type, _ = mimetypes.guess_type(file_path)
             content_type = content_type or "application/octet-stream"
             
-            # 上傳
-            with open(file_path, 'rb') as f:
-                self.client.upload_fileobj(
-                    f,
-                    self.bucket_name,
-                    key,
-                    ExtraArgs={
-                        'ContentType': content_type,
-                        'CacheControl': 'public, max-age=31536000',  # 1 年快取
-                    }
+            # 根據 provider 上傳
+            if self.provider == "gcs":
+                # GCS 上傳
+                blob = self.gcs_bucket.blob(key)
+                blob.upload_from_filename(
+                    file_path,
+                    content_type=content_type
                 )
-            
-            # 構建公開 URL
-            if self.public_url:
-                url = f"{self.public_url.rstrip('/')}/{key}"
+                blob.cache_control = "public, max-age=31536000"
+                blob.patch()
+                url = f"https://storage.googleapis.com/{self.bucket_name}/{key}"
+                print(f"[CloudStorage] ✅ GCS 上傳成功: {key}")
             else:
-                url = f"{self.endpoint_url}/{self.bucket_name}/{key}"
+                # S3/R2 上傳
+                with open(file_path, 'rb') as f:
+                    self.client.upload_fileobj(
+                        f,
+                        self.bucket_name,
+                        key,
+                        ExtraArgs={
+                            'ContentType': content_type,
+                            'CacheControl': 'public, max-age=31536000',
+                        }
+                    )
+                
+                if self.public_url:
+                    url = f"{self.public_url.rstrip('/')}/{key}"
+                else:
+                    url = f"{self.endpoint_url}/{self.bucket_name}/{key}"
             
             return {
                 "success": True,
@@ -161,6 +210,7 @@ class CloudStorageService:
             }
             
         except Exception as e:
+            print(f"[CloudStorage] ❌ 上傳失敗: {e}")
             return {
                 "success": False,
                 "error": str(e)
@@ -258,7 +308,9 @@ class CloudStorageService:
     
     def is_configured(self) -> bool:
         """檢查是否已設定雲端儲存"""
-        return bool(self.access_key and self.secret_key)
+        if self.provider == "gcs":
+            return bool(self.gcs_bucket_name and GCS_AVAILABLE)
+        return bool(getattr(self, 'access_key', None) and getattr(self, 'secret_key', None))
 
 
 # 全域實例
