@@ -169,9 +169,7 @@ jobs:
             --max-instances 10 \
             --timeout 60 \
             --concurrency 100 \
-            --set-env-vars "NODE_ENV=production" \
-            --set-env-vars "NEXT_PUBLIC_API_URL=${{ env.NEXT_PUBLIC_API_URL }}" \
-            --set-env-vars "NEXT_PUBLIC_SITE_URL=${{ env.NEXT_PUBLIC_SITE_URL }}" \
+            --update-env-vars "NODE_ENV=production,NEXT_PUBLIC_API_URL=${{ env.NEXT_PUBLIC_API_URL }},NEXT_PUBLIC_SITE_URL=${{ env.NEXT_PUBLIC_SITE_URL }}" \
             --labels "managed-by=github-actions,commit-sha=${{ steps.meta.outputs.short_sha }}"
           
           # 取得服務 URL

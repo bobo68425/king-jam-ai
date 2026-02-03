@@ -136,9 +136,7 @@ jobs:
             --max-instances 10 \
             --timeout 300 \
             --concurrency 80 \
-            --set-env-vars "ENVIRONMENT=production" \
-            --set-env-vars "FRONTEND_URL=https://kingjam.app" \
-            --set-env-vars "BACKEND_URL=https://api.kingjam.app" \
+            --update-env-vars "ENVIRONMENT=production,FRONTEND_URL=https://kingjam.app,BACKEND_URL=https://api.kingjam.app" \
             --vpc-connector kingjam-connector \
             --vpc-egress all-traffic \
             --labels "managed-by=github-actions,commit-sha=${{ steps.meta.outputs.short_sha }}"
