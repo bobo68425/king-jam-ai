@@ -7,7 +7,7 @@ import os
 
 from app.routers import auth, social_auth, blog, social, video, scheduler, upload, oauth, history, tasks, credits, referral, verification, users, notifications, wordpress, admin, insights, analytics, queue_monitor, brand_kit, prompts, design_studio, payment, account, campaigns, admin_notifications, assistant
 
-app = FastAPI(title="King Jam AI API", version="1.0.0")
+app = FastAPI(title="King Jam AI API", version="1.0.1")  # 2026-02-03 更新
 
 # 添加 validation error 詳細日誌
 @app.exception_handler(RequestValidationError)
