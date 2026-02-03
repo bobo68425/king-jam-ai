@@ -1413,7 +1413,8 @@ STRICTLY AVOID (NEGATIVE PROMPTS EMBEDDED)
             music_path,
             project_id,
             width,
-            height
+            height,
+            music_volume
         )
         
         # 4. 處理影片輸出
@@ -2260,7 +2261,8 @@ Format: Authentic photography aesthetic
         music_path: Optional[str],
         project_id: str,
         width: int,
-        height: int
+        height: int,
+        music_volume: float = 0.3
     ) -> Optional[str]:
         """
         使用 FFmpeg 合成專業級影片
