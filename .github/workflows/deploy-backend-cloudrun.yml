@@ -138,7 +138,8 @@ jobs:
             --concurrency 80 \
             --update-env-vars "ENVIRONMENT=production,FRONTEND_URL=https://kingjam.app,BACKEND_URL=https://api.kingjam.app" \
             --vpc-connector kingjam-connector \
-            --vpc-egress all-traffic \
+            --vpc-egress private-ranges-only \
+            --add-cloudsql-instances king-jam-ai:asia-east1:kingjam-db \
             --labels "managed-by=github-actions,commit-sha=${{ steps.meta.outputs.short_sha }}"
           
           SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
