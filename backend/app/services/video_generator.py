@@ -37,21 +37,24 @@ vertexai_client = None
 IS_CLOUD_RUN = os.getenv("K_SERVICE") is not None
 GOOGLE_CLOUD_PROJECT_ACTUAL = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT") or "king-jam-ai"
 
-# 方法 1: 使用 Vertex AI SDK（Cloud Run 自動有服務帳戶認證）
-if IS_CLOUD_RUN or GOOGLE_APPLICATION_CREDENTIALS:
-    try:
-        from google import genai
-        from google.genai import types
-        
-        # 使用 Vertex AI 模式（Cloud Run 會自動使用服務帳戶）
-        vertexai_client = genai.Client(
-            vertexai=True,
-            project=GOOGLE_CLOUD_PROJECT_ACTUAL,
-            location=GOOGLE_CLOUD_LOCATION,
-        )
-        print(f"[VideoGenerator] ✓ Vertex AI Client 初始化成功 (專案: {GOOGLE_CLOUD_PROJECT_ACTUAL}, Cloud Run: {IS_CLOUD_RUN})")
-    except Exception as e:
-        print(f"[VideoGenerator] Vertex AI 初始化失敗: {e}")
+print(f"[VideoGenerator] 環境檢測: Cloud Run={IS_CLOUD_RUN}, Project={GOOGLE_CLOUD_PROJECT_ACTUAL}")
+
+# 方法 1: 嘗試使用 Vertex AI SDK（Cloud Run 自動有服務帳戶認證）
+try:
+    from google import genai
+    from google.genai import types
+    
+    # 使用 Vertex AI 模式（Cloud Run 會自動使用服務帳戶）
+    vertexai_client = genai.Client(
+        vertexai=True,
+        project=GOOGLE_CLOUD_PROJECT_ACTUAL,
+        location=GOOGLE_CLOUD_LOCATION,
+    )
+    print(f"[VideoGenerator] ✓ Vertex AI Client 初始化成功 (專案: {GOOGLE_CLOUD_PROJECT_ACTUAL})")
+except ImportError as e:
+    print(f"[VideoGenerator] Vertex AI 導入失敗: {e}")
+except Exception as e:
+    print(f"[VideoGenerator] Vertex AI 初始化失敗: {e}")
 
 # 方法 2: 使用 API Key（備選）
 if not vertexai_client and GOOGLE_GEMINI_KEY:
