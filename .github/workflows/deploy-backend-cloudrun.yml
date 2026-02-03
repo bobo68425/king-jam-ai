@@ -136,7 +136,7 @@ jobs:
             --max-instances 10 \
             --timeout 600 \
             --concurrency 80 \
-            --update-env-vars "ENVIRONMENT=production,FRONTEND_URL=https://kingjam.app,BACKEND_URL=https://api.kingjam.app,GCS_BUCKET_NAME=kingjam-media" \
+            --update-env-vars "ENVIRONMENT=production,FRONTEND_URL=https://kingjam.app,BACKEND_URL=https://api.kingjam.app,GCS_BUCKET_NAME=kingjam-media,REPLICATE_API_TOKEN=${{ secrets.REPLICATE_API_TOKEN }}" \
             --vpc-connector kingjam-connector \
             --vpc-egress private-ranges-only \
             --add-cloudsql-instances king-jam-ai:asia-east1:kingjam-db \
