@@ -449,17 +449,21 @@ class VideoGeneratorService:
                     # Veo 只支持 4, 6, 8 秒的影片
                     veo_duration = 8  # 使用最長的 8 秒
                     
-                    # 發起生成請求
+                    # 發起生成請求（不使用 generate_audio，我們會單獨處理音訊）
+                    config = {
+                        "aspect_ratio": aspect_ratio,
+                        "duration_seconds": veo_duration,
+                        "number_of_videos": 1,
+                    }
+                    # generate_audio 只在 Vertex AI 模式下支援
+                    if client == vertexai_client:
+                        config["generate_audio"] = True
+                    
                     operation = await asyncio.to_thread(
                         client.models.generate_videos,
                         model=model_name,
                         prompt=video_prompt,
-                        config={
-                            "aspect_ratio": aspect_ratio,
-                            "duration_seconds": veo_duration,
-                            "number_of_videos": 1,
-                            "generate_audio": True,
-                        }
+                        config=config
                     )
                     
                     print(f"[VideoGenerator] 📡 Operation: {operation.name}")
