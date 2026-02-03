@@ -251,15 +251,16 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                 <span className="sr-only">Toggle navigation</span>
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="flex flex-col bg-sidebar border-sidebar-border">
-              <nav className="grid gap-2 text-lg font-medium">
-                <Link href="/dashboard" className="flex items-center justify-center py-5">
+            <SheetContent side="left" className="flex flex-col bg-sidebar border-sidebar-border p-0 w-[280px]">
+              {/* Logo 區域 - 固定在頂部 */}
+              <div className="flex-shrink-0 border-b border-sidebar-border">
+                <Link href="/dashboard" className="flex items-center justify-center py-4">
                   <Image
                     src="/logo.png"
                     alt="King Jam AI"
-                    width={110}
-                    height={110}
-                    className="h-[110px] w-auto rounded-xl"
+                    width={90}
+                    height={90}
+                    className="h-[90px] w-auto rounded-xl"
                     priority
                     onError={(e) => {
                       const target = e.currentTarget;
@@ -277,8 +278,12 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                     King Jam AI
                   </span>
                 </Link>
+              </div>
+              
+              {/* 可滾動的導航區域 */}
+              <div className="flex-1 overflow-y-auto overflow-x-hidden py-4 px-3">
                 <DashboardNav />
-              </nav>
+              </div>
             </SheetContent>
           </Sheet>
           

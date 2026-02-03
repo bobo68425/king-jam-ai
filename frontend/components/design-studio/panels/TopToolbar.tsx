@@ -94,6 +94,8 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu";
+import NewProjectDialog from "../dialogs/NewProjectDialog";
+import { useShortcutDisplay } from "@/lib/utils/keyboard";
 
 export default function TopToolbar() {
   const {
@@ -143,10 +145,14 @@ export default function TopToolbar() {
 
   const [showSizeDialog, setShowSizeDialog] = useState(false);
   const [showStorageDialog, setShowStorageDialog] = useState(false);
+  const [showNewProjectDialog, setShowNewProjectDialog] = useState(false);
   const [customWidth, setCustomWidth] = useState(canvasWidth.toString());
   const [customHeight, setCustomHeight] = useState(canvasHeight.toString());
   const [storageStats, setStorageStats] = useState({ usedSpace: 0, maxSpace: maxStorageSize, projectCount: 0, percentUsed: 0 });
   const [indexedDBProjects, setIndexedDBProjects] = useState<IndexedDBProject[]>([]);
+  
+  // 快捷鍵顯示（避免 hydration 問題）
+  const { formatShortcut, isMac } = useShortcutDisplay();
 
   // 載入儲存統計
   useEffect(() => {
@@ -238,6 +244,45 @@ export default function TopToolbar() {
     }
   }, [canvas, currentProject, templateName, canvasWidth, canvasHeight, canvasBackgroundColor, storageMode, setSaveStatus, markAsSaved, setCurrentProject]);
 
+  // 重建圖層列表
+  const rebuildLayers = useCallback((fabricCanvas: fabric.Canvas) => {
+    const { addLayer } = useDesignStudioStore.getState();
+    
+    // 先清除現有圖層
+    useDesignStudioStore.setState({ layers: [] });
+    
+    // 從畫布物件重建圖層
+    fabricCanvas.getObjects().forEach((obj: fabric.Object) => {
+      const extObj = obj as ExtendedFabricObject;
+      if (extObj.id && !extObj.isGrid && !extObj.isGuide) {
+        // 判斷物件類型
+        let objType: 'text' | 'image' | 'shape' | 'group' = 'shape';
+        if ((extObj as any).isGroup || obj.type === 'group') {
+          objType = 'group';
+        } else if (obj.type === 'i-text' || obj.type === 'textbox') {
+          objType = 'text';
+        } else if (obj.type === 'image') {
+          objType = 'image';
+        }
+        
+        addLayer({
+          id: extObj.id,
+          name: extObj.name || '物件',
+          type: objType,
+          visible: obj.visible !== false,
+          locked: !obj.selectable,
+          opacity: obj.opacity || 1,
+          blendMode: 'source-over',
+          fabricObject: obj,
+          clipMaskId: (extObj as any).clipMaskId,
+          isClipMask: (extObj as any).isClipMask,
+          isGroup: (extObj as any).isGroup,
+          childIds: (extObj as any).childIds,
+        });
+      }
+    });
+  }, []);
+
   // 開啟專案
   const handleOpen = useCallback(async () => {
     if (!canvas) return;
@@ -255,7 +300,8 @@ export default function TopToolbar() {
           project,
           canvas,
           setCanvasSize,
-          setCanvasBackground
+          setCanvasBackground,
+          rebuildLayers
         );
         
         setTemplateName(project.name);
@@ -272,7 +318,7 @@ export default function TopToolbar() {
       console.error('開啟失敗:', error);
       toast.error(error instanceof Error ? error.message : '開啟專案失敗');
     }
-  }, [canvas, storageMode, setCanvasSize, setCanvasBackground, setTemplateName, setCurrentProject, markAsSaved, openDialog]);
+  }, [canvas, storageMode, setCanvasSize, setCanvasBackground, setTemplateName, setCurrentProject, markAsSaved, openDialog, rebuildLayers]);
   
   // 從 IndexedDB 載入專案
   const loadFromIndexedDB = useCallback(async (projectId: string) => {
@@ -287,6 +333,9 @@ export default function TopToolbar() {
       );
       
       if (project) {
+        // 重建圖層列表
+        rebuildLayers(canvas);
+        
         setTemplateName(project.name);
         setCurrentProject({
           id: project.id,
@@ -302,7 +351,7 @@ export default function TopToolbar() {
       console.error('載入專案失敗:', error);
       toast.error('載入專案失敗');
     }
-  }, [canvas, setCanvasSize, setCanvasBackground, setTemplateName, setCurrentProject, markAsSaved, openDialog]);
+  }, [canvas, setCanvasSize, setCanvasBackground, setTemplateName, setCurrentProject, markAsSaved, openDialog, rebuildLayers]);
 
   // 開啟圖片檔案作為新專案
   const handleOpenImage = useCallback(async () => {
@@ -367,14 +416,24 @@ export default function TopToolbar() {
     }
   }, [canvas, hasUnsavedChanges, setCanvasSize, setCanvasBackground, setTemplateName, setCurrentProject, markAsModified]);
 
-  // 新建專案
+  // 新建專案 - 打開對話框
   const handleNew = useCallback(() => {
     if (hasUnsavedChanges) {
       if (!confirm('有未保存的變更，確定要新建專案嗎？')) {
         return;
       }
     }
-    
+    setShowNewProjectDialog(true);
+  }, [hasUnsavedChanges]);
+
+  // 創建新專案（從對話框回調）
+  const handleCreateProject = useCallback((params: {
+    name: string;
+    width: number;
+    height: number;
+    backgroundColor: string;
+    resolution: number;
+  }) => {
     if (!canvas) return;
     
     // 清除畫布（保留網格和參考線）
@@ -384,16 +443,16 @@ export default function TopToolbar() {
     });
     objectsToRemove.forEach(obj => canvas.remove(obj));
     
-    // 重置設定
-    setCanvasSize(1080, 1080);
-    setCanvasBackground('#FFFFFF');
-    setTemplateName('未命名專案');
+    // 設定新專案
+    setCanvasSize(params.width, params.height);
+    setCanvasBackground(params.backgroundColor);
+    setTemplateName(params.name);
     setCurrentProject(null);
     markAsSaved();
     
     canvas.renderAll();
-    toast.success('已建立新專案');
-  }, [canvas, hasUnsavedChanges, setCanvasSize, setCanvasBackground, setTemplateName, setCurrentProject, markAsSaved]);
+    toast.success(`已建立新專案：${params.name}`);
+  }, [canvas, setCanvasSize, setCanvasBackground, setTemplateName, setCurrentProject, markAsSaved]);
 
   // 匯出 PNG
   const exportPNG = useCallback((transparent: boolean = false) => {
@@ -461,25 +520,6 @@ export default function TopToolbar() {
       toast.success("已匯出 PNG 圖片");
     }
   }, [canvas, templateName]);
-
-  // 匯出 JSON Schema
-  const exportJSON = useCallback(() => {
-    const schema = exportToSchema();
-    if (!schema) {
-      toast.error("匯出失敗");
-      return;
-    }
-    
-    const blob = new Blob([JSON.stringify(schema, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.download = `${templateName || "template"}-${Date.now()}.json`;
-    link.href = url;
-    link.click();
-    URL.revokeObjectURL(url);
-    
-    toast.success("已匯出 JSON 模板");
-  }, [exportToSchema, templateName]);
 
   // 導出到圖庫
   const exportToGallery = useCallback(async () => {
@@ -724,63 +764,127 @@ export default function TopToolbar() {
             <DropdownMenuItem onClick={handleNew} className="cursor-pointer">
               <FilePlus className="w-4 h-4 mr-2" />
               新建專案
-              <DropdownMenuShortcut>⌘N</DropdownMenuShortcut>
+              <DropdownMenuShortcut>{formatShortcut('cmd+n')}</DropdownMenuShortcut>
             </DropdownMenuItem>
             <DropdownMenuItem onClick={handleOpen} className="cursor-pointer">
               <FolderOpen className="w-4 h-4 mr-2" />
               開啟專案
-              <DropdownMenuShortcut>⌘O</DropdownMenuShortcut>
+              <DropdownMenuShortcut>{formatShortcut('cmd+o')}</DropdownMenuShortcut>
             </DropdownMenuItem>
             <DropdownMenuItem onClick={handleOpenImage} className="cursor-pointer">
               <ImagePlus className="w-4 h-4 mr-2" />
               開啟圖片
-              <DropdownMenuShortcut>⌘I</DropdownMenuShortcut>
+              <DropdownMenuShortcut>{formatShortcut('cmd+i')}</DropdownMenuShortcut>
             </DropdownMenuItem>
             <DropdownMenuSeparator className="bg-slate-700" />
             <DropdownMenuItem onClick={handleSave} className="cursor-pointer">
               <Save className="w-4 h-4 mr-2" />
               保存專案
-              <DropdownMenuShortcut>⌘S</DropdownMenuShortcut>
+              <DropdownMenuShortcut>{formatShortcut('cmd+s')}</DropdownMenuShortcut>
             </DropdownMenuItem>
             <DropdownMenuSeparator className="bg-slate-700" />
-            <DropdownMenuLabel className="text-slate-400 text-xs">匯出</DropdownMenuLabel>
-            <DropdownMenuItem onClick={() => exportPNG(false)} className="cursor-pointer">
-              <ImageIcon className="w-4 h-4 mr-2" />
-              匯出 PNG
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => exportPNG(true)} className="cursor-pointer">
-              <ImageIcon className="w-4 h-4 mr-2 text-purple-400" />
-              匯出透明 PNG
-            </DropdownMenuItem>
+            <DropdownMenuLabel className="text-slate-400 text-xs">匯出圖片</DropdownMenuLabel>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger className="cursor-pointer">
+                <ImageIcon className="w-4 h-4 mr-2 text-green-400" />
+                PNG 格式
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="bg-slate-800 border-slate-700">
+                <DropdownMenuItem onClick={() => exportPNG(false)} className="cursor-pointer">
+                  <ImageIcon className="w-4 h-4 mr-2" />
+                  PNG (2x 高解析度)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportPNG(true)} className="cursor-pointer">
+                  <ImageIcon className="w-4 h-4 mr-2 text-purple-400" />
+                  PNG 透明背景 (2x)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => {
+                  if (!canvas) return;
+                  storageService.exportPNG(canvas, templateName || 'design', { multiplier: 1 });
+                  toast.success('已匯出 PNG (1x)');
+                }} className="cursor-pointer">
+                  <ImageIcon className="w-4 h-4 mr-2 text-slate-400" />
+                  PNG (1x 原始尺寸)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => {
+                  if (!canvas) return;
+                  storageService.exportPNG(canvas, templateName || 'design', { multiplier: 4 });
+                  toast.success('已匯出 PNG (4x)');
+                }} className="cursor-pointer">
+                  <ImageIcon className="w-4 h-4 mr-2 text-yellow-400" />
+                  PNG (4x 超高解析度)
+                </DropdownMenuItem>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
             <DropdownMenuItem onClick={() => {
               if (!canvas) return;
               storageService.exportJPG(canvas, templateName || 'design');
               toast.success('已匯出 JPG 圖片');
             }} className="cursor-pointer">
-              <ImageIcon className="w-4 h-4 mr-2" />
-              匯出 JPG
+              <ImageIcon className="w-4 h-4 mr-2 text-orange-400" />
+              JPG 格式 (高品質)
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => {
               if (!canvas) return;
-              storageService.exportSVG(canvas, templateName || 'design');
-              toast.success('已匯出 SVG 圖片');
+              storageService.exportWebP(canvas, templateName || 'design');
+              toast.success('已匯出 WebP 圖片');
             }} className="cursor-pointer">
-              <FileJson className="w-4 h-4 mr-2" />
-              匯出 SVG
+              <ImageIcon className="w-4 h-4 mr-2 text-blue-400" />
+              WebP 格式 (現代格式)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => {
+              if (!canvas) return;
+              storageService.exportGIF(canvas, templateName || 'design');
+              toast.success('已匯出 GIF 圖片');
+            }} className="cursor-pointer">
+              <ImageIcon className="w-4 h-4 mr-2 text-pink-400" />
+              GIF 格式
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="bg-slate-700" />
+            <DropdownMenuLabel className="text-slate-400 text-xs">向量 / 文件</DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => {
+              if (!canvas) return;
+              storageService.exportSVG(canvas, templateName || 'design');
+              toast.success('已匯出 SVG');
+            }} className="cursor-pointer">
+              <FileJson className="w-4 h-4 mr-2 text-cyan-400" />
+              SVG 向量圖
             </DropdownMenuItem>
             <DropdownMenuItem onClick={async () => {
               if (!canvas) return;
               await storageService.exportPDF(canvas, templateName || 'design');
               toast.success('已匯出 PDF');
             }} className="cursor-pointer">
-              <Download className="w-4 h-4 mr-2" />
-              匯出 PDF
+              <Download className="w-4 h-4 mr-2 text-red-400" />
+              PDF 文件
             </DropdownMenuItem>
             <DropdownMenuSeparator className="bg-slate-700" />
-            <DropdownMenuItem onClick={exportJSON} className="cursor-pointer">
-              <FileJson className="w-4 h-4 mr-2" />
-              匯出 JSON 模板
+            <DropdownMenuLabel className="text-slate-400 text-xs">其他格式</DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => {
+              if (!canvas) return;
+              storageService.exportBMP(canvas, templateName || 'design');
+              toast.success('已匯出 BMP 圖片');
+            }} className="cursor-pointer">
+              <ImageIcon className="w-4 h-4 mr-2 text-slate-400" />
+              BMP 點陣圖
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => {
+              if (!canvas) return;
+              storageService.exportTIFF(canvas, templateName || 'design');
+              toast.success('已匯出 TIFF 圖片');
+            }} className="cursor-pointer">
+              <ImageIcon className="w-4 h-4 mr-2 text-indigo-400" />
+              TIFF 高品質
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => {
+              if (!canvas) return;
+              storageService.exportICO(canvas, templateName || 'design');
+              toast.success('已匯出 ICO 圖示');
+            }} className="cursor-pointer">
+              <ImageIcon className="w-4 h-4 mr-2 text-amber-400" />
+              ICO 圖示 (256px)
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="bg-slate-700" />
             <DropdownMenuItem onClick={exportToGallery} className="cursor-pointer">
               <Images className="w-4 h-4 mr-2 text-indigo-400" />
               導出到圖庫
@@ -862,7 +966,7 @@ export default function TopToolbar() {
                 <div className="text-xs">
                   <div className="font-medium">復原</div>
                   <div className="text-slate-400 flex items-center gap-1 mt-0.5">
-                    <kbd className="px-1 py-0.5 bg-slate-700 rounded text-[10px]">⌘Z</kbd>
+                    <kbd className="px-1 py-0.5 bg-slate-700 rounded text-[10px]">{formatShortcut('cmd+z')}</kbd>
                   </div>
                   {history[historyIndex]?.description && (
                     <div className="text-slate-500 mt-1 pt-1 border-t border-slate-700">
@@ -903,7 +1007,7 @@ export default function TopToolbar() {
                 <div className="text-xs">
                   <div className="font-medium">重做</div>
                   <div className="text-slate-400 flex items-center gap-1 mt-0.5">
-                    <kbd className="px-1 py-0.5 bg-slate-700 rounded text-[10px]">⌘⇧Z</kbd>
+                    <kbd className="px-1 py-0.5 bg-slate-700 rounded text-[10px]">{formatShortcut('cmd+shift+z')}</kbd>
                   </div>
                   {history[historyIndex + 1]?.description && (
                     <div className="text-slate-500 mt-1 pt-1 border-t border-slate-700">
@@ -1194,20 +1298,49 @@ export default function TopToolbar() {
               <ChevronDown className="w-3 h-3 ml-1" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="bg-slate-800 border-slate-700">
-            <DropdownMenuLabel className="text-xs text-slate-400">匯出格式</DropdownMenuLabel>
+          <DropdownMenuContent align="end" className="bg-slate-800 border-slate-700 min-w-[180px]">
+            <DropdownMenuLabel className="text-xs text-slate-400">常用格式</DropdownMenuLabel>
             <DropdownMenuSeparator className="bg-slate-700" />
             <DropdownMenuItem onClick={() => exportPNG(false)} className="cursor-pointer">
               <ImageIcon className="w-4 h-4 mr-2 text-green-400" />
-              PNG 圖片 (2x)
+              PNG (2x)
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => exportPNG(true)} className="cursor-pointer">
               <ImageIcon className="w-4 h-4 mr-2 text-purple-400" />
-              透明背景 PNG (2x)
+              PNG 透明 (2x)
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={exportJSON} className="cursor-pointer">
-              <FileJson className="w-4 h-4 mr-2 text-blue-400" />
-              JSON 模板
+            <DropdownMenuItem onClick={() => {
+              if (!canvas) return;
+              storageService.exportJPG(canvas, templateName || 'design');
+              toast.success('已匯出 JPG');
+            }} className="cursor-pointer">
+              <ImageIcon className="w-4 h-4 mr-2 text-orange-400" />
+              JPG (高品質)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => {
+              if (!canvas) return;
+              storageService.exportWebP(canvas, templateName || 'design');
+              toast.success('已匯出 WebP');
+            }} className="cursor-pointer">
+              <ImageIcon className="w-4 h-4 mr-2 text-blue-400" />
+              WebP (現代格式)
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="bg-slate-700" />
+            <DropdownMenuItem onClick={() => {
+              if (!canvas) return;
+              storageService.exportSVG(canvas, templateName || 'design');
+              toast.success('已匯出 SVG');
+            }} className="cursor-pointer">
+              <FileJson className="w-4 h-4 mr-2 text-cyan-400" />
+              SVG (向量圖)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={async () => {
+              if (!canvas) return;
+              await storageService.exportPDF(canvas, templateName || 'design');
+              toast.success('已匯出 PDF');
+            }} className="cursor-pointer">
+              <Download className="w-4 h-4 mr-2 text-red-400" />
+              PDF (文件)
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -1252,7 +1385,7 @@ export default function TopToolbar() {
                     storageMode === 'local' ? 'text-indigo-400' : 'text-slate-500'
                   }`} />
                   <div className="text-sm font-medium text-white">本地檔案</div>
-                  <div className="text-xs text-slate-400 mt-1">儲存為 .jam 檔案</div>
+                  <div className="text-xs text-slate-400 mt-1">儲存為 .kjam 檔案</div>
                 </button>
                 <button
                   onClick={() => setStorageMode('indexeddb')}
@@ -1311,8 +1444,12 @@ export default function TopToolbar() {
                       {indexedDBProjects.map(p => (
                         <div key={p.id} className="flex items-center justify-between p-2 bg-slate-800 rounded text-xs">
                           <div className="flex items-center gap-2">
-                            {p.thumbnail && (
+                            {p.thumbnail ? (
                               <img src={p.thumbnail} className="w-8 h-8 rounded object-cover" alt="" />
+                            ) : (
+                              <div className="w-8 h-8 rounded bg-slate-700 flex items-center justify-center p-1">
+                                <img src="/file.svg" className="w-full h-full" alt="KJAM" />
+                              </div>
                             )}
                             <div>
                               <div className="text-white">{p.name}</div>
@@ -1362,7 +1499,7 @@ export default function TopToolbar() {
 
             {/* 說明 */}
             <div className="text-xs text-slate-500 space-y-1">
-              <p><strong>本地檔案：</strong>專案儲存為 .jam 檔案，可自由備份和分享。</p>
+              <p><strong>本地檔案：</strong>專案儲存為 .kjam 檔案，可自由備份和分享。</p>
               <p><strong>瀏覽器儲存：</strong>專案儲存在瀏覽器中，清除瀏覽器資料會遺失。</p>
             </div>
           </div>
@@ -1396,8 +1533,8 @@ export default function TopToolbar() {
                     {p.thumbnail ? (
                       <img src={p.thumbnail} className="w-16 h-16 rounded object-cover" alt="" />
                     ) : (
-                      <div className="w-16 h-16 rounded bg-slate-700 flex items-center justify-center">
-                        <File className="w-6 h-6 text-slate-500" />
+                      <div className="w-16 h-16 rounded bg-slate-700 flex items-center justify-center p-2">
+                        <img src="/file.svg" className="w-full h-full" alt="KJAM" />
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
@@ -1419,12 +1556,38 @@ export default function TopToolbar() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* 新建專案對話框 */}
+      <NewProjectDialog
+        open={showNewProjectDialog}
+        onOpenChange={setShowNewProjectDialog}
+        onCreateProject={handleCreateProject}
+      />
     </div>
   );
 }
 
-// 快捷鍵顯示組件
+// 快捷鍵顯示組件 - 自動根據 Mac/Windows 顯示對應符號
 function ShortcutRow({ keys, desc }: { keys: string[]; desc: string }) {
+  const { isMac: isMacOS } = useShortcutDisplay();
+  
+  // 轉換 Mac 符號到 Windows
+  const convertKey = (key: string): string => {
+    if (isMacOS) return key;
+    
+    const macToWin: Record<string, string> = {
+      '⌘': 'Ctrl',
+      '⌃': 'Ctrl',
+      '⌥': 'Alt',
+      '⇧': 'Shift',
+      '↵': 'Enter',
+      '⌫': 'Backspace',
+      '⌦': 'Del',
+      '⇥': 'Tab',
+    };
+    return macToWin[key] || key;
+  };
+
   return (
     <div className="flex items-center justify-between">
       <span className="text-slate-300">{desc}</span>
@@ -1434,7 +1597,7 @@ function ShortcutRow({ keys, desc }: { keys: string[]; desc: string }) {
             key={i}
             className="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-[11px] text-slate-400 font-mono min-w-[24px] text-center"
           >
-            {key}
+            {convertKey(key)}
           </kbd>
         ))}
       </div>

@@ -127,7 +127,7 @@ Google Veo 3        - 影片生成
 Google Imagen 3     - 圖片生成
 Kling AI            - 影片生成 (備援)
 Google TTS          - 語音合成
-PicWish             - 背景移除
+rembg (U2Net)       - 背景移除 (本地開源)
 ```
 
 ### 基礎設施

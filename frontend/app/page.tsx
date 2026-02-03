@@ -585,21 +585,21 @@ function TestimonialsSection() {
   const testimonials = [
     {
       content: "King Jam AI 讓我的自媒體經營效率提升了 10 倍！原本要花一整天寫的文章，現在 10 分鐘就搞定。",
-      author: "陳小明",
+      author: "陳先生",
       role: "旅遊部落客",
       avatar: "👨‍💼",
       rating: 5,
     },
     {
       content: "AI 短影片功能太強大了，完全不需要剪輯技能就能做出專業級的影片，推薦給所有自媒體人！",
-      author: "林小美",
+      author: "林小姐",
       role: "美妝 YouTuber",
       avatar: "👩‍🎨",
       rating: 5,
     },
     {
       content: "智能排程功能幫我省下大量時間，現在可以一次準備一週的內容，系統自動發布。",
-      author: "王大華",
+      author: "王先生",
       role: "電商賣家",
       avatar: "👨‍💻",
       rating: 5,
@@ -721,10 +721,10 @@ function Footer() {
       { label: "API 文件", href: "#" },
     ],
     company: [
-      { label: "關於我們", href: "#" },
+      { label: "關於我們", href: "/about" },
       { label: "部落格", href: "#" },
-      { label: "合作夥伴", href: "#" },
-      { label: "聯絡我們", href: "#" },
+      { label: "合作夥伴", href: "/partners" },
+      { label: "聯絡我們", href: "/contact" },
     ],
     legal: [
       { label: "服務條款", href: "/terms" },
@@ -736,7 +736,7 @@ function Footer() {
   return (
     <footer className="bg-slate-950 border-t border-slate-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-12">
+        <div className="grid md:grid-cols-2 lg:grid-cols-6 gap-12">
           {/* Brand */}
           <div className="lg:col-span-2">
             <Link href="/" className="flex items-center gap-3 mb-4">
@@ -791,6 +791,25 @@ function Footer() {
                   <a href={link.href} className="text-slate-400 hover:text-white transition-colors text-sm">{link.label}</a>
                 </li>
               ))}
+            </ul>
+          </div>
+
+          {/* Contact Info */}
+          <div>
+            <h4 className="text-white font-semibold mb-4">聯絡資訊</h4>
+            <ul className="space-y-3 text-sm">
+              <li className="text-slate-400">
+                <span className="block text-slate-500 text-xs mb-1">地址</span>
+                台北市信義區福德街84巷30號23樓之11
+              </li>
+              <li>
+                <span className="block text-slate-500 text-xs mb-1">電話</span>
+                <a href="tel:+886981689608" className="text-slate-400 hover:text-white transition-colors">+886 981 689 608</a>
+              </li>
+              <li>
+                <span className="block text-slate-500 text-xs mb-1">Email</span>
+                <a href="mailto:bobo68425@gmail.com" className="text-slate-400 hover:text-white transition-colors">bobo68425@gmail.com</a>
+              </li>
             </ul>
           </div>
         </div>

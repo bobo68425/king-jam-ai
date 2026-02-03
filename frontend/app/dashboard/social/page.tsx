@@ -15,7 +15,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Loader2, Sparkles, Heart, MessageCircle, Send, Bookmark, Copy, Download, Check, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, RefreshCw, Edit3, Save, X, Trash2, Clock, CheckSquare, Image as ImageIcon, Type, Palette, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { FaInstagram, FaFacebookF, FaTiktok, FaPinterestP, FaLinkedinIn, FaLine, FaThreads } from "react-icons/fa6";
+import { FaInstagram, FaFacebookF, FaPinterestP, FaLinkedinIn, FaLine } from "react-icons/fa";
+import { SiTiktok, SiThreads } from "react-icons/si";
 import { ScheduleDialog, ScheduleContent } from "@/components/schedule-dialog";
 import ImageTextEditor from "@/components/image-text-editor";
 import { useRouter } from "next/navigation";
@@ -98,7 +99,7 @@ const PlatformIcon = ({ platform, className = "w-6 h-6" }: { platform: string; c
       case "tiktok":
         return (
           <div className={cn("flex items-center justify-center rounded-xl bg-black", className)} style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}>
-            <FaTiktok className={cn(iconClass, "text-white")} />
+            <SiTiktok className={cn(iconClass, "text-white")} />
           </div>
         );
       case "pinterest":
@@ -110,7 +111,7 @@ const PlatformIcon = ({ platform, className = "w-6 h-6" }: { platform: string; c
       case "threads":
         return (
           <div className={cn("flex items-center justify-center rounded-xl bg-black", className)} style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}>
-            <FaThreads className={cn(iconClass, "text-white")} />
+            <SiThreads className={cn(iconClass, "text-white")} />
           </div>
         );
       case "linkedin":
@@ -3118,6 +3119,7 @@ export default function SocialPage() {
                   <SelectItem value="vintage">📷 復古懷舊 (Vintage)</SelectItem>
                   <SelectItem value="modern">🚀 現代時尚 (Modern)</SelectItem>
                   <SelectItem value="nature">🌿 自然清新 (Nature)</SelectItem>
+                  <SelectItem value="faith">🕊️ 信仰靈性 (Faith)</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">

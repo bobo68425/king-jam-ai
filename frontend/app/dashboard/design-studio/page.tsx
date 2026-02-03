@@ -15,7 +15,6 @@ import {
   Layers, 
   Settings2,
   Sparkles,
-  X,
   FolderOpen,
   Images,
 } from "lucide-react";
@@ -32,6 +31,7 @@ import GalleryPanel from "@/components/design-studio/panels/GalleryPanel";
 import { useDesignStudioStore, ExtendedFabricObject } from "@/stores/design-studio-store";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useShortcutDisplay } from "@/lib/utils/keyboard";
 import { getPendingImageForEditor, sharedGalleryService } from "@/lib/services/shared-gallery-service";
 import { v4 as uuidv4 } from "uuid";
 
@@ -65,9 +65,11 @@ export default function DesignStudioPage() {
     setTemplateName,
   } = useDesignStudioStore();
 
-  const [showTemplates, setShowTemplates] = useState(false);
   const [activeRightTab, setActiveRightTab] = useState<"properties" | "filters">("properties");
   const [activeLeftTab, setActiveLeftTab] = useState<string>("layers");
+  
+  // 快捷鍵顯示（避免 hydration 問題）
+  const { formatShortcut, deleteKey } = useShortcutDisplay();
 
   // 處理從其他引擎傳來的待編輯圖片
   const handlePendingImage = useCallback(async () => {
@@ -184,16 +186,43 @@ export default function DesignStudioPage() {
       }
       // Delete/Backspace = 刪除選中物件
       if ((e.key === "Delete" || e.key === "Backspace") && canvas) {
-        const activeObjects = canvas.getActiveObjects();
-        if (activeObjects.length > 0) {
-          activeObjects.forEach((obj: fabric.Object) => {
-            canvas.remove(obj);
-            const extObj = obj as ExtendedFabricObject;
-            if (extObj.id) {
-              useDesignStudioStore.getState().removeLayer(extObj.id);
-            }
-          });
+        e.preventDefault();
+        
+        const { selectedObjectIds, layers, removeLayer } = useDesignStudioStore.getState();
+        const activeObject = canvas.getActiveObject();
+        
+        // 優先使用 store 中的選取狀態（支援從圖層面板多選）
+        if (selectedObjectIds.length > 0) {
+          // 找到要刪除的物件
+          const objectsToRemove = layers
+            .filter(l => selectedObjectIds.includes(l.id) && l.fabricObject)
+            .map(l => l.fabricObject!);
+          
+          // 先取消選取
           canvas.discardActiveObject();
+          
+          // 刪除所有選中的物件
+          objectsToRemove.forEach((obj: fabric.Object) => {
+            canvas.remove(obj);
+          });
+          
+          canvas.renderAll();
+        } else if (activeObject) {
+          // 使用 Fabric.js 的選取狀態
+          if (activeObject.type === 'activeSelection') {
+            const activeSelection = activeObject as fabric.ActiveSelection;
+            const objects = activeSelection.getObjects();
+            
+            canvas.discardActiveObject();
+            
+            objects.forEach((obj: fabric.Object) => {
+              canvas.remove(obj);
+            });
+          } else {
+            canvas.remove(activeObject);
+            canvas.discardActiveObject();
+          }
+          
           canvas.renderAll();
         }
       }
@@ -202,7 +231,6 @@ export default function DesignStudioPage() {
         canvas.discardActiveObject();
         canvas.renderAll();
         useDesignStudioStore.getState().clearSelection();
-        setShowTemplates(false);
       }
       // T = 文字工具
       if (e.key === "t" || e.key === "T") {
@@ -228,6 +256,95 @@ export default function DesignStudioPage() {
           });
         }
       }
+      // Ctrl/Cmd + G = 建立群組
+      if ((e.ctrlKey || e.metaKey) && e.key === "g" && !e.shiftKey && canvas) {
+        e.preventDefault();
+        const activeObject = canvas.getActiveObject();
+        if (activeObject && activeObject.type === "activeSelection") {
+          const activeSelection = activeObject as fabric.ActiveSelection;
+          const objectsToGroup = activeSelection.getObjects();
+          
+          if (objectsToGroup.length >= 2) {
+            const group = activeSelection.toGroup();
+            const groupId = Math.random().toString(36).substring(2, 10);
+            (group as any).id = groupId;
+            (group as any).name = `群組 ${groupId.slice(0, 4)}`;
+            (group as any).isGroup = true;
+            
+            const groupedIds = objectsToGroup.map(obj => (obj as any).id).filter(Boolean);
+            const { layers, addLayer } = useDesignStudioStore.getState();
+            const remainingLayers = layers.filter(l => !groupedIds.includes(l.id));
+            
+            useDesignStudioStore.setState({
+              layers: [{
+                id: groupId,
+                name: `群組 ${groupId.slice(0, 4)}`,
+                type: 'group',
+                visible: true,
+                locked: false,
+                opacity: 1,
+                blendMode: 'source-over',
+                fabricObject: group,
+                isGroup: true,
+                childIds: groupedIds,
+              }, ...remainingLayers],
+              selectedObjectIds: [groupId],
+            });
+            
+            canvas.renderAll();
+          }
+        }
+      }
+      // Ctrl/Cmd + Shift + G = 取消群組
+      if ((e.ctrlKey || e.metaKey) && e.key === "g" && e.shiftKey && canvas) {
+        e.preventDefault();
+        const activeObject = canvas.getActiveObject();
+        const { layers, selectedObjectIds } = useDesignStudioStore.getState();
+        const selectedLayer = layers.find(l => selectedObjectIds.includes(l.id));
+        
+        if (activeObject && selectedLayer?.isGroup && activeObject.type === "group") {
+          const group = activeObject as fabric.Group;
+          const objects = group.getObjects();
+          
+          group.toActiveSelection();
+          canvas.discardActiveObject();
+          
+          const newLayers: any[] = [];
+          objects.forEach((obj, index) => {
+            const objId = (obj as any).id || Math.random().toString(36).substring(2, 10);
+            const objName = (obj as any).name || `物件 ${index + 1}`;
+            
+            (obj as any).id = objId;
+            (obj as any).name = objName;
+            
+            newLayers.push({
+              id: objId,
+              name: objName,
+              type: obj.type === 'i-text' || obj.type === 'textbox' ? 'text' :
+                    obj.type === 'image' ? 'image' : 'shape',
+              visible: obj.visible !== false,
+              locked: !obj.selectable,
+              opacity: obj.opacity || 1,
+              blendMode: 'source-over',
+              fabricObject: obj,
+            });
+          });
+          
+          const layerIndex = layers.findIndex(l => l.id === selectedLayer.id);
+          const otherLayers = layers.filter(l => l.id !== selectedLayer.id);
+          
+          useDesignStudioStore.setState({
+            layers: [
+              ...otherLayers.slice(0, layerIndex),
+              ...newLayers,
+              ...otherLayers.slice(layerIndex),
+            ],
+            selectedObjectIds: newLayers.map(l => l.id),
+          });
+          
+          canvas.renderAll();
+        }
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -235,7 +352,7 @@ export default function DesignStudioPage() {
   }, [canvas]);
 
   return (
-    <div className="h-screen flex flex-col bg-slate-950 overflow-hidden">
+    <div className="h-screen flex flex-col bg-slate-950 dark:bg-slate-950 overflow-hidden">
       {/* 頂部工具列 */}
       <TopToolbar />
 
@@ -247,32 +364,31 @@ export default function DesignStudioPage() {
         {/* 左側面板 */}
         <div 
           className={cn(
-            "bg-slate-900/95 backdrop-blur-sm border-r border-slate-700/50 transition-all duration-300 overflow-hidden flex flex-col",
-            leftPanelOpen ? "w-64" : "w-0"
+            "bg-white dark:bg-slate-900/95 backdrop-blur-sm border-r border-slate-200 dark:border-slate-700/50 transition-all duration-300 flex flex-col flex-shrink-0",
+            leftPanelOpen ? "w-[200px] sm:w-64 overflow-y-auto" : "w-0 overflow-hidden"
           )}
         >
           {leftPanelOpen && (
             <Tabs value={activeLeftTab} onValueChange={setActiveLeftTab} className="flex-1 flex flex-col min-h-0">
-              <TabsList className="mx-2 mt-2 grid grid-cols-4 bg-slate-800/50 h-9 shrink-0">
-                <TabsTrigger value="layers" className="text-xs data-[state=active]:bg-indigo-500">
-                  <Layers className="w-3.5 h-3.5 mr-1" />
-                  圖層
+              <TabsList className="mx-2 mt-2 grid grid-cols-4 bg-slate-800/50 dark:bg-slate-800/50 h-9 shrink-0">
+                <TabsTrigger value="layers" className="text-[10px] sm:text-xs px-1 sm:px-2 data-[state=active]:bg-indigo-500 data-[state=active]:text-white">
+                  <Layers className="w-3.5 h-3.5 sm:mr-1" />
+                  <span className="hidden sm:inline">圖層</span>
                 </TabsTrigger>
-                <TabsTrigger value="gallery" className="text-xs data-[state=active]:bg-indigo-500">
-                  <Images className="w-3.5 h-3.5 mr-1" />
-                  圖庫
+                <TabsTrigger value="gallery" className="text-[10px] sm:text-xs px-1 sm:px-2 data-[state=active]:bg-indigo-500 data-[state=active]:text-white">
+                  <Images className="w-3.5 h-3.5 sm:mr-1" />
+                  <span className="hidden sm:inline">圖庫</span>
                 </TabsTrigger>
                 <TabsTrigger 
                   value="templates" 
-                  className="text-xs data-[state=active]:bg-indigo-500"
-                  onClick={() => setShowTemplates(true)}
+                  className="text-[10px] sm:text-xs px-1 sm:px-2 data-[state=active]:bg-indigo-500 data-[state=active]:text-white"
                 >
-                  <LayoutTemplate className="w-3.5 h-3.5 mr-1" />
-                  模板
+                  <LayoutTemplate className="w-3.5 h-3.5 sm:mr-1" />
+                  <span className="hidden sm:inline">模板</span>
                 </TabsTrigger>
-                <TabsTrigger value="assets" className="text-xs data-[state=active]:bg-indigo-500">
-                  <FolderOpen className="w-3.5 h-3.5 mr-1" />
-                  素材
+                <TabsTrigger value="assets" className="text-[10px] sm:text-xs px-1 sm:px-2 data-[state=active]:bg-indigo-500 data-[state=active]:text-white">
+                  <FolderOpen className="w-3.5 h-3.5 sm:mr-1" />
+                  <span className="hidden sm:inline">素材</span>
                 </TabsTrigger>
               </TabsList>
               
@@ -301,20 +417,20 @@ export default function DesignStudioPage() {
         {/* 右側面板 */}
         <div 
           className={cn(
-            "bg-slate-900/95 backdrop-blur-sm border-l border-slate-700/50 transition-all duration-300 overflow-hidden flex flex-col",
-            rightPanelOpen ? "w-72" : "w-0"
+            "bg-white dark:bg-slate-900/95 backdrop-blur-sm border-l border-slate-200 dark:border-slate-700/50 transition-all duration-300 flex flex-col flex-shrink-0",
+            rightPanelOpen ? "w-[200px] sm:w-72 overflow-y-auto" : "w-0 overflow-hidden"
           )}
         >
           {rightPanelOpen && (
             <Tabs value={activeRightTab} onValueChange={(v) => setActiveRightTab(v as "properties" | "filters")} className="flex-1 flex flex-col min-h-0">
-              <TabsList className="mx-2 mt-2 grid grid-cols-2 bg-slate-800/50 h-9 shrink-0">
-                <TabsTrigger value="properties" className="text-xs data-[state=active]:bg-indigo-500">
-                  <Settings2 className="w-3.5 h-3.5 mr-1" />
-                  屬性
+              <TabsList className="mx-2 mt-2 grid grid-cols-2 bg-slate-100 dark:bg-slate-800/50 h-9 shrink-0">
+                <TabsTrigger value="properties" className="text-[10px] sm:text-xs px-1 sm:px-2 data-[state=active]:bg-indigo-500 data-[state=active]:text-white">
+                  <Settings2 className="w-3.5 h-3.5 sm:mr-1" />
+                  <span className="hidden sm:inline">屬性</span>
                 </TabsTrigger>
-                <TabsTrigger value="filters" className="text-xs data-[state=active]:bg-indigo-500">
-                  <Sparkles className="w-3.5 h-3.5 mr-1" />
-                  濾鏡
+                <TabsTrigger value="filters" className="text-[10px] sm:text-xs px-1 sm:px-2 data-[state=active]:bg-indigo-500 data-[state=active]:text-white">
+                  <Sparkles className="w-3.5 h-3.5 sm:mr-1" />
+                  <span className="hidden sm:inline">濾鏡</span>
                 </TabsTrigger>
               </TabsList>
               
@@ -331,68 +447,37 @@ export default function DesignStudioPage() {
       </div>
 
       {/* 底部狀態列 */}
-      <div className="h-7 bg-slate-900/95 backdrop-blur-sm border-t border-slate-700/50 flex items-center justify-between px-4">
-        <div className="flex items-center gap-4 text-xs text-slate-500">
+      <div className="h-7 bg-slate-100 dark:bg-slate-900/95 backdrop-blur-sm border-t border-slate-200 dark:border-slate-700/50 flex items-center justify-between px-2 sm:px-4">
+        <div className="flex items-center gap-2 sm:gap-4 text-[10px] sm:text-xs text-slate-600 dark:text-slate-500">
           <span className="flex items-center gap-1">
             <Palette className="w-3 h-3" />
-            圖片編輯室
+            <span className="hidden sm:inline">圖片編輯室</span>
           </span>
-          <span>|</span>
-          <span>Fabric.js v5.3</span>
-          <span>|</span>
+          <span className="hidden sm:inline">|</span>
+          <span className="hidden sm:inline">Fabric.js v5.3</span>
+          <span className="hidden sm:inline">|</span>
           <span>{layers.length} 個圖層</span>
         </div>
-        <div className="flex items-center gap-4 text-xs text-slate-500">
+        <div className="hidden sm:flex items-center gap-4 text-xs text-slate-600 dark:text-slate-500">
           <span>
-            <kbd className="px-1.5 py-0.5 bg-slate-800 rounded text-[10px] mr-1">V</kbd>
+            <kbd className="px-1.5 py-0.5 bg-slate-200 dark:bg-slate-800 rounded text-[10px] mr-1">V</kbd>
             選取
           </span>
           <span>
-            <kbd className="px-1.5 py-0.5 bg-slate-800 rounded text-[10px] mr-1">T</kbd>
+            <kbd className="px-1.5 py-0.5 bg-slate-200 dark:bg-slate-800 rounded text-[10px] mr-1">T</kbd>
             文字
           </span>
           <span>
-            <kbd className="px-1.5 py-0.5 bg-slate-800 rounded text-[10px] mr-1">⌘Z</kbd>
+            <kbd className="px-1.5 py-0.5 bg-slate-200 dark:bg-slate-800 rounded text-[10px] mr-1">{formatShortcut('cmd+z')}</kbd>
             復原
           </span>
           <span>
-            <kbd className="px-1.5 py-0.5 bg-slate-800 rounded text-[10px] mr-1">Del</kbd>
+            <kbd className="px-1.5 py-0.5 bg-slate-200 dark:bg-slate-800 rounded text-[10px] mr-1">{deleteKey}</kbd>
             刪除
           </span>
         </div>
       </div>
 
-      {/* 模板側邊抽屜（全屏覆蓋） */}
-      {showTemplates && (
-        <div className="fixed inset-0 z-50 flex">
-          {/* 背景遮罩 */}
-          <div 
-            className="flex-1 bg-black/50 backdrop-blur-sm"
-            onClick={() => setShowTemplates(false)}
-          />
-          
-          {/* 模板面板 */}
-          <div className="w-96 bg-slate-900 border-l border-slate-700 shadow-2xl animate-in slide-in-from-right">
-            <div className="flex items-center justify-between p-4 border-b border-slate-700">
-              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                <LayoutTemplate className="w-5 h-5 text-indigo-400" />
-                模板庫
-              </h2>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowTemplates(false)}
-                className="w-8 h-8 p-0 text-slate-400 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
-            <div className="h-[calc(100vh-65px)]">
-              <TemplatesPanel onClose={() => setShowTemplates(false)} />
-            </div>
-          </div>
-        </div>
-      )}
 
     </div>
   );

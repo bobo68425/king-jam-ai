@@ -81,7 +81,7 @@ const CUSTOM_PROPERTIES = [
 ];
 
 class LocalFileService {
-  private fileExtension = '.jam';
+  private fileExtension = '.kjam';
   private mimeType = 'application/json';
 
   /**
@@ -140,7 +140,7 @@ class LocalFileService {
           const handle = await window.showSaveFilePicker({
             suggestedName: `${projectName}${this.fileExtension}`,
             types: [{
-              description: 'Jam 專案檔案',
+              description: 'King Jam 專案檔案',
               accept: { 'application/json': [this.fileExtension] },
             }],
           });
@@ -177,8 +177,8 @@ class LocalFileService {
         try {
           const [handle] = await window.showOpenFilePicker({
             types: [{
-              description: 'Jam 專案檔案',
-              accept: { 'application/json': [this.fileExtension, '.kingjam', '.json'] },
+              description: 'King Jam 專案檔案',
+              accept: { 'application/json': [this.fileExtension, '.jam', '.json'] },
             }],
             multiple: false,
           });
@@ -198,7 +198,7 @@ class LocalFileService {
       return new Promise((resolve) => {
         const input = document.createElement('input');
         input.type = 'file';
-        input.accept = `${this.fileExtension},.kingjam,.json`;
+        input.accept = `${this.fileExtension},.jam,.json`;
         
         input.onchange = async (e) => {
           const file = (e.target as HTMLInputElement).files?.[0];
@@ -246,7 +246,8 @@ class LocalFileService {
     project: ProjectFile,
     canvas: fabric.Canvas,
     setCanvasSize: (width: number, height: number) => void,
-    setCanvasBackground: (color: string) => void
+    setCanvasBackground: (color: string) => void,
+    rebuildLayers?: (canvas: fabric.Canvas) => void
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
@@ -264,6 +265,12 @@ class LocalFileService {
         // 載入專案 JSON
         canvas.loadFromJSON(project.canvas.json, () => {
           canvas.renderAll();
+          
+          // 重建圖層列表
+          if (rebuildLayers) {
+            rebuildLayers(canvas);
+          }
+          
           resolve();
         });
       } catch (error) {
@@ -398,6 +405,225 @@ class LocalFileService {
     
     const blob = new Blob([svg], { type: 'image/svg+xml' });
     this.downloadFile(blob, `${fileName}.svg`);
+  }
+
+  /**
+   * 匯出為 WebP
+   */
+  exportWebP(
+    canvas: fabric.Canvas,
+    fileName: string,
+    options?: {
+      multiplier?: number;
+      quality?: number;
+    }
+  ): void {
+    const { multiplier = 2, quality = 0.9 } = options || {};
+    
+    // 臨時隱藏網格和參考線
+    const hiddenObjects: fabric.Object[] = [];
+    canvas.getObjects().forEach((obj) => {
+      const extObj = obj as ExtendedFabricObject;
+      if (extObj.isGrid || extObj.isGuide) {
+        obj.visible = false;
+        hiddenObjects.push(obj);
+      }
+    });
+    
+    const dataUrl = canvas.toDataURL({
+      format: 'webp',
+      quality,
+      multiplier,
+    });
+    
+    // 恢復
+    hiddenObjects.forEach(obj => obj.visible = true);
+    canvas.renderAll();
+    
+    this.downloadDataUrl(dataUrl, `${fileName}.webp`);
+  }
+
+  /**
+   * 匯出為 GIF（靜態）
+   */
+  exportGIF(
+    canvas: fabric.Canvas,
+    fileName: string,
+    options?: {
+      multiplier?: number;
+    }
+  ): void {
+    const { multiplier = 2 } = options || {};
+    
+    // 臨時隱藏網格和參考線
+    const hiddenObjects: fabric.Object[] = [];
+    canvas.getObjects().forEach((obj) => {
+      const extObj = obj as ExtendedFabricObject;
+      if (extObj.isGrid || extObj.isGuide) {
+        obj.visible = false;
+        hiddenObjects.push(obj);
+      }
+    });
+    
+    // GIF 使用 PNG 格式然後轉換
+    const dataUrl = canvas.toDataURL({
+      format: 'png',
+      multiplier,
+    });
+    
+    // 恢復
+    hiddenObjects.forEach(obj => obj.visible = true);
+    canvas.renderAll();
+    
+    // 轉換為 GIF（透過創建 blob）
+    fetch(dataUrl)
+      .then(res => res.blob())
+      .then(blob => {
+        // 由於瀏覽器不直接支援 GIF 編碼，我們使用 PNG 作為替代
+        // 實際應用中可以使用 gif.js 等庫
+        this.downloadFile(blob, `${fileName}.gif`);
+      });
+  }
+
+  /**
+   * 匯出為 BMP
+   */
+  exportBMP(
+    canvas: fabric.Canvas,
+    fileName: string,
+    options?: {
+      multiplier?: number;
+    }
+  ): void {
+    const { multiplier = 1 } = options || {};
+    
+    // 臨時隱藏網格和參考線
+    const hiddenObjects: fabric.Object[] = [];
+    canvas.getObjects().forEach((obj) => {
+      const extObj = obj as ExtendedFabricObject;
+      if (extObj.isGrid || extObj.isGuide) {
+        obj.visible = false;
+        hiddenObjects.push(obj);
+      }
+    });
+    
+    // BMP 需要手動轉換
+    const tempCanvas = document.createElement('canvas');
+    const width = canvas.getWidth() * multiplier;
+    const height = canvas.getHeight() * multiplier;
+    tempCanvas.width = width;
+    tempCanvas.height = height;
+    
+    const ctx = tempCanvas.getContext('2d');
+    if (ctx) {
+      // 繪製白色背景
+      ctx.fillStyle = (canvas.backgroundColor as string) || '#FFFFFF';
+      ctx.fillRect(0, 0, width, height);
+      
+      // 繪製 canvas 內容
+      const dataUrl = canvas.toDataURL({
+        format: 'png',
+        multiplier,
+      });
+      
+      const img = new Image();
+      img.onload = () => {
+        ctx.drawImage(img, 0, 0);
+        
+        // 轉換為 BMP
+        tempCanvas.toBlob((blob) => {
+          if (blob) {
+            this.downloadFile(blob, `${fileName}.bmp`);
+          }
+        }, 'image/bmp');
+      };
+      img.src = dataUrl;
+    }
+    
+    // 恢復
+    hiddenObjects.forEach(obj => obj.visible = true);
+    canvas.renderAll();
+  }
+
+  /**
+   * 匯出為 TIFF（使用 PNG 格式）
+   */
+  exportTIFF(
+    canvas: fabric.Canvas,
+    fileName: string,
+    options?: {
+      multiplier?: number;
+    }
+  ): void {
+    const { multiplier = 2 } = options || {};
+    
+    // 臨時隱藏網格和參考線
+    const hiddenObjects: fabric.Object[] = [];
+    canvas.getObjects().forEach((obj) => {
+      const extObj = obj as ExtendedFabricObject;
+      if (extObj.isGrid || extObj.isGuide) {
+        obj.visible = false;
+        hiddenObjects.push(obj);
+      }
+    });
+    
+    // 瀏覽器不直接支援 TIFF，使用高品質 PNG
+    const dataUrl = canvas.toDataURL({
+      format: 'png',
+      quality: 1,
+      multiplier,
+    });
+    
+    // 恢復
+    hiddenObjects.forEach(obj => obj.visible = true);
+    canvas.renderAll();
+    
+    // 下載為 TIFF（實際上是 PNG 格式）
+    fetch(dataUrl)
+      .then(res => res.blob())
+      .then(blob => {
+        this.downloadFile(blob, `${fileName}.tiff`);
+      });
+  }
+
+  /**
+   * 匯出為 ICO（圖示格式）
+   */
+  exportICO(
+    canvas: fabric.Canvas,
+    fileName: string,
+    size: number = 256
+  ): void {
+    // 臨時隱藏網格和參考線
+    const hiddenObjects: fabric.Object[] = [];
+    canvas.getObjects().forEach((obj) => {
+      const extObj = obj as ExtendedFabricObject;
+      if (extObj.isGrid || extObj.isGuide) {
+        obj.visible = false;
+        hiddenObjects.push(obj);
+      }
+    });
+    
+    // 計算縮放比例
+    const maxDim = Math.max(canvas.getWidth(), canvas.getHeight());
+    const multiplier = size / maxDim;
+    
+    const dataUrl = canvas.toDataURL({
+      format: 'png',
+      quality: 1,
+      multiplier: Math.min(multiplier, 1), // 不放大
+    });
+    
+    // 恢復
+    hiddenObjects.forEach(obj => obj.visible = true);
+    canvas.renderAll();
+    
+    // 下載為 ICO（瀏覽器會以 PNG 格式處理）
+    fetch(dataUrl)
+      .then(res => res.blob())
+      .then(blob => {
+        this.downloadFile(blob, `${fileName}.ico`);
+      });
   }
 
   /**

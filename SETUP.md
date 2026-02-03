@@ -256,7 +256,6 @@ gcloud run services logs read kingjam-frontend --region=asia-east1 --limit=50
 | `R2_ACCESS_KEY_ID` | R2 存取金鑰 ID | - |
 | `R2_SECRET_ACCESS_KEY` | R2 存取金鑰 | - |
 | `R2_BUCKET_NAME` | R2 儲存桶名稱 | `kingjam-assets` |
-| `PICWISH_API_KEY` | PicWish 去背 API | - |
 
 ### 前端環境變數
 

@@ -27,7 +27,10 @@ import {
   AlignEndVertical,
   LayoutGrid,
   Scissors,
+  Group,
+  Ungroup,
 } from "lucide-react";
+import { fabric } from "fabric";
 import { useDesignStudioStore } from "@/stores/design-studio-store";
 import { cn } from "@/lib/utils";
 import { v4 as uuidv4 } from "uuid";
@@ -56,6 +59,9 @@ export default function ContextMenu({ containerRef }: ContextMenuProps) {
   const [visible, setVisible] = useState(false);
   const [position, setPosition] = useState<MenuPosition>({ x: 0, y: 0 });
   const [clipboardObject, setClipboardObject] = useState<any>(null);
+  const [clipboardMaskObject, setClipboardMaskObject] = useState<any>(null);
+  const [clipboardOriginalPosition, setClipboardOriginalPosition] = useState<{ left: number; top: number } | null>(null);
+  const [clipboardMaskOriginalPosition, setClipboardMaskOriginalPosition] = useState<{ left: number; top: number } | null>(null);
 
   // 獲取選中的圖層
   const selectedLayer = layers.find((l) => selectedObjectIds.includes(l.id));
@@ -113,18 +119,84 @@ export default function ContextMenu({ containerRef }: ContextMenuProps) {
 
   // 操作函數
   const handleCopy = () => {
-    if (!selectedObject) return;
+    if (!selectedObject || !selectedLayer) return;
+    
+    // 保存原始位置
+    setClipboardOriginalPosition({
+      left: selectedObject.left || 0,
+      top: selectedObject.top || 0,
+    });
+    
     selectedObject.clone((cloned: any) => {
+      // 複製遮罩相關屬性
+      cloned.clipMaskId = selectedLayer.clipMaskId;
       setClipboardObject(cloned);
     });
+    
+    // 如果有遮罩，同時複製遮罩物件
+    if (selectedLayer.clipMaskId) {
+      const maskLayer = layers.find(l => l.id === selectedLayer.clipMaskId);
+      if (maskLayer?.fabricObject) {
+        setClipboardMaskOriginalPosition({
+          left: maskLayer.fabricObject.left || 0,
+          top: maskLayer.fabricObject.top || 0,
+        });
+        maskLayer.fabricObject.clone((clonedMask: any) => {
+          clonedMask.isClipMask = true;
+          clonedMask.originalFill = (maskLayer.fabricObject as any).originalFill;
+          clonedMask.originalStroke = (maskLayer.fabricObject as any).originalStroke;
+          clonedMask.originalStrokeWidth = (maskLayer.fabricObject as any).originalStrokeWidth;
+          clonedMask.originalOpacity = (maskLayer.fabricObject as any).originalOpacity;
+          setClipboardMaskObject(clonedMask);
+        });
+      }
+    } else {
+      setClipboardMaskObject(null);
+      setClipboardMaskOriginalPosition(null);
+    }
+    
     closeMenu();
   };
 
   const handleCut = () => {
     if (!canvas || !selectedObject || !selectedLayer) return;
+    
+    // 保存原始位置
+    setClipboardOriginalPosition({
+      left: selectedObject.left || 0,
+      top: selectedObject.top || 0,
+    });
+    
     selectedObject.clone((cloned: any) => {
+      cloned.clipMaskId = selectedLayer.clipMaskId;
       setClipboardObject(cloned);
     });
+    
+    // 如果有遮罩，同時複製遮罩物件
+    if (selectedLayer.clipMaskId) {
+      const maskLayer = layers.find(l => l.id === selectedLayer.clipMaskId);
+      if (maskLayer?.fabricObject) {
+        setClipboardMaskOriginalPosition({
+          left: maskLayer.fabricObject.left || 0,
+          top: maskLayer.fabricObject.top || 0,
+        });
+        maskLayer.fabricObject.clone((clonedMask: any) => {
+          clonedMask.isClipMask = true;
+          clonedMask.originalFill = (maskLayer.fabricObject as any).originalFill;
+          clonedMask.originalStroke = (maskLayer.fabricObject as any).originalStroke;
+          clonedMask.originalStrokeWidth = (maskLayer.fabricObject as any).originalStrokeWidth;
+          clonedMask.originalOpacity = (maskLayer.fabricObject as any).originalOpacity;
+          setClipboardMaskObject(clonedMask);
+        });
+        // 刪除遮罩物件
+        canvas.remove(maskLayer.fabricObject);
+        removeLayer(maskLayer.id);
+      }
+    } else {
+      setClipboardMaskObject(null);
+      setClipboardMaskOriginalPosition(null);
+    }
+    
     canvas.remove(selectedObject);
     canvas.discardActiveObject();
     canvas.renderAll();
@@ -135,14 +207,118 @@ export default function ContextMenu({ containerRef }: ContextMenuProps) {
   const handlePaste = () => {
     if (!canvas || !clipboardObject) return;
     
+    // 先貼上遮罩物件（如果有）
+    let newMaskId: string | undefined;
+    
+    if (clipboardMaskObject && clipboardMaskOriginalPosition) {
+      clipboardMaskObject.clone((clonedMask: any) => {
+        newMaskId = uuidv4().slice(0, 8);
+        clonedMask.set({
+          left: clipboardMaskOriginalPosition.left,
+          top: clipboardMaskOriginalPosition.top,
+        });
+        clonedMask.id = newMaskId;
+        clonedMask.name = `遮罩 ${newMaskId}`;
+        clonedMask.isClipMask = true;
+        clonedMask.originalFill = clipboardMaskObject.originalFill;
+        clonedMask.originalStroke = clipboardMaskObject.originalStroke;
+        clonedMask.originalStrokeWidth = clipboardMaskObject.originalStrokeWidth;
+        clonedMask.originalOpacity = clipboardMaskObject.originalOpacity;
+        
+        canvas.add(clonedMask);
+        
+        addLayer({
+          id: newMaskId!,
+          name: `遮罩 ${newMaskId}`,
+          type: "shape",
+          visible: true,
+          locked: false,
+          opacity: clonedMask.opacity || 1,
+          blendMode: "source-over",
+          fabricObject: clonedMask,
+          isClipMask: true,
+          originalMaskStyle: {
+            fill: clipboardMaskObject.originalFill,
+            stroke: clipboardMaskObject.originalStroke,
+            strokeWidth: clipboardMaskObject.originalStrokeWidth || 0,
+            opacity: clipboardMaskObject.originalOpacity || 1,
+          },
+        });
+      });
+    }
+    
+    // 貼上主物件
     clipboardObject.clone((cloned: any) => {
       const id = uuidv4().slice(0, 8);
-      cloned.set({
-        left: (cloned.left || 0) + 20,
-        top: (cloned.top || 0) + 20,
-      });
+      // 使用原始位置
+      if (clipboardOriginalPosition) {
+        cloned.set({
+          left: clipboardOriginalPosition.left,
+          top: clipboardOriginalPosition.top,
+        });
+      }
       cloned.id = id;
       cloned.name = `貼上物件 ${id}`;
+      
+      // 如果有遮罩，重建 clipPath
+      if (newMaskId && clipboardMaskObject) {
+        cloned.clipMaskId = newMaskId;
+        
+        // 建立 clipPath
+        const maskLeft = clipboardMaskOriginalPosition?.left || 0;
+        const maskTop = clipboardMaskOriginalPosition?.top || 0;
+        const targetLeft = clipboardOriginalPosition?.left || 0;
+        const targetTop = clipboardOriginalPosition?.top || 0;
+        
+        const offsetX = maskLeft - targetLeft;
+        const offsetY = maskTop - targetTop;
+        
+        const clipProps = {
+          left: offsetX,
+          top: offsetY,
+          scaleX: clipboardMaskObject.scaleX || 1,
+          scaleY: clipboardMaskObject.scaleY || 1,
+          angle: clipboardMaskObject.angle || 0,
+          originX: 'center' as const,
+          originY: 'center' as const,
+          absolutePositioned: false,
+        };
+        
+        let clipPath: any = null;
+        const maskType = clipboardMaskObject.type;
+        
+        if (maskType === 'circle') {
+          clipPath = new (window as any).fabric.Circle({
+            radius: clipboardMaskObject.radius,
+            ...clipProps,
+          });
+        } else if (maskType === 'rect') {
+          clipPath = new (window as any).fabric.Rect({
+            width: clipboardMaskObject.width,
+            height: clipboardMaskObject.height,
+            rx: clipboardMaskObject.rx,
+            ry: clipboardMaskObject.ry,
+            ...clipProps,
+          });
+        } else if (maskType === 'ellipse') {
+          clipPath = new (window as any).fabric.Ellipse({
+            rx: clipboardMaskObject.rx,
+            ry: clipboardMaskObject.ry,
+            ...clipProps,
+          });
+        } else if (maskType === 'triangle') {
+          clipPath = new (window as any).fabric.Triangle({
+            width: clipboardMaskObject.width,
+            height: clipboardMaskObject.height,
+            ...clipProps,
+          });
+        }
+        
+        if (clipPath) {
+          cloned.clipPath = clipPath;
+          cloned.dirty = true;
+        }
+      }
       
       canvas.add(cloned);
       canvas.setActiveObject(cloned);
@@ -151,19 +327,56 @@ export default function ContextMenu({ containerRef }: ContextMenuProps) {
       addLayer({
         id,
         name: `貼上物件 ${id}`,
-        type: "shape",
+        type: cloned.type === 'image' ? 'image' : cloned.type === 'i-text' || cloned.type === 'textbox' ? 'text' : 'shape',
         visible: true,
         locked: false,
         opacity: cloned.opacity || 1,
         blendMode: "source-over",
         fabricObject: cloned,
+        clipMaskId: newMaskId,
       });
     });
     closeMenu();
   };
 
   const handleDuplicate = () => {
-    if (!canvas || !selectedObject) return;
+    if (!canvas || !selectedObject || !selectedLayer) return;
+    
+    // 如果有遮罩，先複製遮罩物件
+    let newMaskId: string | undefined;
+    const maskLayer = selectedLayer.clipMaskId ? layers.find(l => l.id === selectedLayer.clipMaskId) : null;
+    
+    if (maskLayer?.fabricObject) {
+      maskLayer.fabricObject.clone((clonedMask: any) => {
+        newMaskId = uuidv4().slice(0, 8);
+        clonedMask.set({
+          left: (clonedMask.left || 0) + 20,
+          top: (clonedMask.top || 0) + 20,
+        });
+        clonedMask.id = newMaskId;
+        clonedMask.name = `${maskLayer.name} 複製`;
+        clonedMask.isClipMask = true;
+        clonedMask.originalFill = (maskLayer.fabricObject as any).originalFill;
+        clonedMask.originalStroke = (maskLayer.fabricObject as any).originalStroke;
+        clonedMask.originalStrokeWidth = (maskLayer.fabricObject as any).originalStrokeWidth;
+        clonedMask.originalOpacity = (maskLayer.fabricObject as any).originalOpacity;
+        
+        canvas.add(clonedMask);
+        
+        addLayer({
+          id: newMaskId!,
+          name: `${maskLayer.name} 複製`,
+          type: "shape",
+          visible: true,
+          locked: false,
+          opacity: clonedMask.opacity || 1,
+          blendMode: "source-over",
+          fabricObject: clonedMask,
+          isClipMask: true,
+          originalMaskStyle: maskLayer.originalMaskStyle,
+        });
+      });
+    }
     
     selectedObject.clone((cloned: any) => {
       const id = uuidv4().slice(0, 8);
@@ -173,6 +386,58 @@ export default function ContextMenu({ containerRef }: ContextMenuProps) {
       });
       cloned.id = id;
       cloned.name = `${selectedLayer?.name} 複製`;
+      
+      // 如果有遮罩，重建 clipPath
+      if (newMaskId && maskLayer?.fabricObject) {
+        cloned.clipMaskId = newMaskId;
+        
+        // 建立 clipPath（偏移量不變，因為都偏移 20）
+        const clipProps = {
+          left: 0,
+          top: 0,
+          scaleX: maskLayer.fabricObject.scaleX || 1,
+          scaleY: maskLayer.fabricObject.scaleY || 1,
+          angle: maskLayer.fabricObject.angle || 0,
+          originX: 'center' as const,
+          originY: 'center' as const,
+          absolutePositioned: false,
+        };
+        
+        let clipPath: any = null;
+        const maskType = maskLayer.fabricObject.type;
+        
+        if (maskType === 'circle') {
+          clipPath = new (window as any).fabric.Circle({
+            radius: (maskLayer.fabricObject as any).radius,
+            ...clipProps,
+          });
+        } else if (maskType === 'rect') {
+          clipPath = new (window as any).fabric.Rect({
+            width: (maskLayer.fabricObject as any).width,
+            height: (maskLayer.fabricObject as any).height,
+            rx: (maskLayer.fabricObject as any).rx,
+            ry: (maskLayer.fabricObject as any).ry,
+            ...clipProps,
+          });
+        } else if (maskType === 'ellipse') {
+          clipPath = new (window as any).fabric.Ellipse({
+            rx: (maskLayer.fabricObject as any).rx,
+            ry: (maskLayer.fabricObject as any).ry,
+            ...clipProps,
+          });
+        } else if (maskType === 'triangle') {
+          clipPath = new (window as any).fabric.Triangle({
+            width: (maskLayer.fabricObject as any).width,
+            height: (maskLayer.fabricObject as any).height,
+            ...clipProps,
+          });
+        }
+        
+        if (clipPath) {
+          cloned.clipPath = clipPath;
+          cloned.dirty = true;
+        }
+      }
       
       canvas.add(cloned);
       canvas.setActiveObject(cloned);
@@ -187,6 +452,7 @@ export default function ContextMenu({ containerRef }: ContextMenuProps) {
         opacity: cloned.opacity || 1,
         blendMode: "source-over",
         fabricObject: cloned,
+        clipMaskId: newMaskId,
       });
     });
     closeMenu();
@@ -194,6 +460,29 @@ export default function ContextMenu({ containerRef }: ContextMenuProps) {
 
   const handleDelete = () => {
     if (!canvas || !selectedObject || !selectedLayer) return;
+    
+    // 如果有遮罩，同時刪除遮罩物件
+    if (selectedLayer.clipMaskId) {
+      const maskLayer = layers.find(l => l.id === selectedLayer.clipMaskId);
+      if (maskLayer?.fabricObject) {
+        canvas.remove(maskLayer.fabricObject);
+        removeLayer(maskLayer.id);
+      }
+    }
+    
+    // 如果此物件是遮罩，清除被遮罩物件的 clipPath
+    if (selectedLayer.isClipMask) {
+      const maskedLayers = layers.filter(l => l.clipMaskId === selectedLayer.id);
+      maskedLayers.forEach(maskedLayer => {
+        if (maskedLayer.fabricObject) {
+          maskedLayer.fabricObject.clipPath = undefined;
+          maskedLayer.fabricObject.dirty = true;
+          (maskedLayer.fabricObject as any).clipMaskId = undefined;
+          updateLayer(maskedLayer.id, { clipMaskId: undefined });
+        }
+      });
+    }
+    
     canvas.remove(selectedObject);
     canvas.discardActiveObject();
     canvas.renderAll();
@@ -228,6 +517,112 @@ export default function ContextMenu({ containerRef }: ContextMenuProps) {
     canvas.renderAll();
     closeMenu();
   };
+
+  // 建立群組
+  const handleGroup = () => {
+    if (!canvas) return;
+    
+    const activeObject = canvas.getActiveObject();
+    if (!activeObject || activeObject.type !== 'activeSelection') {
+      return;
+    }
+    
+    const activeSelection = activeObject as fabric.ActiveSelection;
+    const objectsToGroup = activeSelection.getObjects();
+    
+    if (objectsToGroup.length < 2) return;
+    
+    // 建立群組
+    const group = activeSelection.toGroup();
+    const groupId = uuidv4().slice(0, 8);
+    (group as any).id = groupId;
+    (group as any).name = `群組 ${groupId.slice(0, 4)}`;
+    (group as any).isGroup = true;
+    
+    // 獲取被群組的物件 ID
+    const groupedIds = objectsToGroup.map(obj => (obj as any).id).filter(Boolean);
+    
+    // 移除被群組的圖層
+    const remainingLayers = layers.filter(l => !groupedIds.includes(l.id));
+    
+    // 建立群組圖層
+    const groupLayer = {
+      id: groupId,
+      name: `群組 ${groupId.slice(0, 4)}`,
+      type: 'group' as const,
+      visible: true,
+      locked: false,
+      opacity: 1,
+      blendMode: 'source-over' as const,
+      fabricObject: group,
+      isGroup: true,
+      childIds: groupedIds,
+    };
+    
+    useDesignStudioStore.setState({
+      layers: [groupLayer, ...remainingLayers],
+      selectedObjectIds: [groupId],
+    });
+    
+    canvas.renderAll();
+    closeMenu();
+  };
+
+  // 取消群組
+  const handleUngroup = () => {
+    if (!canvas || !selectedObject || !selectedLayer?.isGroup) return;
+    
+    const group = selectedObject as fabric.Group;
+    const objects = group.getObjects();
+    
+    // 取消群組
+    group.toActiveSelection();
+    canvas.discardActiveObject();
+    
+    // 建立新的圖層
+    const newLayers: any[] = [];
+    objects.forEach((obj, index) => {
+      const objId = (obj as any).id || uuidv4().slice(0, 8);
+      const objName = (obj as any).name || `物件 ${index + 1}`;
+      
+      (obj as any).id = objId;
+      (obj as any).name = objName;
+      
+      newLayers.push({
+        id: objId,
+        name: objName,
+        type: obj.type === 'i-text' || obj.type === 'textbox' ? 'text' :
+              obj.type === 'image' ? 'image' : 'shape',
+        visible: obj.visible !== false,
+        locked: !obj.selectable,
+        opacity: obj.opacity || 1,
+        blendMode: 'source-over',
+        fabricObject: obj,
+      });
+    });
+    
+    // 更新圖層列表
+    const layerIndex = layers.findIndex(l => l.id === selectedLayer.id);
+    const otherLayers = layers.filter(l => l.id !== selectedLayer.id);
+    
+    useDesignStudioStore.setState({
+      layers: [
+        ...otherLayers.slice(0, layerIndex),
+        ...newLayers,
+        ...otherLayers.slice(layerIndex),
+      ],
+      selectedObjectIds: newLayers.map(l => l.id),
+    });
+    
+    canvas.renderAll();
+    closeMenu();
+  };
+
+  // 檢查是否可以建立群組
+  const canGroup = canvas?.getActiveObject()?.type === 'activeSelection';
+  
+  // 檢查是否為群組
+  const isGroup = selectedLayer?.isGroup;
 
   const handleFlipH = () => {
     if (!canvas || !selectedObject) return;
@@ -396,6 +791,15 @@ export default function ContextMenu({ containerRef }: ContextMenuProps) {
           />
           
           <Divider />
+          
+          {/* 群組功能 */}
+          {isGroup ? (
+            <MenuItem icon={Ungroup} label="取消群組" shortcut="⇧⌘G" onClick={handleUngroup} />
+          ) : canGroup ? (
+            <MenuItem icon={Group} label="建立群組" shortcut="⌘G" onClick={handleGroup} />
+          ) : null}
+          
+          {(isGroup || canGroup) && <Divider />}
           
           {/* 刪除 */}
           <MenuItem icon={Trash2} label="刪除" shortcut="Del" onClick={handleDelete} danger />

@@ -20,7 +20,7 @@ x-backend-env: &backend-env
   # Slack Webhook URL（建議設定）
   SLACK_WEBHOOK_URL: ""
   # 告警 Email（多個用逗號分隔）
-  ALERT_EMAIL: ""
+  ALERT_EMAIL: bobo68425@gmail.com
   # Line Notify Token
   LINE_NOTIFY_TOKEN: ""
   # Vertex AI / Veo 設定
@@ -56,10 +56,16 @@ x-backend-env: &backend-env
   LINE_CHANNEL_SECRET: your_line_channel_secret
   LINE_REDIRECT_URI: http://localhost:8000/oauth/line/callback
   LINE_CHANNEL_ACCESS_TOKEN: your_line_channel_access_token
-  # 郵件服務（開發模式使用 console）
-  EMAIL_PROVIDER: console
-  # PicWish 去背 API
-  PICWISH_API_KEY: wx65g7jrbsla2frr5
+  # 郵件服務（Gandi SMTP）
+  EMAIL_PROVIDER: smtp
+  SMTP_HOST: mail.gandi.net
+  SMTP_PORT: "587"
+  SMTP_USER: service@kingjam.app
+  SMTP_PASSWORD: "jmtDh&*XAciu.7*"
+  SMTP_FROM_EMAIL: service@kingjam.app
+  SMTP_FROM_NAME: King Jam AI
+  # 前端 URL（開發環境）
+  FRONTEND_URL: http://localhost:3000
 
 services:
   # ============================================================

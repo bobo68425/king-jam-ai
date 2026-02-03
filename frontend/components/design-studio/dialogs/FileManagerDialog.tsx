@@ -377,8 +377,8 @@ export function OpenProjectDialog() {
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <FileImage className="w-6 h-6 text-muted-foreground" />
+                    <div className="w-full h-full flex items-center justify-center p-1">
+                      <img src="/file.svg" className="h-full" alt="KJAM" />
                     </div>
                   )}
                 </div>

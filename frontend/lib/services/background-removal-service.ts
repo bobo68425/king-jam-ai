@@ -1,19 +1,19 @@
 /**
  * 圖片去背服務
- * 使用 PicWish API 進行圖片去背處理
+ * 使用本地 rembg 進行圖片去背處理（免費開源方案）
  */
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export interface RemoveBackgroundOptions {
   outputType?: 1 | 2;  // 1=PNG透明背景, 2=JPG白色背景
-  returnType?: 1 | 2;  // 1=URL, 2=Base64
-  useAsync?: boolean;   // 是否使用非同步模式（大圖片建議使用）
+  returnType?: 1 | 2;  // 1=URL, 2=Base64（本地服務只支援 Base64）
+  useAsync?: boolean;   // 保留參數但本地服務不需要
 }
 
 export interface RemoveBackgroundResult {
   success: boolean;
-  image: string;       // 去背後的圖片（URL 或 Base64）
+  image: string;       // 去背後的圖片（Base64）
   width?: number;
   height?: number;
 }
@@ -30,6 +30,18 @@ class BackgroundRemovalService {
   async fabricImageToBase64(fabricImage: fabric.Image): Promise<string> {
     return new Promise((resolve, reject) => {
       try {
+        // 檢查物件是否有有效的 canvas 引用
+        if (!fabricImage.canvas) {
+          // 嘗試使用原始圖片來源
+          const imgElement = fabricImage.getElement() as HTMLImageElement;
+          if (imgElement && imgElement.src) {
+            resolve(imgElement.src);
+            return;
+          }
+          reject(new Error('圖片物件沒有有效的 canvas 引用'));
+          return;
+        }
+        
         // 使用 fabric.js 的 toDataURL 方法
         const imgWithMethod = fabricImage as fabric.Image & { toDataURL: (options: { format: string; quality: number; multiplier: number }) => string };
         const dataUrl = imgWithMethod.toDataURL({
@@ -39,6 +51,16 @@ class BackgroundRemovalService {
         });
         resolve(dataUrl);
       } catch (error) {
+        // 嘗試使用替代方案
+        try {
+          const imgElement = fabricImage.getElement() as HTMLImageElement;
+          if (imgElement && imgElement.src) {
+            resolve(imgElement.src);
+            return;
+          }
+        } catch {
+          // 忽略替代方案錯誤
+        }
         reject(error);
       }
     });
@@ -95,7 +117,7 @@ class BackgroundRemovalService {
   }
 
   /**
-   * 檢查 API 狀態
+   * 檢查去背服務狀態
    */
   async checkApiStatus(): Promise<{ configured: boolean; message: string }> {
     const token = this.getAuthToken();
@@ -117,7 +139,7 @@ class BackgroundRemovalService {
 
       const data = await response.json();
       return {
-        configured: data.picwish_configured,
+        configured: data.available ?? true, // rembg 本地服務預設可用
         message: data.message,
       };
     } catch (error) {

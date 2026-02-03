@@ -176,6 +176,8 @@ def get_music_url_for_style(style: str) -> str:
         "energetic": "upbeat", 
         "inspirational": "inspirational",
         "motivational": "inspirational",
+        "faith": "inspirational",  # 信仰靈性風格使用勵志音樂
+        "worship": "inspirational",
         "calm": "calm",
         "relaxing": "calm",
         "chill": "calm",
@@ -275,6 +277,8 @@ class VideoGeneratorService:
         "childlike": "zh-CN-YunxiaNeural",       # 雲夏（可愛童聲）
         "calm": "zh-TW-YunJheNeural",            # 雲哲（專業穩重）
         "sports": "zh-CN-YunjianNeural",         # 雲健（熱情解說）
+        "faith": "zh-TW-HsiaoYuNeural",          # 曉雨（溫柔堅定，適合信仰內容）
+        "worship": "zh-TW-HsiaoYuNeural",        # 曉雨
         
         # ============================================================
         # 直接指定語音 ID（用於品牌包設定）- 官方驗證可用 ✓
@@ -1054,6 +1058,26 @@ punchy saturated colors, crushed blacks for drama,
 Michael Bay color science, sports broadcast punch,
 highlight bloom for glory, deep blacks for intensity""",
                 "reference": "Nike 'Just Do It', Red Bull 'Gives You Wings', Under Armour 'Rule Yourself', Gatorade 'Is It In You'"
+            },
+            "faith": {
+                "visual": """sacred atmosphere with divine light rays streaming through stained glass windows,
+peaceful church interiors with warm wood pews and candle glow, hands in prayer, open Bible pages,
+cross silhouettes against sunrise, quiet garden meditation spaces, baptism waters, communion elements,
+family gathered in worship, community fellowship moments, hands reaching upward in praise,
+dove in flight symbolizing Holy Spirit, mountaintop vistas symbolizing faith journey""",
+                "lighting": """heavenly light rays breaking through clouds, ethereal golden hour glow,
+soft divine radiance from above, warm candlelight ambiance, sunrise hope lighting,
+gentle rim light creating halos, peaceful diffused natural light through windows,
+dawn light symbolizing new beginnings, sunset reflecting God's glory""",
+                "camera": ["Slow reverent tilt upward toward light", "Gentle dolly forward into sacred space",
+                          "Peaceful wide establishing shot", "Intimate close-up on hands in prayer"],
+                "atmosphere": "sacred peace, divine presence, hopeful redemption, comforting grace, eternal love, heavenly serenity, spiritual transformation",
+                "color_grade": """warm golden tones of grace, soft whites symbolizing purity,
+heavenly blue accents, gentle desaturation for reverence,
+sunrise orange and gold, peaceful earth tones,
+skin rendered with divine warmth, ethereal highlight glow,
+Kodak Ektar warmth, film-like softness for timeless feel""",
+                "reference": "The Chosen series cinematography, Hillsong worship films, church promotional content, Christian lifestyle brand imagery"
             },
         }
         

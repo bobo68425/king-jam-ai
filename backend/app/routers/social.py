@@ -87,6 +87,7 @@ TONE_STYLES = {
     "vintage": {"mood": "nostalgic, classic", "colors": "faded, sepia", "lighting": "film-like", "composition": "retro"},
     "modern": {"mood": "contemporary, sleek", "colors": "clean whites, blacks", "lighting": "crisp", "composition": "geometric"},
     "nature": {"mood": "fresh, organic", "colors": "natural greens", "lighting": "outdoor daylight", "composition": "environmental"},
+    "faith": {"mood": "peaceful, hopeful, sacred", "colors": "soft whites, warm golds, sky blues", "lighting": "heavenly, divine rays", "composition": "uplifting, reverent"},
 }
 
 # 平台配置
@@ -299,6 +300,7 @@ async def generate_caption_with_gemini(topic: str, platform: str, tone: str, qua
         "vintage": "復古懷舊，時光記憶",
         "modern": "現代時尚，趨勢先驅",
         "nature": "自然清新，回歸本真",
+        "faith": "信仰靈性，基督教用語，溫柔堅定，充滿盼望與恩典",
     }
 
     info = platform_info.get(platform, platform_info["instagram"])

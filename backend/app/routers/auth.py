@@ -321,3 +321,168 @@ def read_me(current_user: User = Depends(get_current_user)):
     回傳目前登入用戶的基本資料（含 credits）
     """
     return current_user
+
+
+# ============================================================
+# 忘記密碼 / 找回帳號 相關
+# ============================================================
+
+class ForgotPasswordRequest(BaseModel):
+    """忘記密碼請求"""
+    email: str
+
+
+class FindAccountRequest(BaseModel):
+    """找回帳號請求"""
+    phone: Optional[str] = None
+    full_name: Optional[str] = None
+
+
+class FindAccountResponse(BaseModel):
+    """找回帳號回應"""
+    accounts: list[str]
+    message: str
+
+
+class ResetPasswordRequest(BaseModel):
+    """重設密碼請求"""
+    token: str
+    new_password: str
+
+
+# --- 4. 忘記密碼 API ---
+@router.post("/forgot-password")
+def forgot_password(
+    request_data: ForgotPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    忘記密碼 - 發送重設密碼郵件
+    
+    為了安全考量，無論帳號是否存在都回傳成功訊息
+    """
+    user = db.query(User).filter(User.email == request_data.email).first()
+    
+    if user:
+        # 生成重設密碼 Token（有效期 24 小時）
+        reset_token = create_access_token(
+            data={"sub": user.email, "type": "password_reset"},
+            expires_delta=timedelta(hours=24)
+        )
+        
+        # 嘗試發送重設密碼郵件
+        try:
+            from app.services.email_service import get_email_service
+            
+            email_service = get_email_service()
+            result = email_service.send_password_reset(
+                to=user.email,
+                reset_token=reset_token,
+                user_name=user.full_name
+            )
+            
+            if result.get("success"):
+                logger.info(f"[Auth] 密碼重設郵件已發送: {user.email}")
+            else:
+                logger.error(f"[Auth] 發送密碼重設郵件失敗: {result.get('error')}")
+        except Exception as e:
+            logger.error(f"[Auth] 發送密碼重設郵件失敗: {e}")
+            # 不向用戶透露郵件發送失敗
+    
+    # 無論成功與否都回傳相同訊息（安全考量）
+    return {"message": "如果此帳號存在，重設密碼郵件已發送"}
+
+
+# --- 5. 重設密碼 API ---
+@router.post("/reset-password")
+def reset_password(
+    request_data: ResetPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    重設密碼 - 使用 Token 重設密碼
+    """
+    try:
+        payload = jwt.decode(request_data.token, SECRET_KEY, algorithms=[ALGORITHM])
+        email = payload.get("sub")
+        token_type = payload.get("type")
+        
+        if not email or token_type != "password_reset":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="無效的重設密碼連結"
+            )
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="重設密碼連結已過期或無效"
+        )
+    
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="找不到此帳號"
+        )
+    
+    # 驗證密碼長度
+    if len(request_data.new_password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="密碼長度至少需要 6 個字元"
+        )
+    
+    # 更新密碼
+    user.hashed_password = get_password_hash(request_data.new_password)
+    db.commit()
+    
+    logger.info(f"[Auth] 密碼重設成功: {user.email}")
+    
+    return {"message": "密碼重設成功，請使用新密碼登入"}
+
+
+# --- 6. 找回帳號 API ---
+@router.post("/find-account", response_model=FindAccountResponse)
+def find_account(
+    request_data: FindAccountRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    找回帳號 - 透過手機號碼或姓名查詢帳號
+    
+    回傳部分隱藏的 email 列表
+    """
+    if not request_data.phone and not request_data.full_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="請提供手機號碼或姓名"
+        )
+    
+    query = db.query(User)
+    
+    if request_data.phone:
+        # 透過手機號碼查詢
+        query = query.filter(User.phone == request_data.phone)
+    elif request_data.full_name:
+        # 透過姓名查詢（精確匹配）
+        query = query.filter(User.full_name == request_data.full_name)
+    
+    users = query.limit(5).all()  # 限制最多回傳 5 個帳號
+    
+    if not users:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="找不到符合的帳號"
+        )
+    
+    # 回傳完整 email（前端會自行遮罩）
+    accounts = [user.email for user in users]
+    
+    return FindAccountResponse(
+        accounts=accounts,
+        message=f"找到 {len(accounts)} 個帳號"
+    )
+
+
+# 需要引入 os 模組
+import os

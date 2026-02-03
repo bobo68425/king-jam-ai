@@ -104,11 +104,18 @@ export function generateThumbnail(
 ): string {
   if (!canvas) return '';
   
+  // 確保 canvas 有必要的屬性
+  if (!canvas.width || !canvas.height || typeof canvas.toDataURL !== 'function') {
+    console.warn('Canvas 物件不完整，無法產生縮圖');
+    return '';
+  }
+  
   try {
+    const multiplier = Math.min(maxWidth / canvas.width, maxHeight / canvas.height);
     const dataUrl = canvas.toDataURL({
       format: 'jpeg',
       quality: 0.6,
-      multiplier: Math.min(maxWidth / canvas.width, maxHeight / canvas.height)
+      multiplier: Math.max(0.1, multiplier) // 確保 multiplier 有效
     });
     return dataUrl;
   } catch (error) {

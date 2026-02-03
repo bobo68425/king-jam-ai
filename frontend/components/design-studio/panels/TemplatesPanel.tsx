@@ -398,34 +398,34 @@ export default function TemplatesPanel({ onClose }: TemplatesPanelProps) {
   };
 
   return (
-    <div className="h-full flex flex-col bg-slate-900/95 overflow-hidden">
+    <div className="h-full flex flex-col bg-white dark:bg-slate-900/95 overflow-hidden">
       {/* 標題 */}
-      <div className="p-4 border-b border-slate-700/50">
-        <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-          <LayoutTemplate className="w-5 h-5 text-indigo-400" />
+      <div className="p-4 border-b border-slate-200 dark:border-slate-700/50">
+        <h2 className="text-lg font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+          <LayoutTemplate className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
           模板庫
         </h2>
-        <p className="text-xs text-slate-400 mt-1">選擇模板快速開始設計</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">選擇模板快速開始設計</p>
       </div>
 
       {/* 搜尋 */}
-      <div className="p-3 border-b border-slate-700/50">
+      <div className="p-3 border-b border-slate-200 dark:border-slate-700/50">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="搜尋模板..."
-            className="pl-9 bg-slate-800/50 border-slate-700 text-sm"
+            className="pl-9 bg-slate-100 dark:bg-slate-800/50 border-slate-300 dark:border-slate-700 text-sm text-slate-800 dark:text-slate-200"
           />
         </div>
       </div>
 
       {/* 分頁 */}
       <Tabs defaultValue="templates" className="flex-1 flex flex-col min-h-0">
-        <TabsList className="mx-3 mt-2 grid grid-cols-2 bg-slate-800/50 shrink-0">
-          <TabsTrigger value="templates" className="text-xs">設計模板</TabsTrigger>
-          <TabsTrigger value="text-styles" className="text-xs">文字風格</TabsTrigger>
+        <TabsList className="mx-3 mt-2 grid grid-cols-2 bg-slate-100 dark:bg-slate-800/50 shrink-0">
+          <TabsTrigger value="templates" className="text-xs data-[state=active]:bg-indigo-500 data-[state=active]:text-white">設計模板</TabsTrigger>
+          <TabsTrigger value="text-styles" className="text-xs data-[state=active]:bg-indigo-500 data-[state=active]:text-white">文字風格</TabsTrigger>
         </TabsList>
 
         {/* 設計模板 */}
@@ -442,7 +442,7 @@ export default function TemplatesPanel({ onClose }: TemplatesPanelProps) {
                   "text-xs whitespace-nowrap",
                   selectedCategory === cat.id 
                     ? "bg-indigo-500 text-white" 
-                    : "text-slate-400 hover:text-white"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white"
                 )}
               >
                 <cat.icon className="w-3 h-3 mr-1" />
@@ -458,7 +458,7 @@ export default function TemplatesPanel({ onClose }: TemplatesPanelProps) {
                 <button
                   key={template.id}
                   onClick={() => applyTemplate(template)}
-                  className="group relative rounded-xl overflow-hidden border border-slate-700/50 hover:border-indigo-500/50 transition-all hover:scale-[1.02]"
+                  className="group relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700/50 hover:border-indigo-500/50 transition-all hover:scale-[1.02]"
                 >
                   {/* 預覽 */}
                   <div 
@@ -469,7 +469,7 @@ export default function TemplatesPanel({ onClose }: TemplatesPanelProps) {
                   {/* 資訊覆蓋層 */}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-3">
                     <div className="text-left">
-                      <div className="flex items-center gap-1 text-[10px] text-slate-400 mb-1">
+                      <div className="flex items-center gap-1 text-[10px] text-slate-300 mb-1">
                         {getPlatformIcon(template.platform)}
                         <span>{template.canvasSize.width} × {template.canvasSize.height}</span>
                       </div>
@@ -478,8 +478,8 @@ export default function TemplatesPanel({ onClose }: TemplatesPanelProps) {
                   </div>
                   
                   {/* 底部標籤 */}
-                  <div className="absolute bottom-0 left-0 right-0 p-2 bg-slate-900/90">
-                    <p className="text-xs text-slate-300 truncate">{template.name}</p>
+                  <div className="absolute bottom-0 left-0 right-0 p-2 bg-slate-800/90 dark:bg-slate-900/90">
+                    <p className="text-xs text-white dark:text-slate-300 truncate">{template.name}</p>
                   </div>
                 </button>
               ))}
@@ -490,7 +490,7 @@ export default function TemplatesPanel({ onClose }: TemplatesPanelProps) {
         {/* 文字風格 */}
         <TabsContent value="text-styles" className="flex-1 mt-0 min-h-0 overflow-hidden">
           <div className="h-full overflow-y-auto p-3">
-            <p className="text-xs text-slate-400 mb-3">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
               點擊套用風格到選中的文字，或創建新文字
             </p>
             <div className="grid grid-cols-2 gap-3">
@@ -498,7 +498,7 @@ export default function TemplatesPanel({ onClose }: TemplatesPanelProps) {
                 <button
                   key={preset.id}
                   onClick={() => applyTextStyle(preset)}
-                  className="group relative rounded-xl overflow-hidden border border-slate-700/50 hover:border-indigo-500/50 transition-all hover:scale-[1.02]"
+                  className="group relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700/50 hover:border-indigo-500/50 transition-all hover:scale-[1.02]"
                 >
                   <div 
                     className="aspect-video flex items-center justify-center"
@@ -517,8 +517,8 @@ export default function TemplatesPanel({ onClose }: TemplatesPanelProps) {
                       Aa
                     </span>
                   </div>
-                  <div className="p-2 bg-slate-900/90">
-                    <p className="text-xs text-slate-300">{preset.name}</p>
+                  <div className="p-2 bg-slate-800/90 dark:bg-slate-900/90">
+                    <p className="text-xs text-white dark:text-slate-300">{preset.name}</p>
                   </div>
                 </button>
               ))}

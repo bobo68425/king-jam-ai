@@ -30,6 +30,14 @@ export type BlendMode =
 // 物件類型
 export type ObjectType = 'text' | 'image' | 'shape' | 'group';
 
+// 遮罩原始樣式
+export interface MaskOriginalStyle {
+  fill: string | fabric.Pattern | fabric.Gradient | null;
+  stroke: string | null;
+  strokeWidth: number;
+  opacity: number;
+}
+
 // 圖層資料結構
 export interface LayerData {
   id: string;
@@ -40,6 +48,12 @@ export interface LayerData {
   opacity: number;
   blendMode: BlendMode;
   fabricObject?: FabricObject;
+  clipMaskId?: string;  // 被遮罩的圖層 ID（如果有設置，此圖層會被該 ID 的圖層裁切）
+  isClipMask?: boolean; // 是否作為遮罩使用
+  originalMaskStyle?: MaskOriginalStyle; // 作為遮罩前的原始樣式
+  groupId?: string;     // 所屬群組的 ID
+  isGroup?: boolean;    // 是否為群組
+  childIds?: string[];  // 群組內的子圖層 ID 列表
 }
 
 // 模板 Schema (用於序列化/導出)
@@ -247,7 +261,15 @@ export const useDesignStudioStore = create<DesignStudioState>()(
     subscribeWithSelector((set, get) => ({
       // Canvas 實例
       canvas: null,
-      setCanvas: (canvas) => set({ canvas }),
+      setCanvas: (canvas) => {
+        // 當設置新的 canvas 時，清除舊的 layers（因為 fabricObject 引用已失效）
+        // 注意：草稿恢復由 CanvasStage 處理
+        if (canvas !== null) {
+          set({ canvas, layers: [], selectedObjectIds: [], historyStack: [], historyIndex: -1 });
+        } else {
+          set({ canvas });
+        }
+      },
       
       // 畫布設定
       canvasWidth: 1080,

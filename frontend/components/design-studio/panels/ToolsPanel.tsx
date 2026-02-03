@@ -63,6 +63,7 @@ import {
 import { useDesignStudioStore, ExtendedFabricObject } from "@/stores/design-studio-store";
 import { cn } from "@/lib/utils";
 import { v4 as uuidv4 } from "uuid";
+import { useShortcutDisplay } from "@/lib/utils/keyboard";
 
 export default function ToolsPanel() {
   const { 
@@ -82,6 +83,9 @@ export default function ToolsPanel() {
 
   const [shapesOpen, setShapesOpen] = useState(false);
   const [isRemovingBackground, setIsRemovingBackground] = useState(false);
+  
+  // 快捷鍵顯示（避免 hydration 問題）
+  const { formatShortcut } = useShortcutDisplay();
 
   // 生成唯一 ID
   const generateId = () => uuidv4().slice(0, 8);
@@ -398,16 +402,34 @@ export default function ToolsPanel() {
 
     const fabricImage = activeObject as fabric.Image;
 
+    // 確保物件有有效的 canvas 引用
+    if (!fabricImage.canvas) {
+      toast.error("無法處理此圖片，請重新選取");
+      return;
+    }
+
     setIsRemovingBackground(true);
     toast.loading("正在處理去背...", { id: "remove-bg" });
 
     try {
-      // 取得圖片 Base64
-      const dataUrl = fabricImage.toDataURL({
-        format: "png",
-        quality: 1,
-        multiplier: 1,
-      });
+      // 取得圖片 Base64 - 使用 canvas.toDataURL 來避免 getRetinaScaling 錯誤
+      let dataUrl: string;
+      try {
+        dataUrl = fabricImage.toDataURL({
+          format: "png",
+          quality: 1,
+          multiplier: 1,
+        });
+      } catch (toDataUrlError) {
+        console.error("toDataURL 失敗，嘗試替代方案:", toDataUrlError);
+        // 替代方案：使用原始圖片來源
+        const imgElement = fabricImage.getElement() as HTMLImageElement;
+        if (imgElement && imgElement.src) {
+          dataUrl = imgElement.src;
+        } else {
+          throw new Error("無法取得圖片資料");
+        }
+      }
 
       // 調用去背 API
       const result = await backgroundRemovalService.removeBackground({
@@ -531,8 +553,8 @@ export default function ToolsPanel() {
             className={cn(
               "w-11 h-11 p-0 rounded-xl transition-all duration-200",
               active 
-                ? "bg-indigo-500/20 text-indigo-400 border border-indigo-500/50 shadow-lg shadow-indigo-500/20" 
-                : "text-slate-400 hover:text-white hover:bg-slate-700/50",
+                ? "bg-indigo-500/20 text-indigo-500 dark:text-indigo-400 border border-indigo-500/50 shadow-lg shadow-indigo-500/20" 
+                : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700/50",
               disabled && "opacity-40 cursor-not-allowed"
             )}
           >
@@ -541,11 +563,11 @@ export default function ToolsPanel() {
         </TooltipTrigger>
         <TooltipContent 
           side="right" 
-          className="bg-slate-800 border-slate-700 flex items-center gap-2"
+          className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 flex items-center gap-2"
         >
-          <span className="text-sm font-medium">{label}</span>
+          <span className="text-sm font-medium text-slate-800 dark:text-white">{label}</span>
           {shortcut && (
-            <kbd className="px-1.5 py-0.5 bg-slate-700 rounded text-[10px] text-slate-400 font-mono">
+            <kbd className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 rounded text-[10px] text-slate-500 dark:text-slate-400 font-mono">
               {shortcut}
             </kbd>
           )}
@@ -562,7 +584,7 @@ export default function ToolsPanel() {
   );
 
   return (
-    <div className="w-[72px] bg-slate-900/95 backdrop-blur-sm border-r border-slate-700/50 flex flex-col items-center py-3 gap-1">
+    <div className="w-[72px] flex-shrink-0 bg-slate-100 dark:bg-slate-900/95 backdrop-blur-sm border-r border-slate-200 dark:border-slate-700/50 flex flex-col items-center py-3 gap-1 z-20 relative">
       {/* 面板開關 */}
       <TooltipProvider delayDuration={300}>
         <Tooltip>
@@ -571,7 +593,7 @@ export default function ToolsPanel() {
               variant="ghost"
               size="sm"
               onClick={() => setLeftPanelOpen(!leftPanelOpen)}
-              className="w-11 h-9 p-0 rounded-lg text-slate-500 hover:text-white hover:bg-slate-700/50 mb-1"
+              className="w-11 h-9 p-0 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700/50 mb-1"
             >
               {leftPanelOpen ? (
                 <PanelLeftClose className="w-4 h-4" />
@@ -580,13 +602,13 @@ export default function ToolsPanel() {
               )}
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="right" className="bg-slate-800 border-slate-700">
-            <span className="text-xs">{leftPanelOpen ? "收合面板" : "展開面板"}</span>
+          <TooltipContent side="right" className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+            <span className="text-xs text-slate-800 dark:text-white">{leftPanelOpen ? "收合面板" : "展開面板"}</span>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
 
-      <Separator className="my-1 w-10 bg-slate-700/50" />
+      <Separator className="my-1 w-10 bg-slate-300 dark:bg-slate-700/50" />
 
       {/* 復原/重做 */}
       <div className="flex gap-0.5 mb-1">
@@ -601,17 +623,17 @@ export default function ToolsPanel() {
                 className={cn(
                   "w-8 h-8 p-0 rounded-lg transition-all",
                   historyIndex <= 0 
-                    ? "text-slate-600 cursor-not-allowed" 
-                    : "text-slate-400 hover:text-white hover:bg-slate-700/50"
+                    ? "text-slate-400 dark:text-slate-600 cursor-not-allowed" 
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700/50"
                 )}
               >
                 <Undo2 className="w-4 h-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="right" className="bg-slate-800 border-slate-700">
+            <TooltipContent side="right" className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
               <div className="flex items-center gap-2">
-                <span className="text-xs">復原</span>
-                <kbd className="px-1 py-0.5 bg-slate-700 rounded text-[10px] text-slate-400">⌘Z</kbd>
+                <span className="text-xs text-slate-800 dark:text-white">復原</span>
+                <kbd className="px-1 py-0.5 bg-slate-100 dark:bg-slate-700 rounded text-[10px] text-slate-500 dark:text-slate-400">{formatShortcut('cmd+z')}</kbd>
               </div>
             </TooltipContent>
           </Tooltip>
@@ -628,24 +650,24 @@ export default function ToolsPanel() {
                 className={cn(
                   "w-8 h-8 p-0 rounded-lg transition-all",
                   historyIndex >= history.length - 1
-                    ? "text-slate-600 cursor-not-allowed" 
-                    : "text-slate-400 hover:text-white hover:bg-slate-700/50"
+                    ? "text-slate-400 dark:text-slate-600 cursor-not-allowed" 
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700/50"
                 )}
               >
                 <Redo2 className="w-4 h-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="right" className="bg-slate-800 border-slate-700">
+            <TooltipContent side="right" className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
               <div className="flex items-center gap-2">
-                <span className="text-xs">重做</span>
-                <kbd className="px-1 py-0.5 bg-slate-700 rounded text-[10px] text-slate-400">⌘⇧Z</kbd>
+                <span className="text-xs text-slate-800 dark:text-white">重做</span>
+                <kbd className="px-1 py-0.5 bg-slate-100 dark:bg-slate-700 rounded text-[10px] text-slate-500 dark:text-slate-400">{formatShortcut('cmd+shift+z')}</kbd>
               </div>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
       </div>
 
-      <Separator className="my-1 w-10 bg-slate-700/50" />
+      <Separator className="my-1 w-10 bg-slate-300 dark:bg-slate-700/50" />
       
       {/* 選取工具組 */}
       <SectionLabel>工具</SectionLabel>
@@ -666,7 +688,7 @@ export default function ToolsPanel() {
         active={activeTool === "pan"}
       />
       
-      <Separator className="my-2 w-10 bg-slate-700/50" />
+      <Separator className="my-2 w-10 bg-slate-300 dark:bg-slate-700/50" />
       
       {/* 添加元素組 */}
       <SectionLabel>添加</SectionLabel>
@@ -697,8 +719,8 @@ export default function ToolsPanel() {
                   className={cn(
                     "w-11 h-11 p-0 rounded-xl transition-all duration-200 relative",
                     shapesOpen 
-                      ? "bg-indigo-500/20 text-indigo-400 border border-indigo-500/50" 
-                      : "text-slate-400 hover:text-white hover:bg-slate-700/50"
+                      ? "bg-indigo-500/20 text-indigo-500 dark:text-indigo-400 border border-indigo-500/50" 
+                      : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700/50"
                   )}
                 >
                   <Shapes className="w-5 h-5" />
@@ -706,8 +728,8 @@ export default function ToolsPanel() {
                 </Button>
               </DropdownMenuTrigger>
             </TooltipTrigger>
-            <TooltipContent side="right" className="bg-slate-800 border-slate-700">
-              <span className="text-sm font-medium">形狀</span>
+            <TooltipContent side="right" className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+              <span className="text-sm font-medium text-slate-800 dark:text-white">形狀</span>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
@@ -715,19 +737,19 @@ export default function ToolsPanel() {
         <DropdownMenuContent 
           side="right" 
           align="start"
-          className="w-48 bg-slate-800 border-slate-700 p-2"
+          className="w-48 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 p-2"
         >
-          <DropdownMenuLabel className="text-xs text-slate-400 font-normal">
+          <DropdownMenuLabel className="text-xs text-slate-500 dark:text-slate-400 font-normal">
             選擇形狀
           </DropdownMenuLabel>
-          <DropdownMenuSeparator className="bg-slate-700" />
+          <DropdownMenuSeparator className="bg-slate-200 dark:bg-slate-700" />
           
           <div className="grid grid-cols-3 gap-1 p-1">
             {shapeOptions.map((shape) => (
               <button
                 key={shape.id}
                 onClick={() => addShape(shape.id)}
-                className="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-slate-700/50 transition-colors group"
+                className="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors group"
               >
                 <div 
                   className="w-8 h-8 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110"
@@ -735,7 +757,7 @@ export default function ToolsPanel() {
                 >
                   <shape.icon className="w-4 h-4" style={{ color: shape.color }} />
                 </div>
-                <span className="text-[10px] text-slate-400 group-hover:text-white">
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 group-hover:text-slate-800 dark:group-hover:text-white">
                   {shape.label}
                 </span>
               </button>
@@ -744,7 +766,7 @@ export default function ToolsPanel() {
         </DropdownMenuContent>
       </DropdownMenu>
       
-      <Separator className="my-2 w-10 bg-slate-700/50" />
+      <Separator className="my-2 w-10 bg-slate-300 dark:bg-slate-700/50" />
       
       {/* 進階功能 */}
       <SectionLabel>功能</SectionLabel>
@@ -762,7 +784,7 @@ export default function ToolsPanel() {
       <ToolButton
         icon={Sparkles}
         label="AI 生成"
-        shortcut="⌘G"
+        shortcut={formatShortcut('cmd+g')}
         onClick={() => {
           // 提示用戶使用其他引擎生成圖片後導入
           toast.info("AI 生成圖片", {
@@ -784,8 +806,8 @@ export default function ToolsPanel() {
               className={cn(
                 "w-11 h-11 p-0 rounded-xl transition-all duration-200",
                 isRemovingBackground 
-                  ? "bg-pink-500/20 text-pink-400 border border-pink-500/50" 
-                  : "text-slate-400 hover:text-white hover:bg-slate-700/50"
+                  ? "bg-pink-500/20 text-pink-500 dark:text-pink-400 border border-pink-500/50" 
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700/50"
               )}
             >
               {isRemovingBackground ? (
@@ -797,11 +819,11 @@ export default function ToolsPanel() {
           </TooltipTrigger>
           <TooltipContent 
             side="right" 
-            className="bg-slate-800 border-slate-700 flex items-center gap-2"
+            className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 flex items-center gap-2"
           >
-            <span className="text-sm font-medium">圖片去背</span>
-            <kbd className="px-1.5 py-0.5 bg-slate-700 rounded text-[10px] text-slate-400 font-mono">
-              ⌘B
+            <span className="text-sm font-medium text-slate-800 dark:text-white">圖片去背</span>
+            <kbd className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 rounded text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+              {formatShortcut('cmd+b')}
             </kbd>
           </TooltipContent>
         </Tooltip>
@@ -811,7 +833,7 @@ export default function ToolsPanel() {
       <div className="flex-1" />
 
       {/* 版本資訊 */}
-      <div className="text-[9px] text-slate-600 text-center px-2">
+      <div className="text-[9px] text-slate-500 dark:text-slate-600 text-center px-2">
         v2.0
       </div>
     </div>

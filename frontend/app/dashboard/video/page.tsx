@@ -319,6 +319,17 @@ const MUSIC_LIBRARY: MusicTrack[] = [
     previewUrl: "https://assets.mixkit.co/music/preview/mixkit-driving-ambition-32.mp3",
     attribution: "Mixkit License - 免費商用" 
   },
+  { 
+    id: "style-faith", 
+    name: "🕊️ 信仰靈性", 
+    genre: "靈感/盼望", 
+    mood: "faith", 
+    duration: "30秒+", 
+    source: "Mixkit", 
+    url: "style:faith",
+    previewUrl: "https://assets.mixkit.co/music/preview/mixkit-spirit-of-the-game-132.mp3",
+    attribution: "Mixkit License - 免費商用" 
+  },
   
   // 無音樂
   { id: "none", name: "🔇 無背景音樂", genre: "-", mood: "-", duration: "-", source: "-", url: "" },
@@ -333,6 +344,7 @@ const MUSIC_MOODS = [
   { id: "epic", label: "史詩壯闘", icon: "🎬" },
   { id: "minimal", label: "極簡電子", icon: "🔲" },
   { id: "inspirational", label: "勵志向上", icon: "🌟" },
+  { id: "faith", label: "信仰靈性", icon: "🕊️" },
 ];
 
 // 字幕樣式預設

@@ -100,6 +100,7 @@ import {
 // 使用上方已導入的 useDesignStudioStore
 import { BLEND_MODE_OPTIONS, BlendMode } from "@/stores/design-studio-store";
 import { cn } from "@/lib/utils";
+import { useShortcutDisplay } from "@/lib/utils/keyboard";
 
 // 預設顏色 - 擴充版
 const PRESET_COLORS = [
@@ -167,6 +168,9 @@ export default function PropertiesPanel() {
     effects: false,
   });
   const [lockAspectRatio, setLockAspectRatio] = useState(false);
+  
+  // 快捷鍵顯示（避免 hydration 問題）
+  const { formatShortcut, deleteKey } = useShortcutDisplay();
   
   // 獲取選中的圖層
   const selectedLayer = layers.find((l) => selectedObjectIds.includes(l.id));
@@ -475,38 +479,38 @@ export default function PropertiesPanel() {
   if (!selectedObject) {
     return (
       <div className="h-full flex flex-col">
-        <div className="p-4 border-b border-slate-700/50">
-          <h3 className="text-sm font-medium text-slate-300 flex items-center gap-2">
-            <Settings2 className="w-4 h-4 text-indigo-400" />
+        <div className="p-4 border-b border-slate-200 dark:border-slate-700/50">
+          <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
+            <Settings2 className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
             屬性
           </h3>
         </div>
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-slate-800/50 flex items-center justify-center mb-4">
-            <MousePointer2 className="w-8 h-8 text-slate-600" />
+          <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800/50 flex items-center justify-center mb-4">
+            <MousePointer2 className="w-8 h-8 text-slate-400 dark:text-slate-600" />
           </div>
-          <h4 className="text-sm font-medium text-slate-400 mb-2">尚未選取物件</h4>
+          <h4 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">尚未選取物件</h4>
           <p className="text-xs text-slate-500 leading-relaxed">
             點選畫布上的物件<br />即可在此編輯屬性
           </p>
           
-          <div className="mt-6 pt-6 border-t border-slate-700/50 w-full">
-            <p className="text-[10px] text-slate-600 mb-3">快捷鍵提示</p>
+          <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-700/50 w-full">
+            <p className="text-[10px] text-slate-500 dark:text-slate-600 mb-3">快捷鍵提示</p>
             <div className="grid grid-cols-2 gap-2 text-[10px]">
-              <div className="flex items-center gap-1.5 text-slate-500">
-                <kbd className="px-1.5 py-0.5 bg-slate-800 rounded">V</kbd>
+              <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-500">
+                <kbd className="px-1.5 py-0.5 bg-slate-200 dark:bg-slate-800 rounded">V</kbd>
                 <span>選取</span>
               </div>
-              <div className="flex items-center gap-1.5 text-slate-500">
-                <kbd className="px-1.5 py-0.5 bg-slate-800 rounded">T</kbd>
+              <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-500">
+                <kbd className="px-1.5 py-0.5 bg-slate-200 dark:bg-slate-800 rounded">T</kbd>
                 <span>文字</span>
               </div>
-              <div className="flex items-center gap-1.5 text-slate-500">
-                <kbd className="px-1.5 py-0.5 bg-slate-800 rounded">⌘D</kbd>
+              <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-500">
+                <kbd className="px-1.5 py-0.5 bg-slate-200 dark:bg-slate-800 rounded">{formatShortcut('cmd+d')}</kbd>
                 <span>複製</span>
               </div>
-              <div className="flex items-center gap-1.5 text-slate-500">
-                <kbd className="px-1.5 py-0.5 bg-slate-800 rounded">Del</kbd>
+              <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-500">
+                <kbd className="px-1.5 py-0.5 bg-slate-200 dark:bg-slate-800 rounded">{deleteKey}</kbd>
                 <span>刪除</span>
               </div>
             </div>
@@ -533,17 +537,17 @@ export default function PropertiesPanel() {
   }) => (
     <button
       onClick={onToggle}
-      className="w-full flex items-center justify-between p-3 hover:bg-slate-800/30 transition-colors"
+      className="w-full flex items-center justify-between p-3 hover:bg-slate-100 dark:hover:bg-slate-800/30 transition-colors"
     >
       <div className="flex items-center gap-2">
-        <Icon className="w-4 h-4 text-indigo-400" />
-        <span className="text-sm font-medium text-slate-300">{title}</span>
+        <Icon className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
+        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{title}</span>
       </div>
       <div className={cn(
         "w-5 h-5 rounded flex items-center justify-center transition-transform",
         isOpen ? "rotate-180" : ""
       )}>
-        <svg className="w-3 h-3 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg className="w-3 h-3 text-slate-400 dark:text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </div>
@@ -562,16 +566,16 @@ export default function PropertiesPanel() {
   }) => (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <Label className="text-xs text-slate-400">{label}</Label>
+        <Label className="text-xs text-slate-600 dark:text-slate-400">{label}</Label>
         <div className="flex items-center gap-2">
           <div 
-            className="w-6 h-6 rounded-lg border-2 border-slate-600"
+            className="w-6 h-6 rounded-lg border-2 border-slate-300 dark:border-slate-600"
             style={{ backgroundColor: value }}
           />
           <Input
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            className="w-24 h-7 bg-slate-800/50 border-slate-700 text-xs font-mono"
+            className="w-24 h-7 bg-slate-100 dark:bg-slate-800/50 border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-800 dark:text-slate-200"
           />
         </div>
       </div>
@@ -582,7 +586,7 @@ export default function PropertiesPanel() {
           type="color"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-12 h-12 rounded-xl border-2 border-slate-600 cursor-pointer bg-transparent"
+          className="w-12 h-12 rounded-xl border-2 border-slate-300 dark:border-slate-600 cursor-pointer bg-transparent"
         />
         <div className="flex-1 grid grid-cols-8 gap-1">
           {PRESET_COLORS.slice(0, 16).map((color) => (
@@ -592,7 +596,7 @@ export default function PropertiesPanel() {
                 "w-full aspect-square rounded-md border transition-all hover:scale-110",
                 value === color 
                   ? "border-indigo-500 ring-2 ring-indigo-500/30" 
-                  : "border-transparent hover:border-slate-500"
+                  : "border-transparent hover:border-slate-400 dark:hover:border-slate-500"
               )}
               style={{ backgroundColor: color }}
               onClick={() => onChange(color)}
@@ -604,19 +608,19 @@ export default function PropertiesPanel() {
   );
 
   return (
-    <div className="h-full flex flex-col bg-slate-900/50 overflow-hidden">
+    <div className="h-full flex flex-col bg-white dark:bg-slate-900/50 overflow-hidden">
       {/* 標題 */}
-      <div className="p-4 border-b border-slate-700/50 shrink-0">
+      <div className="p-4 border-b border-slate-200 dark:border-slate-700/50 shrink-0">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium text-slate-300 flex items-center gap-2">
-            <Settings2 className="w-4 h-4 text-indigo-400" />
+          <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
+            <Settings2 className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
             {selectedLayer?.name || "屬性"}
           </h3>
           <span className={cn(
             "text-[10px] px-2 py-0.5 rounded-full",
-            isTextObject ? "bg-blue-500/20 text-blue-400" :
-            isImageObject ? "bg-green-500/20 text-green-400" :
-            "bg-purple-500/20 text-purple-400"
+            isTextObject ? "bg-blue-500/20 text-blue-600 dark:text-blue-400" :
+            isImageObject ? "bg-green-500/20 text-green-600 dark:text-green-400" :
+            "bg-purple-500/20 text-purple-600 dark:text-purple-400"
           )}>
             {isTextObject ? "文字" : isImageObject ? "圖片" : "形狀"}
           </span>

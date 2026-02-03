@@ -8,9 +8,16 @@ import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { getQuickFingerprint } from "@/lib/fingerprint";
 import { toast } from "sonner";
-import { Loader2, Mail, Lock } from "lucide-react";
+import { Loader2, Mail, Lock, AlertCircle, KeyRound, HelpCircle } from "lucide-react";
 
 // Google OAuth 配置
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
@@ -36,6 +43,8 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [riskWarning, setRiskWarning] = useState<string | null>(null);
   const [socialLoading, setSocialLoading] = useState<string | null>(null);
+  const [showErrorDialog, setShowErrorDialog] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   // Google 登入
   const handleGoogleLogin = () => {
@@ -138,6 +147,7 @@ export default function LoginPage() {
       
     } catch (error: any) {
       const errorDetail = error.response?.data?.detail;
+      const statusCode = error.response?.status;
       
       // 檢查是否為社交登入帳號
       if (errorDetail?.type === "social_login_required") {
@@ -155,7 +165,14 @@ export default function LoginPage() {
         return;
       }
       
-      const errorMsg = typeof errorDetail === "string" ? errorDetail : "登入失敗，請檢查帳號密碼";
+      // 401 錯誤 - 帳號或密碼錯誤，顯示彈窗
+      if (statusCode === 401) {
+        setErrorMessage("帳號或密碼錯誤，請確認後再試");
+        setShowErrorDialog(true);
+        return;
+      }
+      
+      const errorMsg = typeof errorDetail === "string" ? errorDetail : "登入失敗，請稍後再試";
       toast.error(errorMsg);
       console.error(error);
     } finally {
@@ -283,6 +300,25 @@ export default function LoginPage() {
               "登入開始創作"
             )}
           </Button>
+
+          {/* 忘記密碼/帳號連結 */}
+          <div className="flex justify-center gap-4 text-sm">
+            <Link 
+              href="/forgot-password" 
+              className="text-slate-400 hover:text-cyan-400 transition-colors flex items-center gap-1"
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              忘記密碼
+            </Link>
+            <span className="text-slate-600">|</span>
+            <Link 
+              href="/forgot-account" 
+              className="text-slate-400 hover:text-cyan-400 transition-colors flex items-center gap-1"
+            >
+              <HelpCircle className="w-3.5 h-3.5" />
+              忘記帳號
+            </Link>
+          </div>
         </CardContent>
         <CardFooter className="flex justify-center">
           <p className="text-sm text-slate-400">
@@ -293,6 +329,56 @@ export default function LoginPage() {
           </p>
         </CardFooter>
       </Card>
+
+      {/* 登入錯誤彈窗 */}
+      <Dialog open={showErrorDialog} onOpenChange={setShowErrorDialog}>
+        <DialogContent className="sm:max-w-md bg-slate-800 border-slate-700">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-400">
+              <AlertCircle className="w-5 h-5" />
+              登入失敗
+            </DialogTitle>
+            <DialogDescription className="text-slate-300 pt-2">
+              {errorMessage}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 pt-4">
+            <p className="text-sm text-slate-400">
+              如果您忘記了登入資訊，請嘗試：
+            </p>
+            <div className="flex flex-col gap-2">
+              <Button
+                variant="outline"
+                className="w-full justify-start border-slate-600 hover:bg-slate-700"
+                onClick={() => {
+                  setShowErrorDialog(false);
+                  router.push("/forgot-password");
+                }}
+              >
+                <KeyRound className="w-4 h-4 mr-2 text-cyan-400" />
+                重設密碼
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full justify-start border-slate-600 hover:bg-slate-700"
+                onClick={() => {
+                  setShowErrorDialog(false);
+                  router.push("/forgot-account");
+                }}
+              >
+                <HelpCircle className="w-4 h-4 mr-2 text-amber-400" />
+                找回帳號
+              </Button>
+            </div>
+            <Button
+              className="w-full mt-2"
+              onClick={() => setShowErrorDialog(false)}
+            >
+              再試一次
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

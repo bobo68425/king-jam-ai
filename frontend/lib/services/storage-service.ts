@@ -260,11 +260,18 @@ class StorageService {
       }
 
       // 生成縮圖
-      const thumbnail = canvas.toDataURL({
-        format: 'jpeg',
-        quality: 0.5,
-        multiplier: 0.2,
-      });
+      let thumbnail = '';
+      try {
+        if (canvas && typeof canvas.toDataURL === 'function') {
+          thumbnail = canvas.toDataURL({
+            format: 'jpeg',
+            quality: 0.5,
+            multiplier: 0.2,
+          });
+        }
+      } catch (thumbError) {
+        console.warn('生成縮圖失敗:', thumbError);
+      }
 
       const id = existingId || this.generateId();
       const now = new Date();
@@ -407,12 +414,32 @@ class StorageService {
   // 匯出功能
   // ========================================
 
-  exportPNG(canvas: fabric.Canvas, fileName: string, options?: { multiplier?: number }) {
+  exportPNG(canvas: fabric.Canvas, fileName: string, options?: { multiplier?: number; transparent?: boolean }) {
     localFileService.exportPNG(canvas, fileName, options);
   }
 
   exportJPG(canvas: fabric.Canvas, fileName: string, options?: { multiplier?: number; quality?: number }) {
     localFileService.exportJPG(canvas, fileName, options);
+  }
+
+  exportWebP(canvas: fabric.Canvas, fileName: string, options?: { multiplier?: number; quality?: number }) {
+    localFileService.exportWebP(canvas, fileName, options);
+  }
+
+  exportGIF(canvas: fabric.Canvas, fileName: string, options?: { multiplier?: number }) {
+    localFileService.exportGIF(canvas, fileName, options);
+  }
+
+  exportBMP(canvas: fabric.Canvas, fileName: string, options?: { multiplier?: number }) {
+    localFileService.exportBMP(canvas, fileName, options);
+  }
+
+  exportTIFF(canvas: fabric.Canvas, fileName: string, options?: { multiplier?: number }) {
+    localFileService.exportTIFF(canvas, fileName, options);
+  }
+
+  exportICO(canvas: fabric.Canvas, fileName: string, size?: number) {
+    localFileService.exportICO(canvas, fileName, size);
   }
 
   exportSVG(canvas: fabric.Canvas, fileName: string) {

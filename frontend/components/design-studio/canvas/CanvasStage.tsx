@@ -10,9 +10,11 @@
  * - 優化縮放控制 UI
  */
 
-import React, { useRef, useEffect, useCallback } from "react";
+import React, { useRef, useEffect, useCallback, useState } from "react";
 import { fabric } from "fabric";
 import { useDesignStudioStore, ExtendedFabricObject } from "@/stores/design-studio-store";
+import { autosaveService } from "@/lib/services/autosave-service";
+import { toast } from "sonner";
 
 // Fabric 事件類型
 interface FabricTransformEvent {
@@ -692,19 +694,332 @@ export default function CanvasStage({ className }: CanvasStageProps) {
 
     setCanvas(fabricCanvas);
 
-    // 初始歷史記錄
-    setTimeout(() => {
-      pushHistory({
-        json: JSON.stringify(fabricCanvas.toJSON()),
-        timestamp: Date.now(),
-        action: 'init',
-        description: '初始化畫布',
-      });
-    }, 100);
+    // 用於追蹤 canvas 是否已被清理
+    let isDisposed = false;
+    
+    // 檢查 canvas 是否有效
+    const isCanvasValid = () => {
+      try {
+        if (isDisposed || !fabricCanvas) return false;
+        // 檢查 fabric canvas 的內部元素是否存在
+        const ctx = fabricCanvas.getContext();
+        return ctx !== null && ctx !== undefined;
+      } catch {
+        return false;
+      }
+    };
+    
+    // 嘗試恢復草稿
+    const recoverDraft = async () => {
+      // 檢查 canvas 是否仍然有效
+      if (!isCanvasValid()) {
+        console.log('Canvas 已被清理，跳過恢復');
+        return;
+      }
+      
+      try {
+        // 先檢查 IndexedDB 中的草稿
+        let hasDraft = await autosaveService.hasDraft();
+        let draftData: any = null;
+        
+        if (hasDraft) {
+          draftData = await autosaveService.getDraft();
+        }
+        
+        // 如果沒有 IndexedDB 草稿，檢查 localStorage 緊急保存
+        if (!draftData) {
+          const emergencySave = localStorage.getItem('designStudio_emergencySave');
+          if (emergencySave) {
+            try {
+              const parsed = JSON.parse(emergencySave);
+              // 檢查是否是最近 24 小時內的保存
+              if (Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000) {
+                draftData = {
+                  canvasJson: parsed.canvasJson,
+                  canvasWidth: parsed.canvasWidth,
+                  canvasHeight: parsed.canvasHeight,
+                  backgroundColor: parsed.backgroundColor,
+                  projectName: parsed.projectName
+                };
+                console.log('從緊急保存恢復');
+              }
+            } catch (e) {
+              console.error('解析緊急保存失敗:', e);
+            }
+          }
+        }
+        
+        // 再次檢查 canvas 是否仍然有效
+        if (!isCanvasValid()) {
+          console.log('Canvas 已被清理，跳過恢復');
+          return;
+        }
+        
+        if (draftData && draftData.canvasJson) {
+          // 更新 store 中的畫布設定
+          const { setCanvasSize, setCanvasBackground, setTemplateName, addLayer } = useDesignStudioStore.getState();
+          setCanvasSize(draftData.canvasWidth, draftData.canvasHeight);
+          setCanvasBackground(draftData.backgroundColor);
+          if (draftData.projectName) {
+            setTemplateName(draftData.projectName);
+          }
+          
+          // 載入畫布 JSON
+          const canvasData = typeof draftData.canvasJson === 'string' 
+            ? JSON.parse(draftData.canvasJson) 
+            : draftData.canvasJson;
+          
+          console.log('恢復草稿 - 畫布尺寸:', draftData.canvasWidth, 'x', draftData.canvasHeight);
+          console.log('恢復草稿 - 物件數量:', canvasData.objects?.length);
+          if (canvasData.objects?.length > 0) {
+            console.log('恢復草稿 - 第一個物件位置:', canvasData.objects[0].left, canvasData.objects[0].top);
+          }
+          
+          // 使用 try-catch 包裹 loadFromJSON
+          try {
+            await new Promise<void>((resolve, reject) => {
+              if (!isCanvasValid()) {
+                reject(new Error('Canvas disposed'));
+                return;
+              }
+              fabricCanvas.loadFromJSON(canvasData, () => {
+                if (isCanvasValid()) {
+                  // 確保畫布尺寸正確
+                  fabricCanvas.setWidth(draftData.canvasWidth);
+                  fabricCanvas.setHeight(draftData.canvasHeight);
+                  // 重置視口變換
+                  fabricCanvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+                  fabricCanvas.renderAll();
+                  
+                  // 調試：打印恢復後的物件位置
+                  const objs = fabricCanvas.getObjects();
+                  console.log('恢復後物件數量:', objs.length);
+                  objs.forEach((obj: any, i: number) => {
+                    if (!obj.isGrid && !obj.isGuide) {
+                      console.log(`物件 ${i}: left=${obj.left}, top=${obj.top}, type=${obj.type}`);
+                    }
+                  });
+                }
+                resolve();
+              });
+            });
+          } catch (loadError) {
+            console.error('載入 JSON 失敗:', loadError);
+            return;
+          }
+          
+          // 檢查 canvas 是否仍然有效
+          if (!isCanvasValid()) {
+            return;
+          }
+          
+          // 重建圖層列表
+          const objects = fabricCanvas.getObjects();
+          objects.forEach((obj: fabric.Object) => {
+            const extObj = obj as ExtendedFabricObject;
+            if (extObj.id && !extObj.isGrid && !extObj.isGuide) {
+              // 判斷物件類型
+              let objType: 'text' | 'image' | 'shape' | 'group' = 'shape';
+              if ((extObj as any).isGroup || obj.type === 'group') {
+                objType = 'group';
+              } else if (obj.type === 'i-text' || obj.type === 'textbox') {
+                objType = 'text';
+              } else if (obj.type === 'image') {
+                objType = 'image';
+              }
+              
+              addLayer({
+                id: extObj.id,
+                name: extObj.name || '物件',
+                type: objType,
+                visible: obj.visible !== false,
+                locked: !obj.selectable,
+                opacity: obj.opacity || 1,
+                blendMode: 'source-over',
+                fabricObject: obj,
+                clipMaskId: (extObj as any).clipMaskId,
+                isClipMask: (extObj as any).isClipMask,
+                originalMaskStyle: (extObj as any).isClipMask ? {
+                  fill: (extObj as any).originalFill,
+                  stroke: (extObj as any).originalStroke,
+                  strokeWidth: (extObj as any).originalStrokeWidth || 0,
+                  opacity: (extObj as any).originalOpacity || 1,
+                } : undefined,
+                isGroup: (extObj as any).isGroup,
+                childIds: (extObj as any).childIds,
+              });
+            }
+          });
+          
+          // 重建遮罩關係（clipPath）
+          const { layers: restoredLayers } = useDesignStudioStore.getState();
+          restoredLayers.forEach(layer => {
+            if (layer.clipMaskId && layer.fabricObject) {
+              const maskLayer = restoredLayers.find(l => l.id === layer.clipMaskId);
+              if (maskLayer?.fabricObject) {
+                // 重建 clipPath
+                const maskObj = maskLayer.fabricObject;
+                const targetObj = layer.fabricObject;
+                
+                const maskCenter = maskObj.getCenterPoint();
+                const targetCenter = targetObj.getCenterPoint();
+                const offsetX = maskCenter.x - targetCenter.x;
+                const offsetY = maskCenter.y - targetCenter.y;
+                
+                // 獲取目標物件的縮放比例（用於補償）
+                const targetScaleX = targetObj.scaleX || 1;
+                const targetScaleY = targetObj.scaleY || 1;
+                
+                const clipProps = {
+                  left: offsetX / targetScaleX,
+                  top: offsetY / targetScaleY,
+                  scaleX: (maskObj.scaleX || 1) / targetScaleX,
+                  scaleY: (maskObj.scaleY || 1) / targetScaleY,
+                  angle: (maskObj.angle || 0) - (targetObj.angle || 0),
+                  originX: 'center' as const,
+                  originY: 'center' as const,
+                  absolutePositioned: false,
+                };
+                
+                let clipPath: fabric.Object | null = null;
+                
+                if (maskObj.type === 'circle') {
+                  clipPath = new fabric.Circle({
+                    radius: (maskObj as fabric.Circle).radius,
+                    ...clipProps,
+                  });
+                } else if (maskObj.type === 'rect') {
+                  clipPath = new fabric.Rect({
+                    width: (maskObj as fabric.Rect).width,
+                    height: (maskObj as fabric.Rect).height,
+                    rx: (maskObj as fabric.Rect).rx,
+                    ry: (maskObj as fabric.Rect).ry,
+                    ...clipProps,
+                  });
+                } else if (maskObj.type === 'ellipse') {
+                  clipPath = new fabric.Ellipse({
+                    rx: (maskObj as fabric.Ellipse).rx,
+                    ry: (maskObj as fabric.Ellipse).ry,
+                    ...clipProps,
+                  });
+                } else if (maskObj.type === 'triangle') {
+                  clipPath = new fabric.Triangle({
+                    width: (maskObj as fabric.Triangle).width,
+                    height: (maskObj as fabric.Triangle).height,
+                    ...clipProps,
+                  });
+                } else if (maskObj.type === 'polygon') {
+                  clipPath = new fabric.Polygon((maskObj as fabric.Polygon).points || [], {
+                    ...clipProps,
+                  });
+                } else if (maskObj.type === 'path') {
+                  clipPath = new fabric.Path((maskObj as fabric.Path).path || [], {
+                    ...clipProps,
+                  });
+                } else {
+                  // 對於其他類型，嘗試使用 clone
+                  maskObj.clone((cloned: fabric.Object) => {
+                    cloned.set(clipProps);
+                    targetObj.clipPath = cloned;
+                    targetObj.dirty = true;
+                  });
+                }
+                
+                if (clipPath) {
+                  targetObj.clipPath = clipPath;
+                  targetObj.dirty = true;
+                }
+              }
+            }
+          });
+          
+          fabricCanvas.renderAll();
+          toast.success('已恢復上次編輯的內容');
+          
+          // 清除緊急保存
+          localStorage.removeItem('designStudio_emergencySave');
+        }
+      } catch (error) {
+        console.error('恢復草稿失敗:', error);
+      }
+      
+      // 無論是否恢復草稿，都推送初始歷史記錄
+      if (isCanvasValid()) {
+        pushHistory({
+          json: JSON.stringify(fabricCanvas.toJSON()),
+          timestamp: Date.now(),
+          action: 'init',
+          description: '初始化畫布',
+        });
+      }
+    };
+    
+    // 延遲執行恢復
+    setTimeout(recoverDraft, 200);
+
+    // 啟動自動保存
+    const getCanvasState = () => ({
+      canvas: fabricCanvas,
+      projectName: useDesignStudioStore.getState().templateName,
+      canvasWidth: useDesignStudioStore.getState().canvasWidth,
+      canvasHeight: useDesignStudioStore.getState().canvasHeight,
+      backgroundColor: useDesignStudioStore.getState().canvasBackgroundColor,
+    });
+    
+    autosaveService.start(getCanvasState);
+
+    // 在頁面關閉/重整前保存
+    const handleBeforeUnload = () => {
+      try {
+        // 同步保存（使用 localStorage 作為備份）
+        const state = getCanvasState();
+        if (state.canvas) {
+          const customProperties = ['id', 'name', 'blendMode', 'globalCompositeOperation', 'lockUniScaling', 'isGrid', 'isGuide', 'selectable', 'evented', 'clipMaskId', 'isClipMask', 'originalFill', 'originalStroke', 'originalStrokeWidth', 'originalOpacity', 'isGroup', 'groupId', 'childIds'];
+          const objects = state.canvas.getObjects().filter((obj: any) => !obj.isGrid && !obj.isGuide);
+          const canvasJson = JSON.stringify({
+            ...state.canvas.toJSON(customProperties),
+            objects: objects.map((obj: any) => obj.toJSON(customProperties))
+          });
+          
+          localStorage.setItem('designStudio_emergencySave', JSON.stringify({
+            canvasJson,
+            canvasWidth: state.canvasWidth,
+            canvasHeight: state.canvasHeight,
+            backgroundColor: state.backgroundColor,
+            projectName: state.projectName,
+            timestamp: Date.now()
+          }));
+        }
+      } catch (e) {
+        console.error('緊急保存失敗:', e);
+      }
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    // 監聽物件變更，觸發保存
+    const handleModified = () => {
+      // 延遲保存，避免頻繁觸發
+      setTimeout(() => {
+        autosaveService.save(getCanvasState()).catch(console.error);
+      }, 1000);
+    };
+    
+    fabricCanvas.on('object:modified', handleModified);
+    fabricCanvas.on('object:added', handleModified);
+    fabricCanvas.on('object:removed', handleModified);
 
     return () => {
+      // 標記為已清理
+      isDisposed = true;
+      // 停止自動保存
+      autosaveService.stop();
+      window.removeEventListener('beforeunload', handleBeforeUnload);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      fabricCanvas.off('object:modified', handleModified);
+      fabricCanvas.off('object:added', handleModified);
+      fabricCanvas.off('object:removed', handleModified);
       fabricCanvas.dispose();
       setCanvas(null);
     };
@@ -796,7 +1111,16 @@ export default function CanvasStage({ className }: CanvasStageProps) {
       "isGrid",
       "isGuide",
       "selectable",
-      "evented"
+      "evented",
+      "clipMaskId",
+      "isClipMask",
+      "originalFill",
+      "originalStroke",
+      "originalStrokeWidth",
+      "originalOpacity",
+      "isGroup",
+      "groupId",
+      "childIds"
     ];
 
     // 保存歷史記錄的輔助函數 - 排除網格和參考線
@@ -828,6 +1152,10 @@ export default function CanvasStage({ className }: CanvasStageProps) {
     const handleModified = (e: FabricObjectEvent) => {
       const target = e.target;
       const objectId = target?.id;
+      
+      // clipPath 使用相對位置（absolutePositioned: false），會自動跟著物件移動
+      // 不需要手動同步
+      
       saveHistory('modify', objectId ? [objectId] : undefined);
     };
 
@@ -842,13 +1170,40 @@ export default function CanvasStage({ className }: CanvasStageProps) {
       }
     };
 
-    // 物件刪除後保存歷史
+    // 物件刪除後保存歷史並同步圖層（處理遮罩綁定）
     const handleRemoved = (e: FabricObjectEvent) => {
       const target = e.target;
       // 跳過網格線和參考線
       if (target?.isGrid || target?.isGuide) return;
       const objectId = target?.id;
       if (objectId) {
+        const { layers, updateLayer } = useDesignStudioStore.getState();
+        const currentLayer = layers.find(l => l.id === objectId);
+        
+        // 如果此物件有遮罩，同時刪除遮罩物件
+        if (currentLayer?.clipMaskId) {
+          const maskLayer = layers.find(l => l.id === currentLayer.clipMaskId);
+          if (maskLayer?.fabricObject && maskLayer.fabricObject.canvas) {
+            canvas.remove(maskLayer.fabricObject);
+            removeLayer(maskLayer.id);
+          }
+        }
+        
+        // 如果此物件是遮罩，清除被遮罩物件的 clipPath
+        if (currentLayer?.isClipMask) {
+          const maskedLayers = layers.filter(l => l.clipMaskId === objectId);
+          maskedLayers.forEach(maskedLayer => {
+            if (maskedLayer.fabricObject) {
+              maskedLayer.fabricObject.clipPath = undefined;
+              maskedLayer.fabricObject.dirty = true;
+              updateLayer(maskedLayer.id, { clipMaskId: undefined });
+            }
+          });
+          canvas.renderAll();
+        }
+        
+        // 同步移除圖層
+        removeLayer(objectId);
         saveHistory('remove', [objectId]);
       }
     };
@@ -869,7 +1224,7 @@ export default function CanvasStage({ className }: CanvasStageProps) {
       canvas.off("object:added", handleAdded);
       canvas.off("object:removed", handleRemoved);
     };
-  }, [canvas, setSelectedObjects, pushHistory]);
+  }, [canvas, setSelectedObjects, pushHistory, removeLayer]);
 
   // 計算最佳縮放比例，讓畫布適應容器
   const calculateFitZoom = useCallback(() => {

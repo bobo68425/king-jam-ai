@@ -104,11 +104,21 @@ class AutoSaveService {
 
       const customProperties = [
         'id', 'name', 'blendMode', 'globalCompositeOperation', 
-        'lockUniScaling', 'isGrid', 'isGuide'
+        'lockUniScaling', 'isGrid', 'isGuide',
+        'selectable', 'evented', 'clipMaskId', 'isClipMask',
+        'originalFill', 'originalStroke', 'originalStrokeWidth', 'originalOpacity',
+        'isGroup', 'groupId', 'childIds'
       ];
 
       // 過濾掉網格和參考線
       const objects = canvas.getObjects().filter((obj: any) => !obj.isGrid && !obj.isGuide);
+      
+      // 調試：打印保存時的物件位置
+      console.log('自動保存 - 物件數量:', objects.length);
+      objects.forEach((obj: any, i: number) => {
+        console.log(`保存物件 ${i}: left=${obj.left}, top=${obj.top}, type=${obj.type}`);
+      });
+      
       const canvasJson = JSON.stringify({
         ...canvas.toJSON(customProperties),
         objects: objects.map((obj: any) => obj.toJSON(customProperties))
