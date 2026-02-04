@@ -1460,6 +1460,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [copiedCode, setCopiedCode] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   
   const [showPhoneModal, setShowPhoneModal] = useState(false);
@@ -1587,6 +1588,7 @@ export default function ProfilePage() {
       if (res.data.success) {
         // 更新 profile 中的 avatar
         setProfile(prev => prev ? { ...prev, avatar: res.data.avatar_url } : null);
+        setAvatarError(false); // 重置錯誤狀態
         toast.success('頭像已更新');
       }
     } catch (err: any) {
@@ -1622,15 +1624,16 @@ export default function ProfilePage() {
                 className="hidden"
               />
               <div className="w-28 h-28 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-1 shadow-2xl">
-                {profile?.avatar ? (
+                {profile?.avatar && !avatarError ? (
                   <img 
                     src={profile.avatar.startsWith('http') ? profile.avatar : `${process.env.NEXT_PUBLIC_API_URL || ''}${profile.avatar}`}
                     alt="用戶頭像"
                     className="w-full h-full rounded-xl object-cover"
+                    onError={() => setAvatarError(true)}
                   />
                 ) : (
-                  <div className="w-full h-full rounded-xl bg-slate-900 flex items-center justify-center text-4xl font-bold text-white">
-                    {verification?.identity?.real_name?.[0] || profile?.email?.[0]?.toUpperCase() || "U"}
+                  <div className="w-full h-full rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center">
+                    <Crown className="w-12 h-12 text-yellow-400 drop-shadow-lg" />
                   </div>
                 )}
               </div>

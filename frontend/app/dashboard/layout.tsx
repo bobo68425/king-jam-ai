@@ -418,8 +418,8 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                       {userInfo?.avatar ? (
                         <AvatarImage src={userInfo.avatar.startsWith('http') ? userInfo.avatar : `${process.env.NEXT_PUBLIC_API_URL || ''}${userInfo.avatar}`} />
                       ) : null}
-                      <AvatarFallback className="bg-card text-foreground text-sm font-medium">
-                        {userInfo?.full_name?.[0] || userInfo?.email?.[0]?.toUpperCase() || "U"}
+                      <AvatarFallback className="bg-gradient-to-br from-slate-800 to-slate-900">
+                        <Crown className="w-4 h-4 text-yellow-400" />
                       </AvatarFallback>
                     </Avatar>
                   </div>
@@ -458,8 +458,8 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                       {userInfo?.avatar ? (
                         <AvatarImage src={userInfo.avatar.startsWith('http') ? userInfo.avatar : `${process.env.NEXT_PUBLIC_API_URL || ''}${userInfo.avatar}`} />
                       ) : null}
-                      <AvatarFallback className="bg-card text-foreground text-sm font-medium">
-                        {userInfo?.full_name?.[0] || userInfo?.email?.[0]?.toUpperCase() || "U"}
+                      <AvatarFallback className="bg-gradient-to-br from-slate-800 to-slate-900">
+                        <Crown className="w-5 h-5 text-yellow-400" />
                       </AvatarFallback>
                     </Avatar>
                   </div>
