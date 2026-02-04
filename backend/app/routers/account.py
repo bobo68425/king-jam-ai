@@ -306,6 +306,40 @@ async def upload_avatar(
     }
 
 
+@router.delete("/avatar")
+async def delete_avatar(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    移除用戶頭像
+    """
+    if not current_user.avatar:
+        return {
+            "success": True,
+            "message": "沒有頭像需要移除"
+        }
+    
+    # 如果是本地檔案，嘗試刪除
+    if current_user.avatar.startswith("/static"):
+        old_path = f"/app{current_user.avatar}"
+        if os.path.exists(old_path):
+            try:
+                os.remove(old_path)
+            except:
+                pass
+    
+    # 清除用戶頭像
+    current_user.avatar = None
+    current_user.updated_at = datetime.utcnow()
+    db.commit()
+    
+    return {
+        "success": True,
+        "message": "頭像已移除"
+    }
+
+
 async def _save_avatar_locally(contents: bytes, filename: str, current_user) -> str:
     """本地儲存頭像（備用方案）"""
     # 確保目錄存在

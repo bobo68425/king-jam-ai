@@ -1602,6 +1602,22 @@ export default function ProfilePage() {
     }
   };
 
+  // 移除頭像
+  const handleRemoveAvatar = async () => {
+    if (!profile?.avatar) return;
+    
+    try {
+      const res = await api.delete('/users/avatar');
+      if (res.data.success) {
+        setProfile(prev => prev ? { ...prev, avatar: null } : null);
+        setAvatarError(false);
+        toast.success('頭像已移除');
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || '移除失敗，請稍後再試');
+    }
+  };
+
   return (
     <div className="space-y-8 pb-8">
       {/* Hero Profile Card */}
@@ -1637,10 +1653,12 @@ export default function ProfilePage() {
                   </div>
                 )}
               </div>
+              {/* 上傳按鈕 */}
               <button 
                 onClick={handleAvatarClick}
                 disabled={avatarUploading}
                 className="absolute -bottom-2 -right-2 w-9 h-9 rounded-full bg-slate-800 border-2 border-slate-700 flex items-center justify-center hover:bg-slate-700 hover:border-slate-600 transition-all shadow-lg group-hover:scale-110 disabled:opacity-50"
+                title="更換頭像"
               >
                 {avatarUploading ? (
                   <div className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
@@ -1648,6 +1666,16 @@ export default function ProfilePage() {
                   <Camera className="w-4 h-4 text-slate-400" />
                 )}
               </button>
+              {/* 移除按鈕 - 只在有頭像時顯示 */}
+              {profile?.avatar && !avatarError && (
+                <button 
+                  onClick={handleRemoveAvatar}
+                  className="absolute -bottom-2 -left-2 w-9 h-9 rounded-full bg-red-900/80 border-2 border-red-800 flex items-center justify-center hover:bg-red-800 hover:border-red-700 transition-all shadow-lg group-hover:scale-110"
+                  title="移除頭像"
+                >
+                  <X className="w-4 h-4 text-red-300" />
+                </button>
+              )}
             </div>
 
             {/* Info */}
