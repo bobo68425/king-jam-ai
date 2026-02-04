@@ -1461,6 +1461,7 @@ export default function ProfilePage() {
   const [copiedCode, setCopiedCode] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
+  const [showAvatarMenu, setShowAvatarMenu] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   
   const [showPhoneModal, setShowPhoneModal] = useState(false);
@@ -1635,11 +1636,18 @@ export default function ProfilePage() {
               <input
                 type="file"
                 ref={avatarInputRef}
-                onChange={handleAvatarChange}
+                onChange={(e) => {
+                  handleAvatarChange(e);
+                  setShowAvatarMenu(false);
+                }}
                 accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
                 className="hidden"
               />
-              <div className="w-28 h-28 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-1 shadow-2xl">
+              {/* 頭像 - 點擊顯示選單 */}
+              <div 
+                className="w-28 h-28 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-1 shadow-2xl cursor-pointer hover:scale-105 transition-transform"
+                onClick={() => setShowAvatarMenu(!showAvatarMenu)}
+              >
                 {profile?.avatar && !avatarError ? (
                   <img 
                     src={profile.avatar.startsWith('http') ? profile.avatar : `${process.env.NEXT_PUBLIC_API_URL || ''}${profile.avatar}`}
@@ -1653,29 +1661,53 @@ export default function ProfilePage() {
                   </div>
                 )}
               </div>
-              {/* 上傳按鈕 */}
-              <button 
-                onClick={handleAvatarClick}
-                disabled={avatarUploading}
-                className="absolute -bottom-2 -right-2 w-9 h-9 rounded-full bg-slate-800 border-2 border-slate-700 flex items-center justify-center hover:bg-slate-700 hover:border-slate-600 transition-all shadow-lg group-hover:scale-110 disabled:opacity-50"
-                title="更換頭像"
-              >
-                {avatarUploading ? (
-                  <div className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <Camera className="w-4 h-4 text-slate-400" />
-                )}
-              </button>
-              {/* 移除按鈕 - 只在有頭像時顯示 */}
-              {profile?.avatar && !avatarError && (
-                <button 
-                  onClick={handleRemoveAvatar}
-                  className="absolute -bottom-2 -left-2 w-9 h-9 rounded-full bg-red-900/80 border-2 border-red-800 flex items-center justify-center hover:bg-red-800 hover:border-red-700 transition-all shadow-lg group-hover:scale-110"
-                  title="移除頭像"
-                >
-                  <X className="w-4 h-4 text-red-300" />
-                </button>
+              
+              {/* 彈出選單 */}
+              {showAvatarMenu && (
+                <>
+                  {/* 背景遮罩 */}
+                  <div 
+                    className="fixed inset-0 z-40" 
+                    onClick={() => setShowAvatarMenu(false)}
+                  />
+                  {/* 選單按鈕 */}
+                  <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 flex gap-2 z-50">
+                    {/* 上傳按鈕 */}
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAvatarClick();
+                      }}
+                      disabled={avatarUploading}
+                      className="w-10 h-10 rounded-full bg-indigo-600 border-2 border-indigo-500 flex items-center justify-center hover:bg-indigo-500 transition-all shadow-lg hover:scale-110 disabled:opacity-50 animate-in fade-in zoom-in duration-200"
+                      title="上傳頭像"
+                    >
+                      {avatarUploading ? (
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Camera className="w-5 h-5 text-white" />
+                      )}
+                    </button>
+                    {/* 移除按鈕 */}
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemoveAvatar();
+                        setShowAvatarMenu(false);
+                      }}
+                      className="w-10 h-10 rounded-full bg-red-600 border-2 border-red-500 flex items-center justify-center hover:bg-red-500 transition-all shadow-lg hover:scale-110 animate-in fade-in zoom-in duration-200"
+                      title="移除頭像"
+                    >
+                      <X className="w-5 h-5 text-white" />
+                    </button>
+                  </div>
+                </>
               )}
+              
+              {/* 編輯提示 */}
+              <div className="absolute -bottom-2 -right-2 w-8 h-8 rounded-full bg-slate-800/90 border-2 border-slate-700 flex items-center justify-center shadow-lg pointer-events-none">
+                <Camera className="w-4 h-4 text-slate-400" />
+              </div>
             </div>
 
             {/* Info */}
