@@ -472,8 +472,20 @@ export default function ToolsPanel() {
         // 複製自定義屬性
         const extFabricImage = fabricImage as ExtendedFabricObject;
         const extNewImg = newImg as ExtendedFabricObject;
-        extNewImg.id = extFabricImage.id;
-        extNewImg.name = (extFabricImage.name || '圖片') + " (已去背)";
+        
+        // 從 store 找到對應的圖層
+        const { layers, updateLayer } = useDesignStudioStore.getState();
+        const existingLayer = layers.find(l => l.fabricObject === fabricImage || l.id === extFabricImage.id);
+        
+        if (existingLayer) {
+          // 使用現有圖層的 ID
+          extNewImg.id = existingLayer.id;
+          extNewImg.name = (existingLayer.name || '圖片') + " (已去背)";
+        } else {
+          // 沒有找到圖層，使用原始 ID 或生成新的
+          extNewImg.id = extFabricImage.id || `img_${Date.now()}`;
+          extNewImg.name = (extFabricImage.name || '圖片') + " (已去背)";
+        }
 
         // 替換物件
         canvas.remove(fabricImage);
@@ -482,11 +494,27 @@ export default function ToolsPanel() {
         canvas.renderAll();
 
         // 更新圖層
-        const { updateLayer } = useDesignStudioStore.getState();
-        updateLayer(extFabricImage.id || '', {
-          name: extNewImg.name,
-          fabricObject: newImg,
-        });
+        if (existingLayer) {
+          updateLayer(existingLayer.id, {
+            name: extNewImg.name,
+            fabricObject: newImg,
+          });
+          console.log("[去背] 圖層已更新:", existingLayer.id);
+        } else {
+          // 如果沒有找到圖層，新增一個
+          const { addLayer } = useDesignStudioStore.getState();
+          addLayer({
+            id: extNewImg.id!,
+            name: extNewImg.name!,
+            type: "image",
+            visible: true,
+            locked: false,
+            opacity: newImg.opacity || 1,
+            blendMode: "source-over",
+            fabricObject: newImg,
+          });
+          console.log("[去背] 新增圖層:", extNewImg.id);
+        }
 
         toast.success("去背完成！", { id: "remove-bg" });
       }, { crossOrigin: "anonymous" });
