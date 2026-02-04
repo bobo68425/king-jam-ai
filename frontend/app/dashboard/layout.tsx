@@ -416,7 +416,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                   <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-0.5">
                     <Avatar className="h-full w-full border-2 border-card">
                       {userInfo?.avatar ? (
-                        <AvatarImage src={`http://localhost:8000${userInfo.avatar}`} />
+                        <AvatarImage src={userInfo.avatar.startsWith('http') ? userInfo.avatar : `${process.env.NEXT_PUBLIC_API_URL || ''}${userInfo.avatar}`} />
                       ) : null}
                       <AvatarFallback className="bg-card text-foreground text-sm font-medium">
                         {userInfo?.full_name?.[0] || userInfo?.email?.[0]?.toUpperCase() || "U"}
@@ -456,7 +456,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                   <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-0.5">
                     <Avatar className="h-full w-full border-2 border-card">
                       {userInfo?.avatar ? (
-                        <AvatarImage src={`http://localhost:8000${userInfo.avatar}`} />
+                        <AvatarImage src={userInfo.avatar.startsWith('http') ? userInfo.avatar : `${process.env.NEXT_PUBLIC_API_URL || ''}${userInfo.avatar}`} />
                       ) : null}
                       <AvatarFallback className="bg-card text-foreground text-sm font-medium">
                         {userInfo?.full_name?.[0] || userInfo?.email?.[0]?.toUpperCase() || "U"}

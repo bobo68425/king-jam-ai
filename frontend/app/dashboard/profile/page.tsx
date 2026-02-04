@@ -511,7 +511,7 @@ function ImageUploadBox({
         ) : imageUrl ? (
           <div className="relative">
             <img 
-              src={`http://localhost:8000${imageUrl}`} 
+              src={imageUrl.startsWith('http') ? imageUrl : `${process.env.NEXT_PUBLIC_API_URL || ''}${imageUrl}`} 
               alt={label} 
               className="w-full h-32 object-cover rounded-lg"
             />
@@ -1624,7 +1624,7 @@ export default function ProfilePage() {
               <div className="w-28 h-28 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-1 shadow-2xl">
                 {profile?.avatar ? (
                   <img 
-                    src={`http://localhost:8000${profile.avatar}`}
+                    src={profile.avatar.startsWith('http') ? profile.avatar : `${process.env.NEXT_PUBLIC_API_URL || ''}${profile.avatar}`}
                     alt="用戶頭像"
                     className="w-full h-full rounded-xl object-cover"
                   />
