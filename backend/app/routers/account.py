@@ -254,15 +254,67 @@ async def upload_avatar(
             detail="圖片大小不能超過 5MB"
         )
     
+    # 生成唯一檔名
+    filename = f"avatar_{current_user.id}_{uuid.uuid4().hex[:8]}{ext}"
+    
+    # 嘗試上傳到雲端儲存
+    try:
+        from app.services.cloud_storage import cloud_storage
+        if cloud_storage.is_configured():
+            # 獲取 content type
+            content_type_map = {
+                ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg",
+                ".png": "image/png",
+                ".gif": "image/gif",
+                ".webp": "image/webp",
+            }
+            content_type = content_type_map.get(ext, "image/jpeg")
+            
+            # 上傳到 GCS
+            upload_result = cloud_storage.upload_bytes(
+                data=contents,
+                user_id=current_user.id,
+                file_type="avatars",
+                filename=filename,
+                content_type=content_type
+            )
+            
+            if upload_result.get("success"):
+                avatar_url = upload_result["url"]
+                print(f"[Avatar] ✅ 雲端上傳成功: {avatar_url}")
+            else:
+                print(f"[Avatar] ⚠️ 雲端上傳失敗: {upload_result.get('error')}")
+                # 回退到本地儲存
+                avatar_url = await _save_avatar_locally(contents, filename, current_user)
+        else:
+            # 雲端儲存未設定，使用本地儲存
+            avatar_url = await _save_avatar_locally(contents, filename, current_user)
+    except Exception as e:
+        print(f"[Avatar] ⚠️ 雲端儲存異常: {e}")
+        avatar_url = await _save_avatar_locally(contents, filename, current_user)
+    
+    # 更新用戶頭像路徑
+    current_user.avatar = avatar_url
+    current_user.updated_at = datetime.utcnow()
+    db.commit()
+    
+    return {
+        "success": True,
+        "message": "頭像已更新",
+        "avatar_url": avatar_url
+    }
+
+
+async def _save_avatar_locally(contents: bytes, filename: str, current_user) -> str:
+    """本地儲存頭像（備用方案）"""
     # 確保目錄存在
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     
-    # 生成唯一檔名
-    filename = f"avatar_{current_user.id}_{uuid.uuid4().hex[:8]}{ext}"
     filepath = os.path.join(UPLOAD_DIR, filename)
     
-    # 刪除舊頭像（如果存在）
-    if current_user.avatar:
+    # 刪除舊頭像（如果存在且是本地路徑）
+    if current_user.avatar and current_user.avatar.startswith("/static"):
         old_path = f"/app{current_user.avatar}"
         if os.path.exists(old_path):
             try:
@@ -274,17 +326,7 @@ async def upload_avatar(
     with open(filepath, "wb") as f:
         f.write(contents)
     
-    # 更新用戶頭像路徑
-    avatar_url = f"/static/uploads/avatars/{filename}"
-    current_user.avatar = avatar_url
-    current_user.updated_at = datetime.utcnow()
-    db.commit()
-    
-    return {
-        "success": True,
-        "message": "頭像已更新",
-        "avatar_url": avatar_url
-    }
+    return f"/static/uploads/avatars/{filename}"
 
 
 # ============================================================

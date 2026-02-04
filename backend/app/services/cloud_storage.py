@@ -129,6 +129,7 @@ class CloudStorageService:
             "images": ".png",
             "thumbnails": ".jpg",
             "audio": ".mp3",
+            "avatars": ".jpg",
         }
         return type_map.get(file_type, "")
     
@@ -234,18 +235,33 @@ class CloudStorageService:
                 content_type, _ = mimetypes.guess_type(filename)
                 content_type = content_type or "application/octet-stream"
             
-            self.client.put_object(
-                Bucket=self.bucket_name,
-                Key=key,
-                Body=data,
-                ContentType=content_type,
-                CacheControl='public, max-age=31536000',
-            )
-            
-            if self.public_url:
-                url = f"{self.public_url.rstrip('/')}/{key}"
+            # 根據 provider 上傳
+            if self.provider == "gcs":
+                # GCS 上傳
+                import io
+                blob = self.gcs_bucket.blob(key)
+                blob.upload_from_file(
+                    io.BytesIO(data),
+                    content_type=content_type
+                )
+                blob.cache_control = "public, max-age=31536000"
+                blob.patch()
+                url = f"https://storage.googleapis.com/{self.bucket_name}/{key}"
+                print(f"[CloudStorage] ✅ GCS bytes 上傳成功: {key}")
             else:
-                url = f"{self.endpoint_url}/{self.bucket_name}/{key}"
+                # S3/R2 上傳
+                self.client.put_object(
+                    Bucket=self.bucket_name,
+                    Key=key,
+                    Body=data,
+                    ContentType=content_type,
+                    CacheControl='public, max-age=31536000',
+                )
+                
+                if self.public_url:
+                    url = f"{self.public_url.rstrip('/')}/{key}"
+                else:
+                    url = f"{self.endpoint_url}/{self.bucket_name}/{key}"
             
             return {
                 "success": True,
@@ -256,6 +272,7 @@ class CloudStorageService:
             }
             
         except Exception as e:
+            print(f"[CloudStorage] ❌ bytes 上傳失敗: {e}")
             return {
                 "success": False,
                 "error": str(e)
