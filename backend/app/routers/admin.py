@@ -1180,6 +1180,70 @@ async def get_access_attempts(
 # 訂單管理
 # ============================================================
 
+@router.get("/orders")
+async def list_orders(
+    page: int = 1,
+    page_size: int = 20,
+    status: str = None,
+    user_id: int = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    獲取訂單列表（管理員）
+    """
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="需要管理員權限"
+        )
+    
+    query = db.query(Order)
+    
+    # 篩選條件
+    if status:
+        query = query.filter(Order.status == status)
+    if user_id:
+        query = query.filter(Order.user_id == user_id)
+    
+    # 總數
+    total = query.count()
+    
+    # 排序和分頁
+    orders = query.order_by(Order.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    
+    orders_data = []
+    for o in orders:
+        user = db.query(User).filter(User.id == o.user_id).first()
+        orders_data.append({
+            "id": o.id,
+            "order_no": o.order_no,
+            "user_id": o.user_id,
+            "user_email": user.email if user else None,
+            "order_type": o.order_type,
+            "item_code": o.item_code,
+            "item_name": o.item_name,
+            "total_amount": float(o.total_amount),
+            "credits_amount": o.credits_amount,
+            "bonus_credits": o.bonus_credits,
+            "status": o.status,
+            "payment_provider": o.payment_provider,
+            "payment_method": o.payment_method,
+            "created_at": o.created_at.isoformat() if o.created_at else None,
+            "paid_at": o.paid_at.isoformat() if o.paid_at else None,
+            "completed_at": o.completed_at.isoformat() if o.completed_at else None,
+        })
+    
+    return {
+        "success": True,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total + page_size - 1) // page_size,
+        "orders": orders_data,
+    }
+
+
 @router.get("/orders/{order_no}")
 async def get_order_detail(
     order_no: str,
