@@ -791,8 +791,9 @@ export default function CreditsPage() {
                     className={`w-full ${
                       pkg.is_popular 
                         ? "bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500" 
-                        : "bg-slate-700 hover:bg-slate-600"
+                        : "bg-indigo-500/80 hover:bg-indigo-600"
                     }`}
+                    onClick={() => window.location.href = `/dashboard/pricing?tab=credits&code=${pkg.package_code}`}
                   >
                     <CreditCard className="mr-2 h-4 w-4" />
                     立即購買
