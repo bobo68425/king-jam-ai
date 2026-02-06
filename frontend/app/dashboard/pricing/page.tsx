@@ -16,9 +16,10 @@ import {
 } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import {
   Coins, Zap, Crown, CheckCircle, Loader2, CreditCard,
-  Building2, ArrowRight, Sparkles, Star, Shield
+  Building2, ArrowRight, Sparkles, Star, Shield, Gift
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -77,6 +78,7 @@ export default function PricingPage() {
   const [paymentProvider, setPaymentProvider] = useState<"ecpay" | "stripe">("ecpay");
   const [quantity, setQuantity] = useState(1);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [referralCode, setReferralCode] = useState("");
 
   // ============================================================
   // Data Fetching
@@ -127,6 +129,7 @@ export default function PricingPage() {
         item_code: selectedItem.code,
         payment_provider: paymentProvider,
         quantity: quantity,
+        referral_code: referralCode.trim() || undefined,
       });
 
       if (res.data.success) {
@@ -459,6 +462,24 @@ export default function PricingPage() {
                     {formatPrice(getTotalPrice())}
                   </span>
                 </div>
+              </div>
+
+              {/* Referral Code */}
+              <div className="space-y-3">
+                <Label className="text-slate-300 flex items-center gap-2">
+                  <Gift className="w-4 h-4 text-amber-400" />
+                  推薦碼（選填）
+                </Label>
+                <Input
+                  placeholder="輸入推薦碼可獲得額外優惠"
+                  value={referralCode}
+                  onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+                  className="bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500 uppercase"
+                  maxLength={10}
+                />
+                <p className="text-slate-500 text-xs">
+                  首次購買輸入推薦碼，雙方都能獲得獎勵
+                </p>
               </div>
 
               {/* Payment Method */}

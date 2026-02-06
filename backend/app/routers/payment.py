@@ -62,6 +62,7 @@ class CreateOrderRequest(BaseModel):
     payment_provider: Optional[str] = Field(default=None, description="金流供應商（留空自動選擇）")
     payment_method: str = Field(default="ALL", description="付款方式")
     quantity: int = Field(default=1, ge=1, le=12, description="數量（訂閱為月數）")
+    referral_code: Optional[str] = Field(default=None, description="推薦碼")
 
 
 # 金流額度限制
@@ -242,6 +243,19 @@ async def create_order(
     # 取得客戶端資訊
     ip_address = req.client.host if req.client else None
     user_agent = req.headers.get("user-agent")
+    
+    # 處理推薦碼（如果用戶尚未綁定推薦人）
+    if request.referral_code and not current_user.referred_by:
+        # 驗證推薦碼是否存在且不是自己的
+        referrer = db.query(User).filter(
+            User.referral_code == request.referral_code.upper(),
+            User.id != current_user.id
+        ).first()
+        
+        if referrer:
+            current_user.referred_by = referrer.referral_code
+            db.commit()
+            logger.info(f"用戶 {current_user.id} 綁定推薦人: {referrer.referral_code}")
     
     # 建立訂單
     order = payment_service.create_order(
