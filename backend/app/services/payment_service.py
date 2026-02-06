@@ -980,8 +980,7 @@ class PaymentService:
             )
             
             if result["success"]:
-                # TODO: 待資料庫遷移後啟用
-                # order.newebpay_merchant_order_no = result["merchant_order_no"]
+                order.newebpay_merchant_order_no = result["merchant_order_no"]
                 order.status = OrderStatus.PROCESSING.value
         
         elif provider == PaymentProvider.STRIPE.value:
@@ -1233,14 +1232,9 @@ class PaymentService:
     
     def get_order_by_newebpay_no(self, merchant_order_no: str) -> Optional[Order]:
         """根據藍新金流訂單編號查詢訂單"""
-        # TODO: 待資料庫遷移後啟用
-        # return self.db.query(Order).filter(
-        #     Order.newebpay_merchant_order_no == merchant_order_no
-        # ).first()
-        
-        # 暫時使用 order_no 查詢（從 merchant_order_no 解析）
-        # merchant_order_no 格式: NP + timestamp + order_id
-        return None
+        return self.db.query(Order).filter(
+            Order.newebpay_merchant_order_no == merchant_order_no
+        ).first()
 
 
 # ============================================================
