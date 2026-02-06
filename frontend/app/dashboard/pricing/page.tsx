@@ -130,12 +130,21 @@ export default function PricingPage() {
       });
 
       if (res.data.success) {
-        if (paymentProvider === "stripe" && res.data.checkout_url) {
+        const provider = res.data.payment_provider || paymentProvider;
+        
+        if (provider === "stripe" && res.data.checkout_url) {
           // Stripe: 跳轉到 Checkout 頁面
           window.location.href = res.data.checkout_url;
-        } else if (paymentProvider === "ecpay") {
-          // ECPay: 跳轉到付款頁面
-          window.location.href = `/api/payment/ecpay/checkout/${res.data.order_no}`;
+        } else if (provider === "newebpay" && res.data.form_html) {
+          // 藍新金流: 使用表單 HTML 自動提交
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+          window.location.href = `${apiUrl}/payment/newebpay/checkout/${res.data.order_no}`;
+        } else if (provider === "ecpay" || res.data.form_html) {
+          // 綠界: 跳轉到後端付款頁面
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+          window.location.href = `${apiUrl}/payment/ecpay/checkout/${res.data.order_no}`;
+        } else {
+          toast.error("無法取得付款頁面");
         }
       } else {
         toast.error(res.data.error || "建立訂單失敗");
