@@ -1323,6 +1323,232 @@ function ChangePasswordModal({
 // Notification Settings Modal
 // ============================================================
 
+// ============================================================
+// Edit Profile Modal
+// ============================================================
+
+function EditProfileModal({ 
+  isOpen, 
+  onClose, 
+  onSuccess,
+  initialData
+}: { 
+  isOpen: boolean; 
+  onClose: () => void; 
+  onSuccess: () => void;
+  initialData: {
+    full_name: string | null;
+    email: string;
+    bio?: string;
+    website?: string;
+    company?: string;
+    job_title?: string;
+    location?: string;
+  };
+}) {
+  const [formData, setFormData] = useState({
+    full_name: initialData.full_name || "",
+    bio: initialData.bio || "",
+    website: initialData.website || "",
+    company: initialData.company || "",
+    job_title: initialData.job_title || "",
+    location: initialData.location || "",
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  // 當 modal 打開或 initialData 變化時重設表單
+  useEffect(() => {
+    if (isOpen) {
+      setFormData({
+        full_name: initialData.full_name || "",
+        bio: initialData.bio || "",
+        website: initialData.website || "",
+        company: initialData.company || "",
+        job_title: initialData.job_title || "",
+        location: initialData.location || "",
+      });
+      setError("");
+    }
+  }, [isOpen, initialData]);
+
+  const handleChange = (field: string, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSubmit = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      await api.put("/users/profile", formData);
+      toast.success("個人資料已更新");
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      setError(err.response?.data?.detail || "更新失敗，請稍後再試");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+      <div className="bg-gradient-to-b from-slate-800 to-slate-900 rounded-2xl w-full max-w-lg border border-slate-700/50 shadow-2xl max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="p-6 border-b border-slate-700/50 sticky top-0 bg-gradient-to-b from-slate-800 to-slate-800/95 z-10">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center">
+                <Edit3 className="w-5 h-5 text-indigo-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-white">編輯個人資料</h3>
+                <p className="text-sm text-slate-400">更新您的公開個人資訊</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="p-2 hover:bg-slate-700/50 rounded-lg transition-colors">
+              <X className="w-5 h-5 text-slate-400" />
+            </button>
+          </div>
+        </div>
+
+        {/* Form */}
+        <div className="p-6 space-y-5">
+          {error && (
+            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              {error}
+            </div>
+          )}
+
+          {/* 顯示名稱 */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">顯示名稱</label>
+            <input
+              type="text"
+              value={formData.full_name}
+              onChange={(e) => handleChange("full_name", e.target.value)}
+              placeholder="輸入您的名稱"
+              className="w-full px-4 py-3 bg-slate-700/30 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all"
+              maxLength={100}
+            />
+            <p className="text-xs text-slate-500 mt-1.5">此名稱會顯示在您的個人頁面上</p>
+          </div>
+
+          {/* Email（唯讀） */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">電子郵件</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="email"
+                value={initialData.email}
+                disabled
+                className="flex-1 px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl text-slate-400 cursor-not-allowed"
+              />
+              <div className="p-3 bg-slate-800/50 border border-slate-700/50 rounded-xl">
+                <Lock className="w-5 h-5 text-slate-500" />
+              </div>
+            </div>
+            <p className="text-xs text-slate-500 mt-1.5">Email 請從帳號設定中變更</p>
+          </div>
+
+          {/* 個人簡介 */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">個人簡介</label>
+            <textarea
+              value={formData.bio}
+              onChange={(e) => handleChange("bio", e.target.value)}
+              placeholder="介紹一下自己..."
+              rows={3}
+              className="w-full px-4 py-3 bg-slate-700/30 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all resize-none"
+              maxLength={500}
+            />
+            <p className="text-xs text-slate-500 mt-1.5">{formData.bio.length}/500 字元</p>
+          </div>
+
+          {/* 公司與職稱 */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">公司</label>
+              <input
+                type="text"
+                value={formData.company}
+                onChange={(e) => handleChange("company", e.target.value)}
+                placeholder="公司名稱"
+                className="w-full px-4 py-3 bg-slate-700/30 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all"
+                maxLength={100}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">職稱</label>
+              <input
+                type="text"
+                value={formData.job_title}
+                onChange={(e) => handleChange("job_title", e.target.value)}
+                placeholder="您的職稱"
+                className="w-full px-4 py-3 bg-slate-700/30 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all"
+                maxLength={100}
+              />
+            </div>
+          </div>
+
+          {/* 所在地區 */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">所在地區</label>
+            <input
+              type="text"
+              value={formData.location}
+              onChange={(e) => handleChange("location", e.target.value)}
+              placeholder="例如：台北, 台灣"
+              className="w-full px-4 py-3 bg-slate-700/30 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all"
+              maxLength={100}
+            />
+          </div>
+
+          {/* 個人網站 */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">個人網站</label>
+            <div className="flex items-center gap-2">
+              <div className="px-4 py-3 bg-slate-700/30 border border-slate-600/50 rounded-l-xl text-slate-400 text-sm">
+                https://
+              </div>
+              <input
+                type="text"
+                value={formData.website.replace(/^https?:\/\//, "")}
+                onChange={(e) => handleChange("website", e.target.value)}
+                placeholder="yourwebsite.com"
+                className="flex-1 px-4 py-3 bg-slate-700/30 border border-slate-600/50 rounded-r-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all"
+                maxLength={200}
+              />
+            </div>
+          </div>
+
+          {/* 提交按鈕 */}
+          <div className="flex gap-3 pt-2">
+            <button
+              onClick={onClose}
+              className="flex-1 px-4 py-3 border border-slate-600/50 hover:bg-slate-700/50 text-slate-300 rounded-xl font-medium transition-all"
+            >
+              取消
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={loading}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:from-slate-600 disabled:to-slate-600 disabled:cursor-not-allowed text-white rounded-xl font-medium transition-all shadow-lg shadow-indigo-500/20"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+              儲存變更
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function NotificationSettingsModal({ 
   isOpen, 
   onClose, 
@@ -1470,6 +1696,14 @@ export default function ProfilePage() {
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showNotificationModal, setShowNotificationModal] = useState(false);
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+  const [profileExtended, setProfileExtended] = useState<{
+    bio?: string;
+    website?: string;
+    company?: string;
+    job_title?: string;
+    location?: string;
+  }>({});
   
   const router = useRouter();
 
@@ -1477,10 +1711,11 @@ export default function ProfilePage() {
 
   const fetchProfileData = async () => {
     try {
-      const [profileRes, balanceRes, verifyRes] = await Promise.allSettled([
+      const [profileRes, balanceRes, verifyRes, extendedRes] = await Promise.allSettled([
         api.get("/referral/stats"),
         api.get("/credits/balance"),
         api.get("/verification/status"),
+        api.get("/users/profile"),
       ]);
       
       if (profileRes.status === "fulfilled" && balanceRes.status === "fulfilled") {
@@ -1511,6 +1746,18 @@ export default function ProfilePage() {
       
       if (verifyRes.status === "fulfilled") {
         setVerification(verifyRes.value.data);
+      }
+      
+      // 獲取擴展資料
+      if (extendedRes.status === "fulfilled") {
+        const extData = extendedRes.value.data.profile || {};
+        setProfileExtended({
+          bio: extData.bio || "",
+          website: extData.website || "",
+          company: extData.company || "",
+          job_title: extData.job_title || "",
+          location: extData.location || "",
+        });
       }
     } catch (error) { 
       console.error("Failed to fetch profile:", error); 
@@ -1728,17 +1975,54 @@ export default function ProfilePage() {
               </div>
               <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-slate-400">
                 <span className="flex items-center gap-1.5"><Mail className="w-4 h-4" />{profile?.email}</span>
+                {profileExtended.company && profileExtended.job_title ? (
+                  <span className="flex items-center gap-1.5">
+                    <Award className="w-4 h-4" />
+                    {profileExtended.job_title} @ {profileExtended.company}
+                  </span>
+                ) : profileExtended.company ? (
+                  <span className="flex items-center gap-1.5">
+                    <Award className="w-4 h-4" />{profileExtended.company}
+                  </span>
+                ) : profileExtended.job_title ? (
+                  <span className="flex items-center gap-1.5">
+                    <Award className="w-4 h-4" />{profileExtended.job_title}
+                  </span>
+                ) : null}
+                {profileExtended.location && (
+                  <span className="flex items-center gap-1.5">
+                    <span className="text-base">📍</span>{profileExtended.location}
+                  </span>
+                )}
                 <span className="flex items-center gap-1.5"><Calendar className="w-4 h-4" />加入於 2026 年 1 月</span>
                 {verificationComplete && (
                   <span className="flex items-center gap-1.5 text-green-400"><BadgeCheck className="w-4 h-4" />已完成認證</span>
                 )}
               </div>
+              {/* 個人簡介 */}
+              {profileExtended.bio && (
+                <p className="mt-3 text-slate-300 text-sm max-w-2xl leading-relaxed">
+                  {profileExtended.bio}
+                </p>
+              )}
+              {/* 個人網站 */}
+              {profileExtended.website && (
+                <a 
+                  href={profileExtended.website.startsWith("http") ? profileExtended.website : `https://${profileExtended.website}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 inline-flex items-center gap-1.5 text-sm text-indigo-400 hover:text-indigo-300 transition-colors"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  {profileExtended.website.replace(/^https?:\/\//, "")}
+                </a>
+              )}
             </div>
 
             {/* Actions */}
             <button 
-              onClick={() => handleComingSoon("編輯個人資料")}
-              className="flex items-center gap-2 px-5 py-2.5 bg-slate-700/50 hover:bg-slate-700 border border-slate-600/50 text-white rounded-xl transition-all"
+              onClick={() => setShowEditProfileModal(true)}
+              className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl transition-all shadow-lg shadow-indigo-500/20"
             >
               <Edit3 className="w-4 h-4" />
               編輯資料
@@ -2214,6 +2498,16 @@ export default function ProfilePage() {
       <ChangeEmailModal isOpen={showEmailModal} onClose={() => setShowEmailModal(false)} onSuccess={fetchProfileData} currentEmail={profile?.email || ""} />
       <ChangePasswordModal isOpen={showPasswordModal} onClose={() => setShowPasswordModal(false)} onSuccess={fetchProfileData} />
       <NotificationSettingsModal isOpen={showNotificationModal} onClose={() => setShowNotificationModal(false)} onSuccess={fetchProfileData} />
+      <EditProfileModal 
+        isOpen={showEditProfileModal} 
+        onClose={() => setShowEditProfileModal(false)} 
+        onSuccess={fetchProfileData} 
+        initialData={{
+          full_name: profile?.full_name || null,
+          email: profile?.email || "",
+          ...profileExtended
+        }}
+      />
     </div>
   );
 }

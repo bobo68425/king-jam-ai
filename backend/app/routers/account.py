@@ -445,3 +445,124 @@ async def get_my_profile(
             "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
         }
     }
+
+
+# ============================================================
+# 更新個人資料
+# ============================================================
+
+class UpdateProfileRequest(BaseModel):
+    full_name: Optional[str] = Field(None, max_length=100, description="顯示名稱")
+    bio: Optional[str] = Field(None, max_length=500, description="個人簡介")
+    website: Optional[str] = Field(None, max_length=200, description="個人網站")
+    company: Optional[str] = Field(None, max_length=100, description="公司名稱")
+    job_title: Optional[str] = Field(None, max_length=100, description="職稱")
+    location: Optional[str] = Field(None, max_length=100, description="所在地區")
+
+
+@router.put("/profile")
+async def update_profile(
+    request: UpdateProfileRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    更新當前用戶的個人資料
+    
+    可更新欄位：
+    - full_name: 顯示名稱
+    - bio: 個人簡介
+    - website: 個人網站
+    - company: 公司名稱
+    - job_title: 職稱
+    - location: 所在地區
+    """
+    updated_fields = {}
+    
+    # 更新顯示名稱
+    if request.full_name is not None:
+        # 移除前後空格
+        full_name = request.full_name.strip()
+        if full_name:
+            current_user.full_name = full_name
+            updated_fields["full_name"] = full_name
+        else:
+            # 允許設為空（清除名稱）
+            current_user.full_name = None
+            updated_fields["full_name"] = None
+    
+    # 使用 notification_settings 來存儲擴展個人資料
+    # 擴展欄位存在 notification_settings["profile_extended"] 中
+    settings = current_user.notification_settings or {}
+    profile_extended = settings.get("profile_extended", {})
+    
+    if request.bio is not None:
+        profile_extended["bio"] = request.bio.strip() if request.bio else ""
+        updated_fields["bio"] = profile_extended["bio"]
+    
+    if request.website is not None:
+        website = request.website.strip()
+        # 簡單驗證 URL 格式
+        if website and not (website.startswith("http://") or website.startswith("https://")):
+            website = "https://" + website
+        profile_extended["website"] = website
+        updated_fields["website"] = website
+    
+    if request.company is not None:
+        profile_extended["company"] = request.company.strip() if request.company else ""
+        updated_fields["company"] = profile_extended["company"]
+    
+    if request.job_title is not None:
+        profile_extended["job_title"] = request.job_title.strip() if request.job_title else ""
+        updated_fields["job_title"] = profile_extended["job_title"]
+    
+    if request.location is not None:
+        profile_extended["location"] = request.location.strip() if request.location else ""
+        updated_fields["location"] = profile_extended["location"]
+    
+    # 儲存擴展資料到 notification_settings
+    settings["profile_extended"] = profile_extended
+    current_user.notification_settings = settings
+    current_user.updated_at = datetime.utcnow()
+    db.commit()
+    
+    return {
+        "success": True,
+        "message": "個人資料已更新",
+        "updated_fields": updated_fields,
+        "profile": {
+            "full_name": current_user.full_name,
+            **profile_extended
+        }
+    }
+
+
+@router.get("/profile")
+async def get_profile(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    獲取當前用戶的完整個人資料
+    """
+    settings = current_user.notification_settings or {}
+    profile_extended = settings.get("profile_extended", {})
+    
+    return {
+        "success": True,
+        "profile": {
+            "id": current_user.id,
+            "email": current_user.email,
+            "full_name": current_user.full_name,
+            "avatar": current_user.avatar,
+            "bio": profile_extended.get("bio", ""),
+            "website": profile_extended.get("website", ""),
+            "company": profile_extended.get("company", ""),
+            "job_title": profile_extended.get("job_title", ""),
+            "location": profile_extended.get("location", ""),
+            "provider": current_user.provider,
+            "tier": current_user.tier,
+            "partner_tier": current_user.partner_tier,
+            "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
+        }
+    }
