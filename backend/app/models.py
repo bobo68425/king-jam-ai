@@ -1251,9 +1251,9 @@ class Order(Base):
     ecpay_merchant_trade_no = Column(String(20), nullable=True)
     ecpay_trade_no = Column(String(20), nullable=True)
     
-    # 藍新金流專用
-    newebpay_merchant_order_no = Column(String(30), nullable=True)
-    newebpay_trade_no = Column(String(30), nullable=True)
+    # 藍新金流專用（待資料庫遷移後啟用）
+    # newebpay_merchant_order_no = Column(String(30), nullable=True)
+    # newebpay_trade_no = Column(String(30), nullable=True)
     
     # 訂單狀態
     status = Column(String(20), nullable=False, default="pending")
