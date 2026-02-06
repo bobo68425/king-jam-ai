@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models import User, Order, PaymentLog
+from app.routers.notifications import create_payment_notification, create_credit_notification
 
 logger = logging.getLogger(__name__)
 
@@ -1143,6 +1144,9 @@ class PaymentService:
         order.status = OrderStatus.COMPLETED.value
         order.completed_at = datetime.utcnow()
         self.db.commit()
+        
+        # 發送付款成功通知
+        self._send_payment_notification(order, user)
     
     def _process_referral_bonus(self, order: Order):
         """處理推薦人分潤"""
@@ -1187,6 +1191,48 @@ class PaymentService:
             action="referral_bonus",
             message=f"推薦人分潤 ({partner_tier} {float(commission_rate)*100:.0f}%): NT${float(bonus_twd):.0f} = {bonus_credits} BONUS點",
         )
+    
+    def _send_payment_notification(self, order: Order, user: User):
+        """發送付款成功通知"""
+        try:
+            total_credits = (order.credits_amount or 0) + (order.bonus_credits or 0)
+            
+            # 付款成功通知
+            create_payment_notification(
+                db=self.db,
+                user_id=user.id,
+                title="付款成功",
+                message=f"您的訂單 {order.order_no} 已付款成功！金額 NT${float(order.total_amount):,.0f}，已獲得 {total_credits:,} 點數。",
+                data={
+                    "order_no": order.order_no,
+                    "amount": float(order.total_amount),
+                    "credits": total_credits,
+                    "item_name": order.item_name,
+                }
+            )
+            
+            # 點數入帳通知
+            create_credit_notification(
+                db=self.db,
+                user_id=user.id,
+                title="點數入帳",
+                message=f"您已獲得 {total_credits:,} 點數（含贈送 {order.bonus_credits or 0:,} 點）",
+                data={
+                    "credits_amount": order.credits_amount,
+                    "bonus_credits": order.bonus_credits,
+                    "total_credits": total_credits,
+                    "source": "purchase",
+                    "order_no": order.order_no,
+                }
+            )
+            
+            self._log_payment(
+                order_id=order.id,
+                action="notification_sent",
+                message=f"已發送付款成功通知給用戶 {user.email}",
+            )
+        except Exception as e:
+            logging.error(f"[Payment] 發送通知失敗: {e}")
     
     def _log_payment(
         self,
