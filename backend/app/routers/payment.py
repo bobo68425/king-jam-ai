@@ -245,32 +245,43 @@ async def create_order(
     user_agent = req.headers.get("user-agent")
     
     # 處理推薦碼（如果用戶尚未綁定推薦人）
-    if request.referral_code and not current_user.referred_by:
-        # 驗證推薦碼是否存在且不是自己的
-        referrer = db.query(User).filter(
-            User.referral_code == request.referral_code.upper(),
-            User.id != current_user.id
-        ).first()
-        
-        if referrer:
-            current_user.referred_by = referrer.referral_code
-            db.commit()
-            logger.info(f"用戶 {current_user.id} 綁定推薦人: {referrer.referral_code}")
+    try:
+        if request.referral_code and not current_user.referred_by:
+            # 驗證推薦碼是否存在且不是自己的
+            referrer = db.query(User).filter(
+                User.referral_code == request.referral_code.upper(),
+                User.id != current_user.id
+            ).first()
+            
+            if referrer:
+                current_user.referred_by = referrer.referral_code
+                db.commit()
+                logger.info(f"用戶 {current_user.id} 綁定推薦人: {referrer.referral_code}")
+    except Exception as e:
+        logger.warning(f"推薦碼處理失敗: {e}")
+        # 繼續處理訂單，不因推薦碼問題中斷
     
     # 建立訂單
-    order = payment_service.create_order(
-        user=current_user,
-        order_type=request.order_type,
-        item_code=request.item_code,
-        item_name=item_name,
-        item_description=item_description,
-        total_amount=Decimal(str(total_amount)),
-        credits_amount=credits_amount,
-        bonus_credits=bonus_credits,
-        subscription_months=subscription_months,
-        ip_address=ip_address,
-        user_agent=user_agent,
-    )
+    try:
+        order = payment_service.create_order(
+            user=current_user,
+            order_type=request.order_type,
+            item_code=request.item_code,
+            item_name=item_name,
+            item_description=item_description,
+            total_amount=Decimal(str(total_amount)),
+            credits_amount=credits_amount,
+            bonus_credits=bonus_credits,
+            subscription_months=subscription_months,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+    except Exception as e:
+        logger.error(f"建立訂單失敗: {e}")
+        return {
+            "success": False,
+            "error": f"建立訂單失敗: {str(e)}",
+        }
     
     # 自動選擇金流供應商（如果未指定）
     payment_provider = request.payment_provider or select_payment_provider(float(total_amount))
@@ -282,15 +293,22 @@ async def create_order(
     notify_url = f"{os.getenv('BACKEND_URL', 'http://localhost:8000')}/payment/callback/{payment_provider}"
     
     # 發起支付
-    result = payment_service.initiate_payment(
-        order=order,
-        provider=payment_provider,
-        return_url=return_url,
-        cancel_url=cancel_url,
-        notify_url=notify_url,
-        customer_email=current_user.email,
-        payment_method=request.payment_method,
-    )
+    try:
+        result = payment_service.initiate_payment(
+            order=order,
+            provider=payment_provider,
+            return_url=return_url,
+            cancel_url=cancel_url,
+            notify_url=notify_url,
+            customer_email=current_user.email,
+            payment_method=request.payment_method,
+        )
+    except Exception as e:
+        logger.error(f"發起支付失敗: {e}")
+        return {
+            "success": False,
+            "error": f"發起支付失敗: {str(e)}",
+        }
     
     if not result.get("success"):
         return {
