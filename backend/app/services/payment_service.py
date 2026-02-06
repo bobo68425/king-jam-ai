@@ -33,7 +33,7 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models import User, Order, PaymentLog
-from app.routers.notifications import create_payment_notification, create_credit_notification
+from app.routers.notifications import create_payment_notification, create_credit_notification, create_referral_notification
 
 logger = logging.getLogger(__name__)
 
@@ -1191,6 +1191,9 @@ class PaymentService:
             action="referral_bonus",
             message=f"推薦人分潤 ({partner_tier} {float(commission_rate)*100:.0f}%): NT${float(bonus_twd):.0f} = {bonus_credits} BONUS點",
         )
+        
+        # 發送推薦人獲得分潤通知
+        self._send_referral_bonus_notification(referrer, order, bonus_credits, commission_rate)
     
     def _send_payment_notification(self, order: Order, user: User):
         """發送付款成功通知"""
@@ -1233,6 +1236,36 @@ class PaymentService:
             )
         except Exception as e:
             logging.error(f"[Payment] 發送通知失敗: {e}")
+    
+    def _send_referral_bonus_notification(self, referrer: User, order: Order, bonus_credits: int, commission_rate: float):
+        """發送推薦人獲得分潤通知"""
+        try:
+            # 獲取被推薦者資訊（隱藏部分 Email）
+            buyer = self.db.query(User).filter(User.id == order.user_id).first()
+            buyer_email = buyer.email if buyer else "用戶"
+            if "@" in buyer_email:
+                local, domain = buyer_email.split("@")
+                masked_email = f"{local[:2]}***@{domain}" if len(local) > 2 else f"***@{domain}"
+            else:
+                masked_email = "用戶"
+            
+            create_referral_notification(
+                db=self.db,
+                user_id=referrer.id,
+                title="推薦獎金入帳",
+                message=f"恭喜！您推薦的 {masked_email} 已購買服務，您獲得 {bonus_credits:,} BONUS 點數（{float(commission_rate)*100:.0f}% 分潤）",
+                data={
+                    "bonus_credits": bonus_credits,
+                    "commission_rate": float(commission_rate),
+                    "order_amount": float(order.total_amount),
+                    "order_no": order.order_no,
+                },
+                send_email=True  # 推薦獎金通知發送郵件
+            )
+            
+            logging.info(f"[Payment] 已發送推薦分潤通知給 {referrer.email}: {bonus_credits} 點")
+        except Exception as e:
+            logging.error(f"[Payment] 發送推薦分潤通知失敗: {e}")
     
     def _log_payment(
         self,

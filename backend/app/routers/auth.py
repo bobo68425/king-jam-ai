@@ -254,6 +254,37 @@ def login_with_fingerprint(
         data={"sub": user.email}, expires_delta=access_token_expires
     )
     
+    # 發送登入安全通知
+    try:
+        from app.routers.notifications import create_security_notification
+        from datetime import datetime
+        
+        # 嘗試獲取位置資訊
+        location = "未知位置"
+        try:
+            from app.services.geo_service import get_location_by_ip
+            location_info = get_location_by_ip(client_ip)
+            if location_info:
+                location = f"{location_info.get('city', '')} {location_info.get('country', '')}".strip() or "未知位置"
+        except:
+            pass
+        
+        create_security_notification(
+            db=db,
+            user_id=user.id,
+            title="登入成功",
+            message=f"您的帳號於 {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} (UTC) 從 {location} 登入。如非本人操作，請立即修改密碼。",
+            data={
+                "ip_address": client_ip,
+                "location": location,
+                "user_agent": user_agent[:100] if user_agent else None,
+                "login_time": datetime.utcnow().isoformat(),
+            },
+            send_email=False  # 登入通知預設不發郵件，避免騷擾
+        )
+    except Exception as e:
+        logger.warning(f"[Auth] 發送登入通知失敗: {e}")
+    
     return LoginResponse(
         access_token=access_token,
         token_type="bearer",

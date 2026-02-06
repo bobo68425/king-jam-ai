@@ -1337,6 +1337,9 @@ class CreditService:
                 f"交易ID={transaction.id}"
             )
             
+            # 檢查是否需要發送低餘額提醒
+            self._check_low_balance_alert(user_id, new_balance)
+            
             return CreditResult(
                 success=True,
                 balance=new_balance,
@@ -1555,6 +1558,72 @@ class CreditService:
                 error=str(e),
                 error_code="SYNC_ERROR"
             )
+    
+    # ==================== 低餘額提醒 ====================
+    
+    LOW_BALANCE_THRESHOLDS = [100, 50, 20, 10]  # 當餘額低於這些閾值時發送提醒
+    
+    def _check_low_balance_alert(self, user_id: int, balance: int):
+        """
+        檢查是否需要發送低餘額提醒
+        
+        為避免重複發送，使用 Redis 或用戶設定記錄上次提醒的閾值
+        這裡簡化處理：只在剛好跨過閾值時提醒
+        """
+        try:
+            user = self.db.query(User).filter(User.id == user_id).first()
+            if not user:
+                return
+            
+            # 檢查是否跨過任何閾值
+            settings = user.notification_settings or {}
+            last_alert_threshold = settings.get("last_low_balance_alert_threshold", 0)
+            
+            for threshold in self.LOW_BALANCE_THRESHOLDS:
+                # 餘額剛好低於閾值，且上次提醒的閾值比這個高（或沒有提醒過）
+                if balance < threshold and last_alert_threshold > threshold:
+                    self._send_low_balance_notification(user, balance, threshold)
+                    
+                    # 更新上次提醒閾值
+                    settings["last_low_balance_alert_threshold"] = threshold
+                    user.notification_settings = settings
+                    self.db.commit()
+                    break
+                    
+            # 如果餘額恢復到較高水平，重置閾值
+            if balance >= max(self.LOW_BALANCE_THRESHOLDS):
+                if last_alert_threshold > 0:
+                    settings["last_low_balance_alert_threshold"] = max(self.LOW_BALANCE_THRESHOLDS) + 1
+                    user.notification_settings = settings
+                    self.db.commit()
+                    
+        except Exception as e:
+            logger.warning(f"[Credit] 檢查低餘額提醒失敗: {e}")
+    
+    def _send_low_balance_notification(self, user: User, balance: int, threshold: int):
+        """發送低餘額提醒通知"""
+        try:
+            from app.routers.notifications import create_credit_notification
+            
+            create_credit_notification(
+                db=self.db,
+                user_id=user.id,
+                title="點數餘額不足",
+                message=f"您的點數餘額僅剩 {balance:,} 點，建議儲值以繼續使用服務。",
+                data={
+                    "alert_type": "low_balance",
+                    "balance": balance,
+                    "threshold": threshold,
+                    "action_url": "/dashboard/credits",
+                    "action_text": "立即儲值",
+                },
+                send_email=True  # 低餘額提醒發送郵件
+            )
+            
+            logger.info(f"[Credit] 已發送低餘額提醒：用戶 #{user.id}, 餘額={balance}, 閾值={threshold}")
+            
+        except Exception as e:
+            logger.error(f"[Credit] 發送低餘額提醒失敗: {e}")
 
 
 # ============================================================

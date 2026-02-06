@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { DashboardNav } from "@/components/dashboard-nav";
@@ -59,10 +59,13 @@ interface Notification {
 // 通知類型配置
 const NOTIFICATION_CONFIG: Record<string, { icon: typeof Sparkles; color: string }> = {
   system: { icon: Settings, color: 'text-slate-400' },
-  credit: { icon: CreditCard, color: 'text-amber-400' },
+  credit: { icon: Coins, color: 'text-amber-400' },
+  payment: { icon: CreditCard, color: 'text-emerald-400' },
   referral: { icon: Gift, color: 'text-pink-400' },
   security: { icon: Shield, color: 'text-blue-400' },
   content: { icon: Sparkles, color: 'text-purple-400' },
+  schedule: { icon: Bell, color: 'text-indigo-400' },
+  marketing: { icon: Bell, color: 'text-rose-400' },
 };
 
 // 格式化時間（客戶端專用）
@@ -96,6 +99,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const prevUnreadCountRef = useRef(0);  // 追蹤上次的未讀數量
   const { credits, setCredits } = useCredits();
   
   // 客戶端掛載後才顯示
@@ -104,11 +108,32 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
   }, []);
   
   // 獲取通知列表
-  const fetchNotifications = async () => {
+  const fetchNotifications = async (showToast = false) => {
     try {
       const res = await api.get("/notifications?limit=10");
-      setNotifications(res.data.notifications || []);
-      setUnreadCount(res.data.unread_count || 0);
+      const newNotifications = res.data.notifications || [];
+      const newUnreadCount = res.data.unread_count || 0;
+      
+      // 如果有新通知且啟用了 toast 提示
+      if (showToast && newUnreadCount > prevUnreadCountRef.current && newNotifications.length > 0) {
+        const latestUnread = newNotifications.find((n: Notification) => !n.is_read);
+        if (latestUnread) {
+          // 使用動態導入 sonner 的 toast
+          import('sonner').then(({ toast }) => {
+            toast(latestUnread.title, {
+              description: latestUnread.message,
+              action: {
+                label: "查看",
+                onClick: () => setShowNotifications(true),
+              },
+            });
+          });
+        }
+      }
+      
+      prevUnreadCountRef.current = newUnreadCount;  // 更新 ref
+      setNotifications(newNotifications);
+      setUnreadCount(newUnreadCount);
     } catch (error) {
       console.error("Failed to fetch notifications:", error);
     }
@@ -175,7 +200,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
         }
         
         // 獲取通知
-        fetchNotifications();
+        fetchNotifications(false);
       } catch (error) {
         console.error("Failed to fetch user info:", error);
       } finally {
@@ -184,6 +209,15 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
     };
 
     fetchUserInfo();
+    
+    // 設置通知輪詢（每 30 秒檢查一次新通知）
+    const notificationInterval = setInterval(() => {
+      fetchNotifications(true);  // 有新通知時顯示 toast
+    }, 30000);
+    
+    return () => {
+      clearInterval(notificationInterval);
+    };
   }, [router, setCredits]);
 
   const handleLogout = () => {

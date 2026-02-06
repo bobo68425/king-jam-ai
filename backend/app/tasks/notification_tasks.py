@@ -109,18 +109,20 @@ def send_instant_notification(
     user_id: int,
     title: str,
     message: str,
-    notification_type: str = "info",
-    data: Optional[Dict[str, Any]] = None
+    notification_type: str = "content",
+    data: Optional[Dict[str, Any]] = None,
+    send_email: bool = False
 ) -> Dict[str, Any]:
     """
-    發送即時通知
+    發送即時通知（站內通知 + 可選郵件）
     
     Args:
         user_id: 用戶 ID
         title: 通知標題
         message: 通知內容
-        notification_type: 通知類型 (info, success, warning, error)
+        notification_type: 通知類型 (system, credit, payment, security, referral, content, schedule, marketing)
         data: 額外數據
+        send_email: 是否同時發送郵件（預設 False，內容生成通知太頻繁）
     """
     logger.info(f"[Notification] 發送即時通知給用戶 #{user_id}: {title}")
     
@@ -131,14 +133,21 @@ def send_instant_notification(
         if not user:
             return {"success": False, "error": "用戶不存在"}
         
-        # 這裡可以實作：
-        # 1. WebSocket 推送
-        # 2. 站內通知（存入資料庫）
-        # 3. 郵件通知
-        # 4. Push Notification (如果有 App)
+        # 1. 儲存站內通知到資料庫
+        from app.models import Notification
+        notification = Notification(
+            user_id=user_id,
+            notification_type=notification_type,
+            title=title,
+            message=message,
+            data=data
+        )
+        db.add(notification)
+        db.commit()
+        logger.info(f"[Notification] 站內通知已儲存: ID={notification.id}")
         
-        # 暫時使用郵件通知
-        if user.email:
+        # 2. 可選：發送郵件通知
+        if send_email and user.email:
             subject = f"【King Jam AI】{title}"
             html_content = f"""
             <!DOCTYPE html>
@@ -158,13 +167,13 @@ def send_instant_notification(
             </html>
             """
             
-            result = _send_email(user.email, subject, html_content)
-            return result
+            _send_email(user.email, subject, html_content)
         
-        return {"success": True, "message": "通知已記錄（無郵箱）"}
+        return {"success": True, "notification_id": notification.id}
         
     except Exception as e:
         logger.error(f"[Notification] 發送即時通知失敗: {e}")
+        db.rollback()
         raise self.retry(exc=e)
     finally:
         db.close()
