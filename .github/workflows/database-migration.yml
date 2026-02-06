@@ -82,8 +82,41 @@ jobs:
           
           case "${{ inputs.action }}" in
             upgrade)
-              echo "📈 升級資料庫到最新版本..."
-              alembic upgrade head
+              echo "📈 升級資料庫..."
+              # 檢查是否有多個 head
+              HEADS=$(alembic heads 2>/dev/null | wc -l)
+              if [ "$HEADS" -gt 1 ]; then
+                echo "⚠️ 偵測到多個 Alembic heads，執行直接 SQL 遷移..."
+                # 直接執行 NewebPay 欄位遷移
+                python -c "
+import os
+from sqlalchemy import create_engine, text
+engine = create_engine(os.environ['DATABASE_URL'])
+with engine.connect() as conn:
+    conn.execute(text('''
+        DO \$\$ 
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name = 'orders' AND column_name = 'newebpay_merchant_order_no'
+            ) THEN
+                ALTER TABLE orders ADD COLUMN newebpay_merchant_order_no VARCHAR(30);
+            END IF;
+            
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name = 'orders' AND column_name = 'newebpay_trade_no'
+            ) THEN
+                ALTER TABLE orders ADD COLUMN newebpay_trade_no VARCHAR(30);
+            END IF;
+        END \$\$;
+    '''))
+    conn.commit()
+print('✅ SQL 遷移完成')
+"
+              else
+                alembic upgrade head
+              fi
               ;;
             downgrade)
               echo "📉 回滾資料庫一個版本..."
