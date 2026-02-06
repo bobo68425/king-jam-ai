@@ -1,12 +1,19 @@
 """
 金流服務
-整合綠界 (ECPay) 和 Stripe 支付
+整合綠界 (ECPay)、藍新金流 (NewebPay) 和 Stripe 支付
 
 測試帳號資訊：
 - ECPay 測試商店代號: 3002607
 - ECPay 測試 HashKey: pwFHCqoQZGmho4w6
 - ECPay 測試 HashIV: EkRm7iFT261dpevs
+- NewebPay 測試商店代號: MS149949475
+- NewebPay 測試 HashKey: YsehWqkWu2u5MrBqWCf6M3PKx7vGmLBD
+- NewebPay 測試 HashIV: 2r8i9wr7KAg6zWM1
 - Stripe 測試模式使用 sk_test_ 開頭的密鑰
+
+正式環境額度：
+- 藍新金流：NT$ 40,000
+- 綠界金流：NT$ 200,000
 """
 
 import os
@@ -36,6 +43,7 @@ logger = logging.getLogger(__name__)
 
 class PaymentProvider(str, Enum):
     ECPAY = "ecpay"
+    NEWEBPAY = "newebpay"
     STRIPE = "stripe"
 
 
@@ -54,6 +62,10 @@ class OrderStatus(str, Enum):
     REFUNDED = "refunded"
 
 
+# ============================================================
+# 綠界 ECPay 設定
+# ============================================================
+
 # 綠界測試環境設定
 ECPAY_TEST_CONFIG = {
     "merchant_id": "3002607",
@@ -70,6 +82,37 @@ ECPAY_PROD_CONFIG = {
     "hash_iv": os.getenv("ECPAY_HASH_IV", ""),
     "api_url": "https://payment.ecpay.com.tw/Cashier/AioCheckOut/V5",
     "query_url": "https://payment.ecpay.com.tw/Cashier/QueryTradeInfo/V5",
+}
+
+# 綠界物流設定（從環境變數讀取）
+ECPAY_LOGISTICS_CONFIG = {
+    "merchant_id": os.getenv("ECPAY_MERCHANT_ID", ""),
+    "hash_key": os.getenv("ECPAY_LOGISTICS_HASH_KEY", ""),
+    "hash_iv": os.getenv("ECPAY_LOGISTICS_HASH_IV", ""),
+    "api_url": "https://logistics.ecpay.com.tw/Express/Create",
+    "map_url": "https://logistics.ecpay.com.tw/Express/map",
+}
+
+# ============================================================
+# 藍新金流 NewebPay 設定
+# ============================================================
+
+# 藍新測試環境設定
+NEWEBPAY_TEST_CONFIG = {
+    "merchant_id": "MS149949475",
+    "hash_key": "YsehWqkWu2u5MrBqWCf6M3PKx7vGmLBD",
+    "hash_iv": "2r8i9wr7KAg6zWM1",
+    "api_url": "https://ccore.newebpay.com/MPG/mpg_gateway",
+    "query_url": "https://ccore.newebpay.com/API/QueryTradeInfo",
+}
+
+# 藍新正式環境設定（從環境變數讀取）
+NEWEBPAY_PROD_CONFIG = {
+    "merchant_id": os.getenv("NEWEBPAY_MERCHANT_ID", ""),
+    "hash_key": os.getenv("NEWEBPAY_HASH_KEY", ""),
+    "hash_iv": os.getenv("NEWEBPAY_HASH_IV", ""),
+    "api_url": "https://core.newebpay.com/MPG/mpg_gateway",
+    "query_url": "https://core.newebpay.com/API/QueryTradeInfo",
 }
 
 # Stripe 設定
@@ -97,6 +140,18 @@ def get_ecpay_config() -> Dict[str, str]:
     if PAYMENT_MODE == "production" and ECPAY_PROD_CONFIG["merchant_id"]:
         return ECPAY_PROD_CONFIG
     return ECPAY_TEST_CONFIG
+
+
+def get_newebpay_config() -> Dict[str, str]:
+    """取得藍新金流設定"""
+    if PAYMENT_MODE == "production" and NEWEBPAY_PROD_CONFIG["merchant_id"]:
+        return NEWEBPAY_PROD_CONFIG
+    return NEWEBPAY_TEST_CONFIG
+
+
+def get_ecpay_logistics_config() -> Dict[str, str]:
+    """取得綠界物流設定"""
+    return ECPAY_LOGISTICS_CONFIG
 
 
 def get_stripe_key() -> str:
@@ -289,6 +344,354 @@ class ECPayService:
 
 
 # ============================================================
+# 藍新金流 NewebPay 服務
+# ============================================================
+
+class NewebPayService:
+    """
+    藍新金流服務
+    
+    支援付款方式：
+    - 信用卡 (CREDIT)
+    - ATM 轉帳 (VACC)
+    - 超商代碼 (CVS)
+    - 超商條碼 (BARCODE)
+    - LINE Pay
+    - 台灣 Pay
+    
+    額度限制：NT$ 40,000
+    """
+    
+    def __init__(self):
+        self.config = get_newebpay_config()
+    
+    def _aes_encrypt(self, data: str) -> str:
+        """AES-256-CBC 加密"""
+        from Crypto.Cipher import AES
+        from Crypto.Util.Padding import pad
+        import base64
+        
+        key = self.config["hash_key"].encode("utf-8")
+        iv = self.config["hash_iv"].encode("utf-8")
+        
+        cipher = AES.new(key, AES.MODE_CBC, iv)
+        padded_data = pad(data.encode("utf-8"), AES.block_size)
+        encrypted = cipher.encrypt(padded_data)
+        
+        return encrypted.hex()
+    
+    def _aes_decrypt(self, encrypted_data: str) -> str:
+        """AES-256-CBC 解密"""
+        from Crypto.Cipher import AES
+        from Crypto.Util.Padding import unpad
+        
+        key = self.config["hash_key"].encode("utf-8")
+        iv = self.config["hash_iv"].encode("utf-8")
+        
+        cipher = AES.new(key, AES.MODE_CBC, iv)
+        decrypted = cipher.decrypt(bytes.fromhex(encrypted_data))
+        
+        return unpad(decrypted, AES.block_size).decode("utf-8")
+    
+    def _generate_sha256_hash(self, trade_info: str) -> str:
+        """生成 SHA256 檢查碼"""
+        raw_str = f"HashKey={self.config['hash_key']}&{trade_info}&HashIV={self.config['hash_iv']}"
+        return hashlib.sha256(raw_str.encode("utf-8")).hexdigest().upper()
+    
+    def create_payment(
+        self,
+        order: Order,
+        return_url: str,
+        notify_url: str,
+        payment_method: str = "ALL",  # CREDIT, VACC, CVS, BARCODE, ALL
+        client_back_url: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        建立藍新金流付款
+        
+        Args:
+            order: 訂單物件
+            return_url: 付款完成後導向頁面
+            notify_url: 付款結果通知 URL (後端接收)
+            payment_method: 付款方式
+            client_back_url: 取消付款時導向頁面
+        
+        Returns:
+            包含付款表單 HTML 的字典
+        """
+        # 訂單編號（藍新限制 30 字元）
+        merchant_order_no = f"KJ{datetime.now().strftime('%y%m%d%H%M%S')}{order.id:04d}"
+        
+        # 組建交易資訊
+        trade_info = {
+            "MerchantID": self.config["merchant_id"],
+            "RespondType": "JSON",
+            "TimeStamp": str(int(datetime.now().timestamp())),
+            "Version": "2.0",
+            "MerchantOrderNo": merchant_order_no,
+            "Amt": int(order.total_amount),
+            "ItemDesc": order.item_name[:50],  # 限制長度
+            "Email": "",  # 可選
+            "ReturnURL": notify_url,
+            "NotifyURL": notify_url,
+            "CustomerURL": return_url,
+        }
+        
+        if client_back_url:
+            trade_info["ClientBackURL"] = client_back_url
+        
+        # 設定付款方式
+        if payment_method == "ALL":
+            trade_info["CREDIT"] = 1
+            trade_info["VACC"] = 1
+            trade_info["CVS"] = 1
+            trade_info["BARCODE"] = 1
+        elif payment_method == "CREDIT":
+            trade_info["CREDIT"] = 1
+            # 信用卡分期（金額 >= 3000 可分期）
+            if order.total_amount >= 3000:
+                trade_info["InstFlag"] = "3,6,12"
+        elif payment_method == "VACC":
+            trade_info["VACC"] = 1
+        elif payment_method == "CVS":
+            trade_info["CVS"] = 1
+        elif payment_method == "BARCODE":
+            trade_info["BARCODE"] = 1
+        
+        # URL encode 並加密
+        trade_info_str = urllib.parse.urlencode(trade_info)
+        encrypted_trade_info = self._aes_encrypt(trade_info_str)
+        trade_sha = self._generate_sha256_hash(encrypted_trade_info)
+        
+        # 組建表單參數
+        post_params = {
+            "MerchantID": self.config["merchant_id"],
+            "TradeInfo": encrypted_trade_info,
+            "TradeSha": trade_sha,
+            "Version": "2.0",
+        }
+        
+        # 生成表單 HTML
+        form_html = self._generate_form_html(post_params)
+        
+        return {
+            "success": True,
+            "payment_url": self.config["api_url"],
+            "form_html": form_html,
+            "merchant_order_no": merchant_order_no,
+            "params": post_params,
+        }
+    
+    def _generate_form_html(self, params: Dict[str, Any]) -> str:
+        """生成自動提交的表單 HTML"""
+        inputs = "\n".join([
+            f'<input type="hidden" name="{k}" value="{v}">'
+            for k, v in params.items()
+        ])
+        
+        return f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>正在跳轉到藍新金流...</title>
+</head>
+<body>
+    <form id="newebpay_form" method="POST" action="{self.config['api_url']}">
+        {inputs}
+    </form>
+    <script>document.getElementById('newebpay_form').submit();</script>
+</body>
+</html>
+"""
+    
+    def verify_callback(self, params: Dict[str, Any]) -> Tuple[bool, Dict[str, Any]]:
+        """
+        驗證藍新金流回呼
+        
+        Returns:
+            (是否驗證成功, 解密後的交易資訊)
+        """
+        if "TradeInfo" not in params or "TradeSha" not in params:
+            return False, {"error": "缺少必要參數"}
+        
+        trade_info = params["TradeInfo"]
+        trade_sha = params["TradeSha"]
+        
+        # 驗證 SHA256
+        calculated_sha = self._generate_sha256_hash(trade_info)
+        if trade_sha != calculated_sha:
+            return False, {"error": "TradeSha 驗證失敗"}
+        
+        try:
+            # 解密 TradeInfo
+            decrypted_str = self._aes_decrypt(trade_info)
+            decrypted_data = json.loads(decrypted_str)
+            return True, decrypted_data
+        except Exception as e:
+            logger.error(f"NewebPay 解密失敗: {e}")
+            return False, {"error": f"解密失敗: {str(e)}"}
+    
+    def query_trade(self, merchant_order_no: str, amount: int) -> Dict[str, Any]:
+        """查詢訂單狀態"""
+        check_value_str = f"IV={self.config['hash_iv']}&Amt={amount}&MerchantID={self.config['merchant_id']}&MerchantOrderNo={merchant_order_no}&Key={self.config['hash_key']}"
+        check_value = hashlib.sha256(check_value_str.encode("utf-8")).hexdigest().upper()
+        
+        post_data = {
+            "MerchantID": self.config["merchant_id"],
+            "Version": "1.3",
+            "RespondType": "JSON",
+            "CheckValue": check_value,
+            "TimeStamp": str(int(datetime.now().timestamp())),
+            "MerchantOrderNo": merchant_order_no,
+            "Amt": amount,
+        }
+        
+        try:
+            response = httpx.post(
+                self.config["query_url"],
+                data=post_data,
+                timeout=30,
+            )
+            
+            result = response.json()
+            return {
+                "success": True,
+                "data": result,
+            }
+        except Exception as e:
+            logger.error(f"NewebPay 查詢失敗: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+            }
+
+
+# ============================================================
+# 綠界物流服務
+# ============================================================
+
+class ECPayLogisticsService:
+    """
+    綠界物流服務
+    
+    支援：
+    - 超商取貨（7-11, 全家, 萊爾富, OK）
+    - 宅配
+    """
+    
+    def __init__(self):
+        self.config = get_ecpay_logistics_config()
+    
+    def _url_encode(self, data: str) -> str:
+        """URL 編碼（綠界特殊規則）"""
+        encoded = urllib.parse.quote_plus(data)
+        encoded = encoded.replace("%2d", "-")
+        encoded = encoded.replace("%5f", "_")
+        encoded = encoded.replace("%2e", ".")
+        encoded = encoded.replace("%21", "!")
+        encoded = encoded.replace("%2a", "*")
+        encoded = encoded.replace("%28", "(")
+        encoded = encoded.replace("%29", ")")
+        return encoded
+    
+    def _generate_check_mac_value(self, params: Dict[str, Any]) -> str:
+        """生成檢查碼"""
+        sorted_params = sorted(params.items(), key=lambda x: x[0])
+        param_str = "&".join([f"{k}={v}" for k, v in sorted_params])
+        raw_str = f"HashKey={self.config['hash_key']}&{param_str}&HashIV={self.config['hash_iv']}"
+        encoded_str = self._url_encode(raw_str).lower()
+        return hashlib.md5(encoded_str.encode("utf-8")).hexdigest().upper()
+    
+    def get_store_map(
+        self,
+        logistics_type: str,  # FAMI, UNIMART, HILIFE, OKMART
+        return_url: str,
+    ) -> Dict[str, Any]:
+        """
+        取得超商門市地圖
+        
+        Args:
+            logistics_type: 物流類型
+            return_url: 選擇門市後回傳 URL
+        
+        Returns:
+            地圖 URL
+        """
+        params = {
+            "MerchantID": self.config["merchant_id"],
+            "LogisticsType": "CVS",
+            "LogisticsSubType": logistics_type,
+            "IsCollection": "N",
+            "ServerReplyURL": return_url,
+        }
+        
+        return {
+            "success": True,
+            "map_url": self.config["map_url"],
+            "params": params,
+        }
+    
+    def create_shipment(
+        self,
+        order_no: str,
+        logistics_type: str,
+        logistics_sub_type: str,
+        sender_name: str,
+        sender_phone: str,
+        receiver_name: str,
+        receiver_phone: str,
+        receiver_store_id: str,
+        goods_name: str,
+        goods_amount: int = 1,
+    ) -> Dict[str, Any]:
+        """建立物流訂單"""
+        params = {
+            "MerchantID": self.config["merchant_id"],
+            "MerchantTradeNo": order_no,
+            "MerchantTradeDate": datetime.now().strftime("%Y/%m/%d %H:%M:%S"),
+            "LogisticsType": logistics_type,
+            "LogisticsSubType": logistics_sub_type,
+            "GoodsAmount": goods_amount,
+            "GoodsName": goods_name,
+            "SenderName": sender_name,
+            "SenderPhone": sender_phone,
+            "ReceiverName": receiver_name,
+            "ReceiverCellPhone": receiver_phone,
+            "ReceiverStoreID": receiver_store_id,
+        }
+        
+        params["CheckMacValue"] = self._generate_check_mac_value(params)
+        
+        try:
+            response = httpx.post(
+                self.config["api_url"],
+                data=params,
+                timeout=30,
+            )
+            
+            result = dict(urllib.parse.parse_qsl(response.text))
+            
+            if result.get("RtnCode") == "1":
+                return {
+                    "success": True,
+                    "data": result,
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": result.get("RtnMsg", "Unknown error"),
+                    "data": result,
+                }
+        except Exception as e:
+            logger.error(f"ECPay 物流建立失敗: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+            }
+
+
+# ============================================================
 # Stripe 服務
 # ============================================================
 
@@ -470,7 +873,9 @@ class PaymentService:
     def __init__(self, db: Session):
         self.db = db
         self.ecpay = ECPayService()
+        self.newebpay = NewebPayService()
         self.stripe = StripeService()
+        self.logistics = ECPayLogisticsService()
     
     def create_order(
         self,
@@ -563,6 +968,19 @@ class PaymentService:
             
             if result["success"]:
                 order.ecpay_merchant_trade_no = result["merchant_trade_no"]
+                order.status = OrderStatus.PROCESSING.value
+        
+        elif provider == PaymentProvider.NEWEBPAY.value:
+            result = self.newebpay.create_payment(
+                order=order,
+                return_url=return_url,
+                notify_url=notify_url,
+                payment_method=payment_method,
+                client_back_url=cancel_url,
+            )
+            
+            if result["success"]:
+                order.newebpay_merchant_order_no = result["merchant_order_no"]
                 order.status = OrderStatus.PROCESSING.value
         
         elif provider == PaymentProvider.STRIPE.value:
@@ -810,6 +1228,12 @@ class PaymentService:
         """根據 Stripe Session ID 查詢訂單"""
         return self.db.query(Order).filter(
             Order.stripe_checkout_session_id == session_id
+        ).first()
+    
+    def get_order_by_newebpay_no(self, merchant_order_no: str) -> Optional[Order]:
+        """根據藍新金流訂單編號查詢訂單"""
+        return self.db.query(Order).filter(
+            Order.newebpay_merchant_order_no == merchant_order_no
         ).first()
 
 

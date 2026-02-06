@@ -162,7 +162,11 @@ async def create_order(
         )
     
     # 驗證支付方式
-    if request.payment_provider not in [PaymentProvider.ECPAY.value, PaymentProvider.STRIPE.value]:
+    if request.payment_provider not in [
+        PaymentProvider.ECPAY.value, 
+        PaymentProvider.NEWEBPAY.value, 
+        PaymentProvider.STRIPE.value,
+    ]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="無效的支付方式"
@@ -395,6 +399,67 @@ async def ecpay_callback(
         return Response(content="0|Error", status_code=200)
 
 
+@router.post("/callback/newebpay")
+async def newebpay_callback(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """
+    藍新金流支付回呼
+    """
+    from app.services.payment_service import NewebPayService
+    
+    try:
+        form_data = await request.form()
+        params = dict(form_data)
+        
+        logger.info(f"NewebPay 回呼: TradeInfo={params.get('TradeInfo', '')[:50]}...")
+        
+        # 驗證並解密回呼
+        newebpay = NewebPayService()
+        is_valid, decrypted_data = newebpay.verify_callback(params)
+        
+        if not is_valid:
+            logger.error(f"NewebPay 驗證失敗: {decrypted_data.get('error')}")
+            return Response(content="Error", status_code=200)
+        
+        logger.info(f"NewebPay 解密資料: {decrypted_data}")
+        
+        # 取得訂單資訊
+        result_data = decrypted_data.get("Result", {})
+        if isinstance(result_data, str):
+            import json
+            result_data = json.loads(result_data)
+        
+        merchant_order_no = result_data.get("MerchantOrderNo")
+        payment_service = get_payment_service(db)
+        order = payment_service.get_order_by_newebpay_no(merchant_order_no)
+        
+        if not order:
+            logger.error(f"找不到訂單: {merchant_order_no}")
+            return Response(content="Order Not Found", status_code=200)
+        
+        # 處理付款結果
+        status_code = decrypted_data.get("Status")
+        is_success = status_code == "SUCCESS"
+        
+        if is_success:
+            order.newebpay_trade_no = result_data.get("TradeNo")
+            order.payment_method = result_data.get("PaymentType")
+        
+        payment_service.process_payment_callback(
+            order=order,
+            is_success=is_success,
+            provider_data=decrypted_data,
+        )
+        
+        return Response(content="OK", status_code=200)
+        
+    except Exception as e:
+        logger.error(f"NewebPay 回呼處理失敗: {e}")
+        return Response(content="Error", status_code=200)
+
+
 @router.post("/callback/stripe")
 async def stripe_callback(
     request: Request,
@@ -485,6 +550,56 @@ async def ecpay_checkout_page(
     
     if result.get("success"):
         order.ecpay_merchant_trade_no = result["merchant_trade_no"]
+        db.commit()
+        return HTMLResponse(content=result["form_html"])
+    
+    return HTMLResponse(
+        content=f"<h1>建立付款失敗</h1><p>{result.get('error')}</p>",
+        status_code=500,
+    )
+
+
+# ============================================================
+# 藍新金流付款頁面
+# ============================================================
+
+@router.get("/newebpay/checkout/{order_no}", response_class=HTMLResponse)
+async def newebpay_checkout_page(
+    order_no: str,
+    db: Session = Depends(get_db),
+):
+    """
+    藍新金流付款頁面（自動提交表單）
+    """
+    order = db.query(Order).filter(Order.order_no == order_no).first()
+    
+    if not order:
+        return HTMLResponse(
+            content="<h1>訂單不存在</h1>",
+            status_code=404,
+        )
+    
+    if order.status not in [OrderStatus.PENDING.value, OrderStatus.PROCESSING.value]:
+        return RedirectResponse(
+            url=f"{FRONTEND_URL}/dashboard/payment/result?order_no={order_no}"
+        )
+    
+    # 生成付款表單
+    from app.services.payment_service import NewebPayService
+    
+    newebpay = NewebPayService()
+    return_url = f"{FRONTEND_URL}/dashboard/payment/result?order_no={order_no}"
+    notify_url = f"{os.getenv('BACKEND_URL', 'http://localhost:8000')}/payment/callback/newebpay"
+    
+    result = newebpay.create_payment(
+        order=order,
+        return_url=return_url,
+        notify_url=notify_url,
+        payment_method="ALL",
+    )
+    
+    if result.get("success"):
+        order.newebpay_merchant_order_no = result["merchant_order_no"]
         db.commit()
         return HTMLResponse(content=result["form_html"])
     
