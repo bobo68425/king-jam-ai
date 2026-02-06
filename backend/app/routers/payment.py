@@ -74,16 +74,23 @@ def select_payment_provider(amount: float) -> str:
     根據金額自動選擇金流供應商
     
     策略：
-    - 金額 ≤ 40,000：使用藍新金流（手續費較低）
-    - 金額 > 40,000：使用綠界金流
+    - 目前預設使用綠界金流（穩定可用）
+    - 藍新金流待完整測試後再啟用
+    
+    額度：
+    - 藍新金流：NT$ 40,000
+    - 綠界金流：NT$ 200,000
     """
-    if amount <= NEWEBPAY_LIMIT:
-        return PaymentProvider.NEWEBPAY.value
-    elif amount <= ECPAY_LIMIT:
-        return PaymentProvider.ECPAY.value
-    else:
-        # 超過所有金流限制，仍使用綠界（可能需要分單處理）
-        return PaymentProvider.ECPAY.value
+    # 暫時全部使用綠界金流，等藍新金流測試完成後再調整
+    return PaymentProvider.ECPAY.value
+    
+    # TODO: 藍新金流測試完成後，啟用以下邏輯
+    # if amount <= NEWEBPAY_LIMIT:
+    #     return PaymentProvider.NEWEBPAY.value
+    # elif amount <= ECPAY_LIMIT:
+    #     return PaymentProvider.ECPAY.value
+    # else:
+    #     return PaymentProvider.ECPAY.value
 
 
 class CreateOrderResponse(BaseModel):
