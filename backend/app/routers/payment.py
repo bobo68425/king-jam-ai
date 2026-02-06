@@ -59,14 +59,37 @@ class ProductListResponse(BaseModel):
 class CreateOrderRequest(BaseModel):
     order_type: str = Field(..., description="subscription 或 credits")
     item_code: str = Field(..., description="方案代碼或套餐代碼")
-    payment_provider: str = Field(..., description="ecpay 或 stripe")
-    payment_method: str = Field(default="ALL", description="付款方式（綠界專用）")
+    payment_provider: Optional[str] = Field(default=None, description="金流供應商（留空自動選擇）")
+    payment_method: str = Field(default="ALL", description="付款方式")
     quantity: int = Field(default=1, ge=1, le=12, description="數量（訂閱為月數）")
+
+
+# 金流額度限制
+NEWEBPAY_LIMIT = 40000  # 藍新金流額度：NT$ 40,000
+ECPAY_LIMIT = 200000    # 綠界金流額度：NT$ 200,000
+
+
+def select_payment_provider(amount: float) -> str:
+    """
+    根據金額自動選擇金流供應商
+    
+    策略：
+    - 金額 ≤ 40,000：使用藍新金流（手續費較低）
+    - 金額 > 40,000：使用綠界金流
+    """
+    if amount <= NEWEBPAY_LIMIT:
+        return PaymentProvider.NEWEBPAY.value
+    elif amount <= ECPAY_LIMIT:
+        return PaymentProvider.ECPAY.value
+    else:
+        # 超過所有金流限制，仍使用綠界（可能需要分單處理）
+        return PaymentProvider.ECPAY.value
 
 
 class CreateOrderResponse(BaseModel):
     success: bool
     order_no: Optional[str] = None
+    payment_provider: Optional[str] = None
     checkout_url: Optional[str] = None
     form_html: Optional[str] = None
     error: Optional[str] = None
@@ -161,8 +184,8 @@ async def create_order(
             detail="無效的訂單類型"
         )
     
-    # 驗證支付方式
-    if request.payment_provider not in [
+    # 驗證支付方式（如果有指定）
+    if request.payment_provider and request.payment_provider not in [
         PaymentProvider.ECPAY.value, 
         PaymentProvider.NEWEBPAY.value, 
         PaymentProvider.STRIPE.value,
@@ -228,15 +251,19 @@ async def create_order(
         user_agent=user_agent,
     )
     
+    # 自動選擇金流供應商（如果未指定）
+    payment_provider = request.payment_provider or select_payment_provider(float(total_amount))
+    logger.info(f"訂單 {order.order_no} 金額 NT${total_amount}，使用金流：{payment_provider}")
+    
     # 設定回呼 URL
     return_url = f"{FRONTEND_URL}/dashboard/payment/result?order_no={order.order_no}"
     cancel_url = f"{FRONTEND_URL}/dashboard/pricing"
-    notify_url = f"{os.getenv('BACKEND_URL', 'http://localhost:8000')}/payment/callback/{request.payment_provider}"
+    notify_url = f"{os.getenv('BACKEND_URL', 'http://localhost:8000')}/payment/callback/{payment_provider}"
     
     # 發起支付
     result = payment_service.initiate_payment(
         order=order,
-        provider=request.payment_provider,
+        provider=payment_provider,
         return_url=return_url,
         cancel_url=cancel_url,
         notify_url=notify_url,
@@ -253,6 +280,7 @@ async def create_order(
     return {
         "success": True,
         "order_no": order.order_no,
+        "payment_provider": payment_provider,
         "checkout_url": result.get("checkout_url"),
         "form_html": result.get("form_html"),
     }
