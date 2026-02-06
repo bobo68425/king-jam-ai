@@ -700,26 +700,47 @@ async def get_payment_result(
             detail="找不到此訂單"
         )
     
-    # 如果是 Stripe 且狀態仍在處理中，主動查詢
-    if (
-        order.payment_provider == PaymentProvider.STRIPE.value
-        and order.status == OrderStatus.PROCESSING.value
-        and order.stripe_checkout_session_id
-    ):
-        from app.services.payment_service import StripeService
+    # 如果狀態仍在處理中，主動查詢金流狀態
+    if order.status == OrderStatus.PROCESSING.value:
+        payment_service = get_payment_service(db)
         
-        stripe_service = StripeService()
-        result = stripe_service.retrieve_session(order.stripe_checkout_session_id)
+        # ECPay 主動查詢
+        if order.payment_provider == PaymentProvider.ECPAY.value and order.ecpay_merchant_trade_no:
+            from app.services.payment_service import ECPayService
+            
+            ecpay = ECPayService()
+            result = ecpay.query_trade(order.ecpay_merchant_trade_no)
+            
+            if result.get("success"):
+                trade_data = result["data"]
+                trade_status = trade_data.get("TradeStatus")
+                
+                # TradeStatus: 0=未付款, 1=已付款, 10099031=已付款(舊版)
+                if trade_status in ["1", "10099031"]:
+                    logger.info(f"ECPay 主動查詢成功: 訂單 {order.order_no} 已付款")
+                    order.ecpay_trade_no = trade_data.get("TradeNo")
+                    order.payment_method = trade_data.get("PaymentType")
+                    payment_service.process_payment_callback(
+                        order=order,
+                        is_success=True,
+                        provider_data=trade_data,
+                    )
         
-        if result.get("success"):
-            session_data = result["data"]
-            if session_data.get("payment_status") == "paid":
-                payment_service = get_payment_service(db)
-                payment_service.process_payment_callback(
-                    order=order,
-                    is_success=True,
-                    provider_data=session_data,
-                )
+        # Stripe 主動查詢
+        elif order.payment_provider == PaymentProvider.STRIPE.value and order.stripe_checkout_session_id:
+            from app.services.payment_service import StripeService
+            
+            stripe_service = StripeService()
+            result = stripe_service.retrieve_session(order.stripe_checkout_session_id)
+            
+            if result.get("success"):
+                session_data = result["data"]
+                if session_data.get("payment_status") == "paid":
+                    payment_service.process_payment_callback(
+                        order=order,
+                        is_success=True,
+                        provider_data=session_data,
+                    )
     
     return {
         "success": True,
