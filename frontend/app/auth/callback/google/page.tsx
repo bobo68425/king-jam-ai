@@ -31,10 +31,14 @@ function GoogleCallbackContent() {
       try {
         const redirectUri = `${window.location.origin}/auth/callback/google`;
         
+        // 取得推薦碼
+        const referralCode = sessionStorage.getItem("referral_code");
+        
         // 呼叫後端 API 完成登入
         const res = await api.post("/auth/google", {
           code,
           redirect_uri: redirectUri,
+          referral_code: referralCode || undefined,
         });
 
         // 儲存 Token

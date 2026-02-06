@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { zhTW } from "date-fns/locale";
+import api from "@/lib/api";
 
 // ============================================================
 // Types
@@ -105,14 +106,14 @@ export default function ReferralPage() {
   const fetchData = async () => {
     try {
       const [statsRes, historyRes, tableRes] = await Promise.all([
-        fetch("http://localhost:8000/referral/stats"),
-        fetch("http://localhost:8000/referral/history"),
-        fetch("http://localhost:8000/referral/bonus-table"),
+        api.get("/referral/stats"),
+        api.get("/referral/history"),
+        api.get("/referral/bonus-table"),
       ]);
 
-      if (statsRes.ok) setStats(await statsRes.json());
-      if (historyRes.ok) setHistory(await historyRes.json());
-      if (tableRes.ok) setBonusTable(await tableRes.json());
+      setStats(statsRes.data);
+      setHistory(historyRes.data);
+      setBonusTable(tableRes.data);
     } catch (error) {
       console.error("Failed to fetch referral data:", error);
     } finally {
@@ -456,9 +457,9 @@ export default function ReferralPage() {
                 <tr className="border-b border-slate-700/50 bg-slate-800/50">
                   <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">訂閱方案</th>
                   <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">方案價格</th>
-                  <th className="text-center text-xs font-medium text-amber-500 uppercase tracking-wider px-6 py-4">🥉 銅牌 (10%)</th>
-                  <th className="text-center text-xs font-medium text-slate-300 uppercase tracking-wider px-6 py-4">🥈 銀牌 (15%)</th>
-                  <th className="text-center text-xs font-medium text-yellow-400 uppercase tracking-wider px-6 py-4">🥇 金牌 (20%)</th>
+                  <th className="text-center text-xs font-medium text-amber-500 uppercase tracking-wider px-6 py-4">🥉 銅牌 (3%)</th>
+                  <th className="text-center text-xs font-medium text-slate-300 uppercase tracking-wider px-6 py-4">🥈 銀牌 (5%)</th>
+                  <th className="text-center text-xs font-medium text-yellow-400 uppercase tracking-wider px-6 py-4">🥇 金牌 (8%)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700/50">
