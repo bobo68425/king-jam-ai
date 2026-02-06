@@ -4,10 +4,9 @@ Revision ID: 20260204_newebpay
 Revises: 
 Create Date: 2026-02-04
 
+此遷移使用直接 SQL 執行，以避免 Alembic 多頭問題
 """
 from alembic import op
-import sqlalchemy as sa
-from sqlalchemy.engine.reflection import Inspector
 
 
 # revision identifiers, used by Alembic.
@@ -17,26 +16,31 @@ branch_labels = None
 depends_on = None
 
 
-def column_exists(table_name: str, column_name: str) -> bool:
-    """檢查欄位是否已存在"""
-    conn = op.get_bind()
-    inspector = Inspector.from_engine(conn)
-    columns = [col['name'] for col in inspector.get_columns(table_name)]
-    return column_name in columns
-
-
 def upgrade() -> None:
-    # 新增藍新金流欄位到 orders 表（如果不存在）
-    if not column_exists('orders', 'newebpay_merchant_order_no'):
-        op.add_column('orders', sa.Column('newebpay_merchant_order_no', sa.String(30), nullable=True))
-    
-    if not column_exists('orders', 'newebpay_trade_no'):
-        op.add_column('orders', sa.Column('newebpay_trade_no', sa.String(30), nullable=True))
+    # 使用 PostgreSQL 的 ADD COLUMN IF NOT EXISTS（需要 PG 9.6+）
+    # 直接執行 SQL 以避免 Alembic 版本追蹤問題
+    op.execute("""
+        DO $$ 
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name = 'orders' AND column_name = 'newebpay_merchant_order_no'
+            ) THEN
+                ALTER TABLE orders ADD COLUMN newebpay_merchant_order_no VARCHAR(30);
+            END IF;
+            
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name = 'orders' AND column_name = 'newebpay_trade_no'
+            ) THEN
+                ALTER TABLE orders ADD COLUMN newebpay_trade_no VARCHAR(30);
+            END IF;
+        END $$;
+    """)
 
 
 def downgrade() -> None:
-    if column_exists('orders', 'newebpay_trade_no'):
-        op.drop_column('orders', 'newebpay_trade_no')
-    
-    if column_exists('orders', 'newebpay_merchant_order_no'):
-        op.drop_column('orders', 'newebpay_merchant_order_no')
+    op.execute("""
+        ALTER TABLE orders DROP COLUMN IF EXISTS newebpay_trade_no;
+        ALTER TABLE orders DROP COLUMN IF EXISTS newebpay_merchant_order_no;
+    """)
