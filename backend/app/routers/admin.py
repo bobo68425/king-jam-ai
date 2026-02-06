@@ -1174,3 +1174,113 @@ async def get_access_attempts(
         "unique_paths": unique_paths,
         "attempts": recent_attempts,
     }
+
+
+# ============================================================
+# 訂單管理
+# ============================================================
+
+@router.get("/orders/{order_no}")
+async def get_order_detail(
+    order_no: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    查詢訂單詳情（管理員）
+    """
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="需要管理員權限"
+        )
+    
+    order = db.query(Order).filter(Order.order_no == order_no).first()
+    
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="找不到此訂單"
+        )
+    
+    user = db.query(User).filter(User.id == order.user_id).first()
+    
+    return {
+        "success": True,
+        "order": {
+            "id": order.id,
+            "order_no": order.order_no,
+            "user_id": order.user_id,
+            "user_email": user.email if user else None,
+            "order_type": order.order_type,
+            "item_code": order.item_code,
+            "item_name": order.item_name,
+            "total_amount": float(order.total_amount),
+            "credits_amount": order.credits_amount,
+            "bonus_credits": order.bonus_credits,
+            "status": order.status,
+            "payment_provider": order.payment_provider,
+            "payment_method": order.payment_method,
+            "ecpay_merchant_trade_no": order.ecpay_merchant_trade_no,
+            "ecpay_trade_no": order.ecpay_trade_no,
+            "created_at": order.created_at.isoformat() if order.created_at else None,
+            "paid_at": order.paid_at.isoformat() if order.paid_at else None,
+            "completed_at": order.completed_at.isoformat() if order.completed_at else None,
+        }
+    }
+
+
+@router.post("/orders/{order_no}/confirm-payment")
+async def admin_confirm_payment(
+    order_no: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    管理員手動確認付款
+    
+    用於回調失敗但實際已付款的情況
+    """
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="需要管理員權限"
+        )
+    
+    order = db.query(Order).filter(Order.order_no == order_no).first()
+    
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="找不到此訂單"
+        )
+    
+    if order.status in ["paid", "completed"]:
+        return {
+            "success": True,
+            "message": "訂單已經是付款完成狀態",
+            "status": order.status,
+        }
+    
+    if order.status not in ["pending", "processing"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"訂單狀態 {order.status} 無法確認付款"
+        )
+    
+    # 使用 PaymentService 處理付款回調
+    from app.services.payment_service import PaymentService
+    
+    payment_service = PaymentService(db)
+    payment_service.process_payment_callback(
+        order=order,
+        is_success=True,
+        provider_data={"admin_confirmed": True, "confirmed_by": current_user.id},
+    )
+    
+    return {
+        "success": True,
+        "message": f"訂單 {order_no} 已手動確認付款完成",
+        "new_status": order.status,
+        "credits_granted": (order.credits_amount or 0) + (order.bonus_credits or 0),
+    }
