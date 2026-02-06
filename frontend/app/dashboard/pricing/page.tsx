@@ -265,11 +265,12 @@ export default function PricingPage() {
                         "w-full",
                         pkg.is_popular
                           ? "bg-indigo-600 hover:bg-indigo-700"
-                          : "bg-slate-700 hover:bg-slate-600"
+                          : "bg-indigo-500/80 hover:bg-indigo-600"
                       )}
                       onClick={() => handleSelectPackage(pkg)}
                     >
-                      購買
+                      <CreditCard className="w-4 h-4 mr-2" />
+                      立即購買
                       <ArrowRight className="w-4 h-4 ml-2" />
                     </Button>
                   </CardFooter>
@@ -339,11 +340,12 @@ export default function PricingPage() {
                         "w-full",
                         plan.is_popular
                           ? "bg-purple-600 hover:bg-purple-700"
-                          : "bg-slate-700 hover:bg-slate-600"
+                          : "bg-purple-500/80 hover:bg-purple-600"
                       )}
                       onClick={() => handleSelectPlan(plan)}
                     >
-                      訂閱
+                      <Crown className="w-4 h-4 mr-2" />
+                      立即訂閱
                       <ArrowRight className="w-4 h-4 ml-2" />
                     </Button>
                   </CardFooter>
