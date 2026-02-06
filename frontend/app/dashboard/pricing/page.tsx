@@ -385,7 +385,7 @@ export default function PricingPage() {
             </div>
           </div>
           <p className="text-slate-500 text-xs">
-            付款由綠界科技 (ECPay) 及 Stripe 安全處理
+            付款由綠界科技 (ECPay) 安全處理
           </p>
         </div>
       </div>
@@ -485,34 +485,18 @@ export default function PricingPage() {
               {/* Payment Method */}
               <div className="space-y-3">
                 <Label className="text-slate-300">付款方式</Label>
-                <RadioGroup
-                  value={paymentProvider}
-                  onValueChange={(v) => setPaymentProvider(v as "ecpay" | "stripe")}
-                  className="space-y-2"
-                >
-                  <div className="flex items-center space-x-3 p-3 rounded-lg bg-slate-800/50 border border-slate-700 cursor-pointer hover:border-slate-600">
-                    <RadioGroupItem value="ecpay" id="ecpay" />
-                    <Label htmlFor="ecpay" className="flex-1 cursor-pointer">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-white font-medium">綠界科技</p>
-                          <p className="text-slate-400 text-xs">信用卡、ATM、超商付款</p>
-                        </div>
-                        <Badge className="bg-green-500/20 text-green-400">推薦</Badge>
-                      </div>
-                    </Label>
-                  </div>
-                  
-                  <div className="flex items-center space-x-3 p-3 rounded-lg bg-slate-800/50 border border-slate-700 cursor-pointer hover:border-slate-600">
-                    <RadioGroupItem value="stripe" id="stripe" />
-                    <Label htmlFor="stripe" className="flex-1 cursor-pointer">
+                <div className="p-3 rounded-lg bg-slate-800/50 border border-indigo-500/50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <CreditCard className="w-5 h-5 text-indigo-400" />
                       <div>
-                        <p className="text-white font-medium">Stripe</p>
-                        <p className="text-slate-400 text-xs">國際信用卡</p>
+                        <p className="text-white font-medium">綠界科技 ECPay</p>
+                        <p className="text-slate-400 text-xs">信用卡、ATM 轉帳、超商代碼</p>
                       </div>
-                    </Label>
+                    </div>
+                    <Badge className="bg-green-500/20 text-green-400">安全付款</Badge>
                   </div>
-                </RadioGroup>
+                </div>
               </div>
             </div>
           )}
