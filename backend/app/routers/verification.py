@@ -103,6 +103,162 @@ async def get_verification_status(
     }
 
 
+# ============================================================
+# 手機驗證 API（別名路由，供前端 /verification/phone/* 使用）
+# ============================================================
+
+class PhoneSendCodeRequest(BaseModel):
+    """發送驗證碼請求"""
+    phone_number: str = Field(..., description="手機號碼")
+
+
+class PhoneVerifyRequest(BaseModel):
+    """驗證碼驗證請求"""
+    code: str = Field(..., min_length=6, max_length=6, description="6 位數驗證碼")
+
+
+@router.post("/phone/send-code")
+async def send_phone_verification_code(
+    request: Request,
+    data: PhoneSendCodeRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    發送手機驗證碼（前端別名路由）
+    """
+    import os
+    from app.services.sms_service import get_sms_service, get_otp_manager
+    
+    sms_service = get_sms_service()
+    otp_manager = get_otp_manager()
+    
+    # 格式化手機號碼
+    is_valid, formatted_phone = sms_service.validate_phone_number(data.phone_number)
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=formatted_phone  # 錯誤訊息
+        )
+    
+    # 將手機號碼存儲到 session 中供驗證使用
+    # 使用資料庫記錄
+    db.execute(text("""
+        INSERT INTO phone_verifications (user_id, phone_number, is_verified, created_at, updated_at)
+        VALUES (:user_id, :phone, false, NOW(), NOW())
+        ON CONFLICT (user_id) DO UPDATE SET 
+            phone_number = :phone,
+            is_verified = false,
+            updated_at = NOW()
+    """), {"user_id": current_user.id, "phone": formatted_phone})
+    db.commit()
+    
+    # 檢查是否可重發
+    can_resend, wait_seconds = await otp_manager.can_resend(formatted_phone)
+    if not can_resend:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"請等待 {wait_seconds} 秒後再試"
+        )
+    
+    # 檢查此手機號碼是否已被其他用戶驗證
+    existing = db.execute(text("""
+        SELECT user_id FROM phone_verifications 
+        WHERE phone_number = :phone AND is_verified = true AND user_id != :user_id
+    """), {"phone": formatted_phone, "user_id": current_user.id}).fetchone()
+    
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="此手機號碼已被其他帳號綁定"
+        )
+    
+    # 發送 OTP
+    result, otp = await sms_service.send_otp(formatted_phone)
+    
+    if not result.success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"發送失敗：{result.error}"
+        )
+    
+    # 開發環境返回驗證碼（方便測試）
+    response_data = {
+        "success": True,
+        "message": "驗證碼已發送",
+        "phone_masked": formatted_phone[:4] + "****" + formatted_phone[-2:] if len(formatted_phone) >= 10 else "****",
+        "expires_in": 300,  # 5 分鐘
+    }
+    
+    # 開發環境或控制台模式顯示驗證碼
+    if os.getenv("ENVIRONMENT") != "production" or os.getenv("SMS_PROVIDER") == "console":
+        response_data["dev_code"] = otp
+    
+    return response_data
+
+
+@router.post("/phone/verify")
+async def verify_phone_code(
+    data: PhoneVerifyRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    驗證手機驗證碼（前端別名路由）
+    """
+    from app.services.sms_service import get_otp_manager
+    
+    otp_manager = get_otp_manager()
+    
+    # 從資料庫獲取用戶的待驗證手機號碼
+    phone_record = db.execute(text("""
+        SELECT phone_number, is_verified FROM phone_verifications 
+        WHERE user_id = :user_id
+    """), {"user_id": current_user.id}).fetchone()
+    
+    if not phone_record:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="請先發送驗證碼"
+        )
+    
+    if phone_record.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="手機號碼已驗證"
+        )
+    
+    phone_number = phone_record.phone_number
+    
+    # 驗證 OTP
+    is_valid = await otp_manager.verify_otp(phone_number, data.code)
+    
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="驗證碼錯誤或已過期"
+        )
+    
+    # 更新驗證狀態
+    db.execute(text("""
+        UPDATE phone_verifications 
+        SET is_verified = true, verified_at = NOW(), updated_at = NOW()
+        WHERE user_id = :user_id
+    """), {"user_id": current_user.id})
+    
+    # 更新用戶的 phone_verified 欄位（如果存在）
+    db.execute(text("""
+        UPDATE users SET phone_verified = true WHERE id = :user_id
+    """), {"user_id": current_user.id})
+    
+    db.commit()
+    
+    return {
+        "success": True,
+        "message": "手機號碼驗證成功",
+    }
+
+
 @router.post("/submit")
 async def submit_verification(
     request: Request,
