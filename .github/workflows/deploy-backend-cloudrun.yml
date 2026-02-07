@@ -124,7 +124,7 @@ jobs:
       - name: 🚀 Deploy to Cloud Run
         id: deploy
         env:
-          ENV_VARS: "ENVIRONMENT=production,FRONTEND_URL=https://kingjam.app,BACKEND_URL=https://api.kingjam.app,GCS_BUCKET_NAME=kingjam-media,REPLICATE_API_TOKEN=${{ secrets.REPLICATE_API_TOKEN }},PAYMENT_MODE=production,ECPAY_MERCHANT_ID=${{ secrets.ECPAY_MERCHANT_ID }},ECPAY_HASH_KEY=${{ secrets.ECPAY_HASH_KEY }},ECPAY_HASH_IV=${{ secrets.ECPAY_HASH_IV }},ECPAY_LOGISTICS_HASH_KEY=${{ secrets.ECPAY_LOGISTICS_HASH_KEY }},ECPAY_LOGISTICS_HASH_IV=${{ secrets.ECPAY_LOGISTICS_HASH_IV }},NEWEBPAY_MERCHANT_ID=${{ secrets.NEWEBPAY_MERCHANT_ID }},NEWEBPAY_HASH_KEY=${{ secrets.NEWEBPAY_HASH_KEY }},NEWEBPAY_HASH_IV=${{ secrets.NEWEBPAY_HASH_IV }}"
+          ENV_VARS: "ENVIRONMENT=production,FRONTEND_URL=https://kingjam.app,BACKEND_URL=https://api.kingjam.app,GCS_BUCKET_NAME=kingjam-media,REPLICATE_API_TOKEN=${{ secrets.REPLICATE_API_TOKEN }},PAYMENT_MODE=production,ECPAY_MERCHANT_ID=${{ secrets.ECPAY_MERCHANT_ID }},ECPAY_HASH_KEY=${{ secrets.ECPAY_HASH_KEY }},ECPAY_HASH_IV=${{ secrets.ECPAY_HASH_IV }},ECPAY_LOGISTICS_HASH_KEY=${{ secrets.ECPAY_LOGISTICS_HASH_KEY }},ECPAY_LOGISTICS_HASH_IV=${{ secrets.ECPAY_LOGISTICS_HASH_IV }},NEWEBPAY_MERCHANT_ID=${{ secrets.NEWEBPAY_MERCHANT_ID }},NEWEBPAY_HASH_KEY=${{ secrets.NEWEBPAY_HASH_KEY }},NEWEBPAY_HASH_IV=${{ secrets.NEWEBPAY_HASH_IV }},SMS_PROVIDER=twilio,TWILIO_ACCOUNT_SID=${{ secrets.TWILIO_ACCOUNT_SID }},TWILIO_AUTH_TOKEN=${{ secrets.TWILIO_AUTH_TOKEN }},TWILIO_FROM_NUMBER=${{ secrets.TWILIO_FROM_NUMBER }}"
         run: |
           gcloud run deploy ${{ env.SERVICE_NAME }} \
             --image ${{ steps.meta.outputs.image_sha }} \
@@ -140,7 +140,7 @@ jobs:
             --concurrency 80 \
             --update-env-vars "$ENV_VARS" \
             --vpc-connector kingjam-connector \
-            --vpc-egress all-traffic \
+            --vpc-egress private-ranges-only \
             --add-cloudsql-instances king-jam-ai:asia-east1:kingjam-db \
             --labels "managed-by=github-actions,commit-sha=${{ steps.meta.outputs.short_sha }}"
           
