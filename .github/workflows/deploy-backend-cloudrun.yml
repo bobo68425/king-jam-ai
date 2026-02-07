@@ -140,7 +140,7 @@ jobs:
             --concurrency 80 \
             --update-env-vars "$ENV_VARS" \
             --vpc-connector kingjam-connector \
-            --vpc-egress private-ranges-only \
+            --vpc-egress all-traffic \
             --add-cloudsql-instances king-jam-ai:asia-east1:kingjam-db \
             --labels "managed-by=github-actions,commit-sha=${{ steps.meta.outputs.short_sha }}"
           
