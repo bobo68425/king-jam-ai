@@ -40,7 +40,9 @@ SMS_PROVIDER = os.getenv("SMS_PROVIDER", "console")
 
 # Twilio 設定
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")  # 主帳戶 Auth Token
+TWILIO_API_KEY_SID = os.getenv("TWILIO_API_KEY_SID", "")  # API Key SID (SK...)
+TWILIO_API_KEY_SECRET = os.getenv("TWILIO_API_KEY_SECRET", "")  # API Key Secret
 TWILIO_FROM_NUMBER = os.getenv("TWILIO_FROM_NUMBER", "")
 
 # 每客簡訊 (Mitake) 設定
@@ -193,15 +195,36 @@ class SMSService:
     # ==================== Twilio ====================
     
     async def _send_twilio(self, phone: str, message: str) -> SMSResult:
-        """使用 Twilio 發送簡訊"""
-        if not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN:
-            return SMSResult(success=False, error="Twilio 設定不完整")
+        """
+        使用 Twilio 發送簡訊
+        
+        支援兩種認證方式：
+        1. Account SID + Auth Token（傳統方式）
+        2. API Key SID + API Key Secret（更安全，推薦）
+        """
+        if not TWILIO_ACCOUNT_SID:
+            return SMSResult(success=False, error="Twilio Account SID 未設定")
+        
+        if not TWILIO_FROM_NUMBER:
+            return SMSResult(success=False, error="Twilio 發送號碼未設定")
+        
+        # 選擇認證方式：優先使用 API Key
+        if TWILIO_API_KEY_SID and TWILIO_API_KEY_SECRET:
+            auth_user = TWILIO_API_KEY_SID
+            auth_pass = TWILIO_API_KEY_SECRET
+            auth_method = "API Key"
+        elif TWILIO_AUTH_TOKEN:
+            auth_user = TWILIO_ACCOUNT_SID
+            auth_pass = TWILIO_AUTH_TOKEN
+            auth_method = "Auth Token"
+        else:
+            return SMSResult(success=False, error="Twilio 認證資訊未設定（需要 Auth Token 或 API Key）")
         
         try:
             url = f"https://api.twilio.com/2010-04-01/Accounts/{TWILIO_ACCOUNT_SID}/Messages.json"
             
             async with aiohttp.ClientSession() as session:
-                auth = aiohttp.BasicAuth(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+                auth = aiohttp.BasicAuth(auth_user, auth_pass)
                 data = {
                     "To": phone,
                     "From": TWILIO_FROM_NUMBER,
@@ -212,7 +235,7 @@ class SMSService:
                     result = await resp.json()
                     
                     if resp.status == 201:
-                        logger.info(f"[SMS] Twilio 發送成功: {phone}")
+                        logger.info(f"[SMS] Twilio 發送成功 ({auth_method}): {phone}")
                         return SMSResult(
                             success=True,
                             message_id=result.get("sid"),
