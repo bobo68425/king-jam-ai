@@ -95,11 +95,17 @@ function PricingContent() {
     const fetchProducts = async () => {
       try {
         const res = await api.get("/payment/products");
-        setCreditPackages(res.data.credit_packages || []);
-        setSubscriptionPlans(res.data.subscription_plans || []);
-      } catch (error) {
+        if (res.data && !res.data.success && res.data.error) {
+          toast.error(`載入產品失敗：${res.data.error}`);
+          return;
+        }
+        setCreditPackages(res.data?.credit_packages ?? []);
+        setSubscriptionPlans(res.data?.subscription_plans ?? []);
+      } catch (error: unknown) {
+        const err = error as { response?: { data?: { detail?: string; error?: string }; status?: number }; message?: string };
+        const msg = err.response?.data?.detail ?? err.response?.data?.error ?? err.message ?? "連線失敗，請檢查網路或稍後再試";
         console.error("Failed to fetch products:", error);
-        toast.error("載入產品失敗");
+        toast.error(`載入產品失敗：${typeof msg === "string" ? msg : JSON.stringify(msg)}`);
       } finally {
         setLoading(false);
       }

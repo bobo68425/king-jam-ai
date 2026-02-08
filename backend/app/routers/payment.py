@@ -57,6 +57,7 @@ class ProductListResponse(BaseModel):
     success: bool
     credit_packages: List[ProductListItem]
     subscription_plans: List[ProductListItem]
+    error: Optional[str] = None
 
 
 class CreateOrderRequest(BaseModel):
@@ -132,46 +133,68 @@ async def get_products(db: Session = Depends(get_db)):
     - 點數套餐
     - 訂閱方案
     """
-    # 取得點數套餐（is_active 為 True 或 NULL）
-    credit_packages = db.query(CreditPackage).filter(
-        (CreditPackage.is_active == True) | (CreditPackage.is_active == None)
-    ).order_by(CreditPackage.sort_order).all()
-    
-    # 取得訂閱方案
-    subscription_plans = db.query(SubscriptionPlan).filter(
-        SubscriptionPlan.is_active == True,
-        SubscriptionPlan.plan_code != "free",
-    ).order_by(SubscriptionPlan.sort_order).all()
-    
-    return {
-        "success": True,
-        "credit_packages": [
+    def _safe_float(v):
+        if v is None:
+            return None
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+
+    credit_packages_rows = []
+    try:
+        credit_packages_rows = db.query(CreditPackage).filter(
+            (CreditPackage.is_active == True) | (CreditPackage.is_active == None)
+        ).order_by(CreditPackage.sort_order).all()
+    except Exception as e:
+        logger.warning(f"get_products: credit_packages query failed: {e}")
+
+    subscription_plans_rows = []
+    try:
+        subscription_plans_rows = db.query(SubscriptionPlan).filter(
+            SubscriptionPlan.is_active == True,
+            SubscriptionPlan.plan_code != "free",
+        ).order_by(SubscriptionPlan.sort_order).all()
+    except Exception as e:
+        logger.warning(f"get_products: subscription_plans query failed (run DB migration?): {e}")
+
+    subscription_plans = [
+        {
+            "code": p.plan_code,
+            "name": p.name,
+            "description": p.description,
+            "price": float(p.price_monthly),
+            "monthly_credits": p.monthly_credits,
+            "features": p.features if isinstance(p.features, list) else [],
+            "is_popular": p.is_popular or False,
+            "price_yearly": _safe_float(getattr(p, "price_yearly", None)),
+            "yearly_discount_percent": _safe_float(getattr(p, "yearly_discount_percent", None)),
+        }
+        for p in subscription_plans_rows
+    ]
+
+    credit_packages = []
+    try:
+        credit_packages = [
             {
                 "code": p.package_code,
                 "name": p.name,
                 "description": p.description,
                 "price": float(p.price_twd),
-                "original_price": float(p.original_price_twd) if p.original_price_twd else None,
+                "original_price": float(p.original_price_twd) if getattr(p, "original_price_twd", None) else None,
                 "credits_amount": p.credits_amount,
                 "bonus_credits": p.bonus_credits,
-                "is_popular": p.is_popular or False,
+                "is_popular": getattr(p, "is_popular", False) or False,
             }
-            for p in credit_packages
-        ],
-        "subscription_plans": [
-            {
-                "code": p.plan_code,
-                "name": p.name,
-                "description": p.description,
-                "price": float(p.price_monthly),
-                "monthly_credits": p.monthly_credits,
-                "features": p.features if isinstance(p.features, list) else [],
-                "is_popular": p.is_popular or False,
-                "price_yearly": float(p.price_yearly) if p.price_yearly is not None else None,
-                "yearly_discount_percent": float(p.yearly_discount_percent) if p.yearly_discount_percent is not None else None,
-            }
-            for p in subscription_plans
-        ],
+            for p in credit_packages_rows
+        ]
+    except Exception as e:
+        logger.warning(f"get_products: credit_packages serialize failed: {e}")
+
+    return {
+        "success": True,
+        "credit_packages": credit_packages,
+        "subscription_plans": subscription_plans,
     }
 
 
