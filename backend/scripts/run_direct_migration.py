@@ -1,6 +1,12 @@
 """
-直接 SQL 遷移（多個 Alembic heads 時由 GitHub Actions 呼叫）
+直接 SQL 遷移（由 GitHub Actions 呼叫）
 需設定環境變數 DATABASE_URL。
+
+功能：
+1. 建立 subscription_plans 表（若不存在）
+2. 寫入預設訂閱方案（free / basic / pro / enterprise）
+3. 加年繳欄位與預設值
+4. orders 表加 NewebPay 欄位
 """
 import os
 import sys
@@ -15,53 +21,81 @@ def main():
     engine = create_engine(dsn)
     try:
         with engine.connect() as conn:
-            # NewebPay 欄位
-            conn.execute(
-                text("""
+            # ── 1. 建立 subscription_plans 表 ──
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS subscription_plans (
+                    id SERIAL PRIMARY KEY,
+                    plan_code VARCHAR(50) NOT NULL UNIQUE,
+                    name VARCHAR(100) NOT NULL,
+                    tier VARCHAR(20) NOT NULL,
+                    price_monthly NUMERIC(10,2) NOT NULL DEFAULT 0,
+                    price_yearly NUMERIC(10,2),
+                    yearly_discount_percent NUMERIC(5,2),
+                    monthly_credits INTEGER NOT NULL DEFAULT 0,
+                    features JSONB DEFAULT '[]',
+                    is_popular BOOLEAN DEFAULT FALSE,
+                    sort_order INTEGER DEFAULT 0,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    description TEXT,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ
+                );
+            """))
+            conn.commit()
+            print("  ✅ subscription_plans 表已確認")
+
+            # ── 2. 寫入預設訂閱方案（若不存在） ──
+            conn.execute(text("""
+                INSERT INTO subscription_plans (plan_code, name, tier, price_monthly, monthly_credits, features, is_popular, sort_order, is_active, description)
+                VALUES
+                    ('free',       '免費版', 'free',       0,    0,    '["註冊贈送 100 點","基本 AI 文章生成","社群圖文設計"]',                          FALSE, 0, TRUE, '適合個人嘗試體驗'),
+                    ('basic',      '入門版', 'basic',    299,    0,    '["基本功能無廣告","AI 文章生成","社群圖文設計","單平台發布","Email 客服支援"]',       FALSE, 1, TRUE, '適合輕度使用者'),
+                    ('pro',        '專業版', 'pro',      699, 1000,    '["每月 1,000 點","全部 AI 功能解鎖","AI 短影片生成","智能排程發布","多平台同步","優先客服支援"]', TRUE, 2, TRUE, '適合自媒體創作者'),
+                    ('enterprise', '企業版', 'enterprise',3699, 5000,  '["每月 5,000 點","全部專業版功能","API 存取權限","團隊協作功能","專屬客戶經理","客製化需求","優先技術支援","SLA 保證"]', FALSE, 3, TRUE, '適合品牌與團隊')
+                ON CONFLICT (plan_code) DO NOTHING;
+            """))
+            conn.commit()
+            print("  ✅ 訂閱方案預設資料已確認")
+
+            # ── 3. 年繳欄位與預設值 ──
+            conn.execute(text("""
                 DO $$
                 BEGIN
-                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'newebpay_merchant_order_no') THEN
-                        ALTER TABLE orders ADD COLUMN newebpay_merchant_order_no VARCHAR(30);
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='subscription_plans' AND column_name='price_yearly') THEN
+                        ALTER TABLE subscription_plans ADD COLUMN price_yearly NUMERIC(10,2);
                     END IF;
-                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'newebpay_trade_no') THEN
-                        ALTER TABLE orders ADD COLUMN newebpay_trade_no VARCHAR(30);
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='subscription_plans' AND column_name='yearly_discount_percent') THEN
+                        ALTER TABLE subscription_plans ADD COLUMN yearly_discount_percent NUMERIC(5,2);
                     END IF;
                 END $$;
-                """)
-            )
+            """))
             conn.commit()
-            # 訂閱方案年繳欄位（僅當表存在時）
-            conn.execute(
-                text("""
+            conn.execute(text("""
+                UPDATE subscription_plans
+                SET price_yearly = ROUND(price_monthly * 12 * 0.8, 0), yearly_discount_percent = 20
+                WHERE plan_code IN ('basic','pro','enterprise') AND (price_yearly IS NULL OR yearly_discount_percent IS NULL);
+            """))
+            conn.commit()
+            print("  ✅ 年繳欄位與預設值已確認")
+
+            # ── 4. orders 表 NewebPay 欄位 ──
+            conn.execute(text("""
                 DO $$
                 BEGIN
-                    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'subscription_plans') THEN
-                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'subscription_plans' AND column_name = 'price_yearly') THEN
-                            ALTER TABLE subscription_plans ADD COLUMN price_yearly NUMERIC(10, 2);
+                    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='orders') THEN
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='orders' AND column_name='newebpay_merchant_order_no') THEN
+                            ALTER TABLE orders ADD COLUMN newebpay_merchant_order_no VARCHAR(30);
                         END IF;
-                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'subscription_plans' AND column_name = 'yearly_discount_percent') THEN
-                            ALTER TABLE subscription_plans ADD COLUMN yearly_discount_percent NUMERIC(5, 2);
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='orders' AND column_name='newebpay_trade_no') THEN
+                            ALTER TABLE orders ADD COLUMN newebpay_trade_no VARCHAR(30);
                         END IF;
                     END IF;
                 END $$;
-                """)
-            )
+            """))
             conn.commit()
-            # 僅當表存在且已有 price_monthly 時更新年繳預設值
-            conn.execute(
-                text("""
-                DO $$
-                BEGIN
-                    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'subscription_plans') THEN
-                        UPDATE subscription_plans
-                        SET price_yearly = ROUND(price_monthly * 12 * 0.8, 0), yearly_discount_percent = 20
-                        WHERE plan_code IN ('basic', 'pro', 'enterprise') AND (price_yearly IS NULL OR yearly_discount_percent IS NULL);
-                    END IF;
-                END $$;
-                """)
-            )
-            conn.commit()
-        print("✅ SQL 遷移完成")
+            print("  ✅ orders NewebPay 欄位已確認")
+
+        print("✅ 全部遷移完成")
     except Exception as e:
         print(f"❌ 遷移失敗: {e}", file=sys.stderr)
         sys.exit(1)
