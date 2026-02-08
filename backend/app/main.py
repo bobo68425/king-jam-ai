@@ -99,4 +99,25 @@ def read_root():
 def health_check():
     return {"status": "ok", "service": "backend"}
 
+
+@app.get("/health/db")
+def health_check_db():
+    """健康檢查（含資料庫連線），用於排查 DB 連線問題"""
+    import os as _os
+    from app.database import SessionLocal
+    db_url = _os.getenv("DATABASE_URL", "(not set)")
+    # 遮蔽密碼
+    safe_url = db_url
+    if "@" in db_url:
+        parts = db_url.split("@", 1)
+        user_part = parts[0].rsplit(":", 1)
+        safe_url = user_part[0] + ":***@" + parts[1]
+    try:
+        db = SessionLocal()
+        db.execute(__import__("sqlalchemy").text("SELECT 1"))
+        db.close()
+        return {"status": "ok", "db": "connected", "database_url": safe_url}
+    except Exception as e:
+        return {"status": "error", "db": "failed", "database_url": safe_url, "error": str(e)}
+
 # Redeployed on Wed Feb  4 00:14:11 CST 2026

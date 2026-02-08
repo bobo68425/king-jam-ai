@@ -127,9 +127,10 @@ jobs:
 
       - name: 🚀 Deploy to Cloud Run
         id: deploy
-        env:
-          ENV_VARS: "DATABASE_URL=postgresql://kingjam:${{ secrets.DB_PASSWORD }}@/kingjam_db?host=/cloudsql/${{ env.PROJECT_ID }}:${{ env.REGION }}:kingjam-db,SECRET_KEY=${{ secrets.SECRET_KEY }},ENVIRONMENT=production,FRONTEND_URL=https://kingjam.app,BACKEND_URL=https://api.kingjam.app,GCS_BUCKET_NAME=kingjam-media,REPLICATE_API_TOKEN=${{ secrets.REPLICATE_API_TOKEN }},PAYMENT_MODE=production,ECPAY_MERCHANT_ID=${{ secrets.ECPAY_MERCHANT_ID }},ECPAY_HASH_KEY=${{ secrets.ECPAY_HASH_KEY }},ECPAY_HASH_IV=${{ secrets.ECPAY_HASH_IV }},ECPAY_LOGISTICS_HASH_KEY=${{ secrets.ECPAY_LOGISTICS_HASH_KEY }},ECPAY_LOGISTICS_HASH_IV=${{ secrets.ECPAY_LOGISTICS_HASH_IV }},NEWEBPAY_MERCHANT_ID=${{ secrets.NEWEBPAY_MERCHANT_ID }},NEWEBPAY_HASH_KEY=${{ secrets.NEWEBPAY_HASH_KEY }},NEWEBPAY_HASH_IV=${{ secrets.NEWEBPAY_HASH_IV }},SMS_PROVIDER=twilio,TWILIO_ACCOUNT_SID=${{ secrets.TWILIO_ACCOUNT_SID }},TWILIO_API_KEY_SID=${{ secrets.TWILIO_API_KEY_SID }},TWILIO_API_KEY_SECRET=${{ secrets.TWILIO_API_KEY_SECRET }},TWILIO_FROM_NUMBER=${{ secrets.TWILIO_FROM_NUMBER }}"
         run: |
+          # 組合 DATABASE_URL（透過 Unix socket 連 Cloud SQL）
+          DB_URL="postgresql://kingjam:${{ secrets.DB_PASSWORD }}@/kingjam_db?host=/cloudsql/${{ env.PROJECT_ID }}:${{ env.REGION }}:kingjam-db"
+          
           gcloud run deploy ${{ env.SERVICE_NAME }} \
             --image ${{ steps.meta.outputs.image_sha }} \
             --region ${{ env.REGION }} \
@@ -142,7 +143,8 @@ jobs:
             --max-instances 10 \
             --timeout 600 \
             --concurrency 80 \
-            --update-env-vars "$ENV_VARS" \
+            --set-env-vars "DATABASE_URL=${DB_URL}" \
+            --update-env-vars "SECRET_KEY=${{ secrets.SECRET_KEY }},ENVIRONMENT=production,FRONTEND_URL=https://kingjam.app,BACKEND_URL=https://api.kingjam.app,GCS_BUCKET_NAME=kingjam-media,REPLICATE_API_TOKEN=${{ secrets.REPLICATE_API_TOKEN }},PAYMENT_MODE=production,ECPAY_MERCHANT_ID=${{ secrets.ECPAY_MERCHANT_ID }},ECPAY_HASH_KEY=${{ secrets.ECPAY_HASH_KEY }},ECPAY_HASH_IV=${{ secrets.ECPAY_HASH_IV }},ECPAY_LOGISTICS_HASH_KEY=${{ secrets.ECPAY_LOGISTICS_HASH_KEY }},ECPAY_LOGISTICS_HASH_IV=${{ secrets.ECPAY_LOGISTICS_HASH_IV }},NEWEBPAY_MERCHANT_ID=${{ secrets.NEWEBPAY_MERCHANT_ID }},NEWEBPAY_HASH_KEY=${{ secrets.NEWEBPAY_HASH_KEY }},NEWEBPAY_HASH_IV=${{ secrets.NEWEBPAY_HASH_IV }},SMS_PROVIDER=twilio,TWILIO_ACCOUNT_SID=${{ secrets.TWILIO_ACCOUNT_SID }},TWILIO_API_KEY_SID=${{ secrets.TWILIO_API_KEY_SID }},TWILIO_API_KEY_SECRET=${{ secrets.TWILIO_API_KEY_SECRET }},TWILIO_FROM_NUMBER=${{ secrets.TWILIO_FROM_NUMBER }}" \
             --vpc-connector kingjam-connector \
             --vpc-egress private-ranges-only \
             --add-cloudsql-instances ${{ env.PROJECT_ID }}:${{ env.REGION }}:kingjam-db \
