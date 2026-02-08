@@ -146,7 +146,7 @@ jobs:
           _TW_FROM: ${{ secrets.TWILIO_FROM_NUMBER }}
         run: |
           # 組合 DATABASE_URL（透過 Unix socket 連 Cloud SQL）
-          DB_URL="postgresql://postgres:${_DB_PASS}@/postgres?host=/cloudsql/${{ env.PROJECT_ID }}:${{ env.REGION }}:kingjam-db"
+          DB_URL="postgresql://postgres:${_DB_PASS}@/kingjam?host=/cloudsql/${{ env.PROJECT_ID }}:${{ env.REGION }}:kingjam-db"
           
           # 使用 ^@@^ 自訂分隔符，避免 DATABASE_URL 裡的逗號或特殊字元被誤切
           gcloud run deploy ${{ env.SERVICE_NAME }} \
