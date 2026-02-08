@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import api from "@/lib/api";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
@@ -65,10 +65,10 @@ function formatPrice(price: number): string {
 }
 
 // ============================================================
-// Main Component
+// Main Content (uses useSearchParams - must be in Suspense)
 // ============================================================
 
-export default function PricingPage() {
+function PricingContent() {
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<"credits" | "subscription">("credits");
   const [loading, setLoading] = useState(true);
@@ -602,5 +602,23 @@ export default function PricingPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// ============================================================
+// Page with Suspense (required by Next.js for useSearchParams)
+// ============================================================
+
+export default function PricingPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
+        </div>
+      }
+    >
+      <PricingContent />
+    </Suspense>
   );
 }

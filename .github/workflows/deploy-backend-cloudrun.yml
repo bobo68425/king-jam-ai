@@ -64,7 +64,11 @@ jobs:
       - name: ✅ Run tests
         run: |
           cd backend
-          python -m pytest tests/ -v --tb=short 2>/dev/null || echo "Tests passed or no tests found"
+          if [ -d tests ]; then
+            python -m pytest tests/ -v --tb=short
+          else
+            echo "No tests/ directory, skipping pytest"
+          fi
 
   # ===========================================================================
   # 建置並部署
@@ -141,7 +145,7 @@ jobs:
             --update-env-vars "$ENV_VARS" \
             --vpc-connector kingjam-connector \
             --vpc-egress private-ranges-only \
-            --add-cloudsql-instances king-jam-ai:asia-east1:kingjam-db \
+            --add-cloudsql-instances ${{ env.PROJECT_ID }}:${{ env.REGION }}:kingjam-db \
             --labels "managed-by=github-actions,commit-sha=${{ steps.meta.outputs.short_sha }}"
           
           SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
