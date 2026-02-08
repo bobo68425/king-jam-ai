@@ -448,6 +448,7 @@ function PricingSection() {
     {
       name: "入門版",
       price: "299",
+      priceYearly: "2,870",
       period: "每月",
       description: "適合輕度使用者",
       features: [
@@ -464,6 +465,7 @@ function PricingSection() {
     {
       name: "專業版",
       price: "699",
+      priceYearly: "6,710",
       period: "每月",
       description: "適合自媒體創作者",
       features: [
@@ -481,6 +483,7 @@ function PricingSection() {
     {
       name: "企業版",
       price: "3,699",
+      priceYearly: "35,510",
       period: "每月",
       description: "適合品牌與團隊",
       features: [
@@ -535,11 +538,16 @@ function PricingSection() {
 
               <div className="text-center mb-6">
                 <h3 className="text-xl font-semibold text-white mb-2">{plan.name}</h3>
-                <div className="flex items-baseline justify-center gap-1 mb-2">
+                <div className="flex items-baseline justify-center gap-1 mb-1">
                   <span className="text-sm text-slate-500">NT$</span>
                   <span className="text-4xl font-bold text-white">{plan.price}</span>
                   <span className="text-slate-500">/{plan.period}</span>
                 </div>
+                {"priceYearly" in plan && plan.priceYearly && (
+                  <p className="text-sm text-emerald-400/90 mb-2">
+                    年繳 NT${plan.priceYearly} <span className="text-emerald-300">省 20%</span>
+                  </p>
+                )}
                 <p className="text-sm text-slate-400">{plan.description}</p>
               </div>
 

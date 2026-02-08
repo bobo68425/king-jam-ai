@@ -183,7 +183,7 @@ export default function PricingPage() {
     if (!selectedItem) return 0;
     if (selectedType === "subscription" && billingCycle === "yearly") {
       const plan = selectedItem as SubscriptionPlan;
-      if (plan.price_yearly != null) return plan.price_yearly;
+      return plan.price_yearly ?? Math.round(plan.price * 12 * 0.8);
     }
     return selectedItem.price * quantity;
   };
@@ -354,8 +354,11 @@ export default function PricingPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {subscriptionPlans.map((plan) => {
-                const showYearly = billingCycle === "yearly" && plan.price_yearly != null;
-                const displayPrice = showYearly ? plan.price_yearly! : plan.price;
+                // API 若未回傳年繳價則用月價推算（8 折）
+                const yearlyPrice = plan.price_yearly ?? Math.round(plan.price * 12 * 0.8);
+                const discountPercent = plan.yearly_discount_percent ?? 20;
+                const showYearly = billingCycle === "yearly";
+                const displayPrice = showYearly ? yearlyPrice : plan.price;
                 const periodLabel = showYearly ? "/年" : "/月";
                 return (
                   <Card
@@ -392,12 +395,12 @@ export default function PricingPage() {
                           {formatPrice(displayPrice)}
                         </span>
                         <span className="text-slate-400">{periodLabel}</span>
-                        {showYearly && plan.yearly_discount_percent != null && (
+                        {showYearly && (
                           <span className="text-emerald-400 text-sm font-medium">
-                            省 {plan.yearly_discount_percent}%
+                            省 {discountPercent}%
                           </span>
                         )}
-                        {showYearly && plan.price_yearly != null && (
+                        {showYearly && (
                           <span className="text-slate-500 text-sm line-through">
                             {formatPrice(plan.price * 12)}
                           </span>
