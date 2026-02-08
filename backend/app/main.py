@@ -106,8 +106,6 @@ def _auto_init_db():
                 name VARCHAR(100) NOT NULL,
                 tier VARCHAR(20) NOT NULL,
                 price_monthly NUMERIC(10,2) NOT NULL DEFAULT 0,
-                price_yearly NUMERIC(10,2),
-                yearly_discount_percent NUMERIC(5,2),
                 monthly_credits INTEGER NOT NULL DEFAULT 0,
                 features JSONB DEFAULT '[]',
                 is_popular BOOLEAN DEFAULT FALSE,
@@ -117,6 +115,20 @@ def _auto_init_db():
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ
             );
+        """))
+        db.commit()
+
+        # 確保年繳欄位存在（表可能已存在但缺欄位）
+        db.execute(text("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='subscription_plans' AND column_name='price_yearly') THEN
+                    ALTER TABLE subscription_plans ADD COLUMN price_yearly NUMERIC(10,2);
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='subscription_plans' AND column_name='yearly_discount_percent') THEN
+                    ALTER TABLE subscription_plans ADD COLUMN yearly_discount_percent NUMERIC(5,2);
+                END IF;
+            END $$;
         """))
         db.commit()
 
@@ -258,8 +270,6 @@ def init_db_endpoint():
                 name VARCHAR(100) NOT NULL,
                 tier VARCHAR(20) NOT NULL,
                 price_monthly NUMERIC(10,2) NOT NULL DEFAULT 0,
-                price_yearly NUMERIC(10,2),
-                yearly_discount_percent NUMERIC(5,2),
                 monthly_credits INTEGER NOT NULL DEFAULT 0,
                 features JSONB DEFAULT '[]',
                 is_popular BOOLEAN DEFAULT FALSE,
@@ -272,6 +282,21 @@ def init_db_endpoint():
         """))
         db.commit()
         results.append("subscription_plans ok")
+
+        # 確保年繳欄位存在
+        db.execute(text("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='subscription_plans' AND column_name='price_yearly') THEN
+                    ALTER TABLE subscription_plans ADD COLUMN price_yearly NUMERIC(10,2);
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='subscription_plans' AND column_name='yearly_discount_percent') THEN
+                    ALTER TABLE subscription_plans ADD COLUMN yearly_discount_percent NUMERIC(5,2);
+                END IF;
+            END $$;
+        """))
+        db.commit()
+        results.append("yearly columns ok")
 
         db.execute(text("""
             INSERT INTO subscription_plans (plan_code, name, tier, price_monthly, monthly_credits, features, is_popular, sort_order, is_active, description)
