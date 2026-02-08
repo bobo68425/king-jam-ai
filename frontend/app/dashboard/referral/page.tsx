@@ -53,6 +53,8 @@ interface BonusTable {
   partner_tiers: PartnerTier[];
   bonus_table: Record<string, Record<string, number>>;
   subscription_prices: Record<string, number>;
+  bonus_table_yearly?: Record<string, Record<string, number>>;
+  subscription_prices_yearly?: Record<string, number>;
 }
 
 // ============================================================
@@ -451,50 +453,79 @@ export default function ReferralPage() {
         )}
 
         {activeTab === "table" && bonusTable && (
-          <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-slate-700/50 bg-slate-800/50">
-                  <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">訂閱方案</th>
-                  <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">方案價格</th>
-                  <th className="text-center text-xs font-medium text-amber-500 uppercase tracking-wider px-6 py-4">🥉 銅牌 (3%)</th>
-                  <th className="text-center text-xs font-medium text-slate-300 uppercase tracking-wider px-6 py-4">🥈 銀牌 (5%)</th>
-                  <th className="text-center text-xs font-medium text-yellow-400 uppercase tracking-wider px-6 py-4">🥇 金牌 (8%)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-700/50">
-                {Object.entries(bonusTable.bonus_table).map(([plan, bonuses]) => (
-                  <tr key={plan} className="hover:bg-slate-700/20 transition-colors">
-                    <td className="px-6 py-4">
-                      <span className="text-white font-medium">
-                        {plan === "basic" ? "入門方案" :
-                         plan === "pro" ? "標準方案" :
-                         plan === "enterprise" ? "企業方案" : plan}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-slate-400">
-                      NT${bonusTable.subscription_prices[plan]?.toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className="text-amber-400 font-semibold">{bonuses.bronze}</span>
-                      <span className="text-slate-500 text-sm"> 點</span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className="text-slate-200 font-semibold">{bonuses.silver}</span>
-                      <span className="text-slate-500 text-sm"> 點</span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className="text-yellow-400 font-semibold">{bonuses.gold}</span>
-                      <span className="text-slate-500 text-sm"> 點</span>
-                    </td>
+          <div className="space-y-6">
+            {/* 月繳方案獎金 */}
+            <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
+              <div className="px-6 py-3 border-b border-slate-700/50 bg-slate-800/80">
+                <h3 className="text-sm font-semibold text-white">月繳方案 · 推薦獎金</h3>
+              </div>
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-slate-700/50 bg-slate-800/50">
+                    <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">訂閱方案</th>
+                    <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">月繳價格</th>
+                    <th className="text-center text-xs font-medium text-amber-500 uppercase tracking-wider px-6 py-4">🥉 銅牌 (3%)</th>
+                    <th className="text-center text-xs font-medium text-slate-300 uppercase tracking-wider px-6 py-4">🥈 銀牌 (5%)</th>
+                    <th className="text-center text-xs font-medium text-yellow-400 uppercase tracking-wider px-6 py-4">🥇 金牌 (8%)</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-            
-            <div className="p-4 bg-slate-900/50 border-t border-slate-700/50">
+                </thead>
+                <tbody className="divide-y divide-slate-700/50">
+                  {Object.entries(bonusTable.bonus_table).map(([plan, bonuses]) => (
+                    <tr key={plan} className="hover:bg-slate-700/20 transition-colors">
+                      <td className="px-6 py-4">
+                        <span className="text-white font-medium">
+                          {plan === "basic" ? "入門方案" : plan === "pro" ? "標準方案" : plan === "enterprise" ? "企業方案" : plan}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-slate-400">NT${bonusTable.subscription_prices[plan]?.toLocaleString()}</td>
+                      <td className="px-6 py-4 text-center"><span className="text-amber-400 font-semibold">{bonuses.bronze}</span><span className="text-slate-500 text-sm"> 點</span></td>
+                      <td className="px-6 py-4 text-center"><span className="text-slate-200 font-semibold">{bonuses.silver}</span><span className="text-slate-500 text-sm"> 點</span></td>
+                      <td className="px-6 py-4 text-center"><span className="text-yellow-400 font-semibold">{bonuses.gold}</span><span className="text-slate-500 text-sm"> 點</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* 年繳方案獎金 */}
+            {bonusTable.bonus_table_yearly && Object.keys(bonusTable.bonus_table_yearly).length > 0 && bonusTable.subscription_prices_yearly && (
+              <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
+                <div className="px-6 py-3 border-b border-slate-700/50 bg-slate-800/80 flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-white">年繳方案 · 推薦獎金</h3>
+                  <span className="text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">省 20%</span>
+                </div>
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-slate-700/50 bg-slate-800/50">
+                      <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">訂閱方案</th>
+                      <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">年繳價格</th>
+                      <th className="text-center text-xs font-medium text-amber-500 uppercase tracking-wider px-6 py-4">🥉 銅牌 (3%)</th>
+                      <th className="text-center text-xs font-medium text-slate-300 uppercase tracking-wider px-6 py-4">🥈 銀牌 (5%)</th>
+                      <th className="text-center text-xs font-medium text-yellow-400 uppercase tracking-wider px-6 py-4">🥇 金牌 (8%)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-700/50">
+                    {Object.entries(bonusTable.bonus_table_yearly).map(([plan, bonuses]) => (
+                      <tr key={`yearly-${plan}`} className="hover:bg-slate-700/20 transition-colors">
+                        <td className="px-6 py-4">
+                          <span className="text-white font-medium">
+                            {plan === "basic" ? "入門方案" : plan === "pro" ? "標準方案" : plan === "enterprise" ? "企業方案" : plan}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-slate-400">NT${bonusTable.subscription_prices_yearly[plan]?.toLocaleString()}</td>
+                        <td className="px-6 py-4 text-center"><span className="text-amber-400 font-semibold">{bonuses.bronze}</span><span className="text-slate-500 text-sm"> 點</span></td>
+                        <td className="px-6 py-4 text-center"><span className="text-slate-200 font-semibold">{bonuses.silver}</span><span className="text-slate-500 text-sm"> 點</span></td>
+                        <td className="px-6 py-4 text-center"><span className="text-yellow-400 font-semibold">{bonuses.gold}</span><span className="text-slate-500 text-sm"> 點</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700/50">
               <p className="text-xs text-slate-500">
-                * 獎金點數可累積提領，滿 3,000 點（NT$300）即可申請提領現金
+                * 被推薦人訂閱月繳或年繳，您皆可依方案價格獲得對應比例獎金；獎金點數可累積提領，滿 3,000 點（NT$300）即可申請提領現金
               </p>
             </div>
           </div>

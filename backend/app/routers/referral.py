@@ -14,11 +14,13 @@ from app.database import get_db
 from app.models import User
 from app.routers.auth import get_current_user
 from app.services.referral_service import (
-    ReferralService, 
+    ReferralService,
     get_referral_service,
     PARTNER_TIERS,
     REFERRAL_BONUS_TABLE,
+    REFERRAL_BONUS_TABLE_YEARLY,
     SUBSCRIPTION_PRICES,
+    SUBSCRIPTION_PRICES_YEARLY,
 )
 
 router = APIRouter(prefix="/referral", tags=["推薦系統"])
@@ -89,6 +91,8 @@ class ReferralBonusTableResponse(BaseModel):
     partner_tiers: List[PartnerTierInfo]
     bonus_table: Dict[str, Dict[str, int]]
     subscription_prices: Dict[str, float]
+    bonus_table_yearly: Dict[str, Dict[str, int]] = {}
+    subscription_prices_yearly: Dict[str, float] = {}
 
 
 # ============================================================
@@ -165,6 +169,8 @@ def get_bonus_table():
         partner_tiers=tiers,
         bonus_table=REFERRAL_BONUS_TABLE,
         subscription_prices={k: float(v) for k, v in SUBSCRIPTION_PRICES.items()},
+        bonus_table_yearly=REFERRAL_BONUS_TABLE_YEARLY,
+        subscription_prices_yearly={k: float(v) for k, v in SUBSCRIPTION_PRICES_YEARLY.items()},
     )
 
 

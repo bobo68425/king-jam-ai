@@ -88,12 +88,20 @@ PARTNER_TIERS = {
     },
 }
 
-# 訂閱方案價格
+# 訂閱方案價格（月繳）
 SUBSCRIPTION_PRICES = {
     "free": Decimal("0"),
     "basic": Decimal("299"),
     "pro": Decimal("699"),
     "enterprise": Decimal("3699"),
+}
+
+# 訂閱方案年繳價格（約 8 折，20% 折扣）
+SUBSCRIPTION_PRICES_YEARLY = {
+    "free": Decimal("0"),
+    "basic": Decimal("2870"),   # 299 * 12 * 0.8
+    "pro": Decimal("6710"),    # 699 * 12 * 0.8
+    "enterprise": Decimal("35510"),  # 3699 * 12 * 0.8
 }
 
 
@@ -124,14 +132,14 @@ def calculate_referral_bonus(price: Decimal, partner_tier: str) -> Tuple[int, fl
     return bonus_credits, bonus_twd
 
 
-def _generate_bonus_table() -> Dict[str, Dict[str, int]]:
+def _generate_bonus_table(prices: Dict[str, Decimal]) -> Dict[str, Dict[str, int]]:
     """
     動態生成推薦獎金對照表
     
     計算公式：BONUS 點數 = 訂閱價格 × 分潤比例（取整數）
     """
     table = {}
-    for plan, price in SUBSCRIPTION_PRICES.items():
+    for plan, price in prices.items():
         if plan == "free" or price == 0:
             continue
         table[plan] = {}
@@ -141,8 +149,9 @@ def _generate_bonus_table() -> Dict[str, Dict[str, int]]:
     return table
 
 
-# 推薦獎金對照表（動態計算）
-REFERRAL_BONUS_TABLE = _generate_bonus_table()
+# 推薦獎金對照表（月繳 / 年繳）
+REFERRAL_BONUS_TABLE = _generate_bonus_table(SUBSCRIPTION_PRICES)
+REFERRAL_BONUS_TABLE_YEARLY = _generate_bonus_table(SUBSCRIPTION_PRICES_YEARLY)
 
 # 註冊獎勵（活動點數 PROMO，有時效性）
 REGISTRATION_BONUS = 100  # 新用戶註冊送的活動點數

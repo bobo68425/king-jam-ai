@@ -137,14 +137,15 @@ const PARTNER_CONFIG: Record<string, {
 const SUBSCRIPTION_CONFIG: Record<string, { 
   name: string;
   price: string;
+  priceYearly?: string;
   monthlyCredits: number;
   features: string[];
   color: string;
 }> = {
   free: { name: "免費方案", price: "免費", monthlyCredits: 0, features: ["基本功能", "一次性 200 點"], color: "slate" },
-  basic: { name: "入門方案", price: "NT$299/月", monthlyCredits: 0, features: ["基本功能", "無廣告"], color: "blue" },
-  pro: { name: "標準方案", price: "NT$699/月", monthlyCredits: 1000, features: ["進階功能", "每月 1000 點", "優先支援"], color: "purple" },
-  enterprise: { name: "企業方案", price: "NT$3699/月", monthlyCredits: 5000, features: ["完整功能", "每月 5000 點", "專屬客服", "API 存取"], color: "amber" },
+  basic: { name: "入門方案", price: "NT$299/月", priceYearly: "2,870", monthlyCredits: 0, features: ["基本功能", "無廣告"], color: "blue" },
+  pro: { name: "標準方案", price: "NT$699/月", priceYearly: "6,710", monthlyCredits: 1000, features: ["進階功能", "每月 1000 點", "優先支援"], color: "purple" },
+  enterprise: { name: "企業方案", price: "NT$3699/月", priceYearly: "35,510", monthlyCredits: 5000, features: ["完整功能", "每月 5000 點", "專屬客服", "API 存取"], color: "amber" },
   admin: { name: "管理員", price: "無限制", monthlyCredits: 99999, features: ["完整功能", "系統管理", "無限點數"], color: "red" },
 };
 
@@ -2327,6 +2328,11 @@ export default function ProfilePage() {
                       </span>
                     )}
                   </div>
+                  {plan.priceYearly && (
+                    <p className="text-sm text-emerald-400/90 mb-2">
+                      年繳 NT${plan.priceYearly} <span className="text-emerald-300">省 20%</span>
+                    </p>
+                  )}
                   <div className="flex flex-wrap gap-2">
                     {plan.features.map((feature, i) => (
                       <span key={i} className="inline-flex items-center gap-1 px-2 py-1 bg-slate-800/50 rounded text-xs text-slate-300">
@@ -2340,10 +2346,20 @@ export default function ProfilePage() {
             })()}
 
             {profile?.subscription_plan === "free" && (
-              <a href="/dashboard/credits"
+              <a href="/dashboard/pricing"
                 className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl font-medium transition-all shadow-lg shadow-purple-500/20">
                 <Zap className="w-4 h-4" />
                 升級方案
+                <ArrowRight className="w-4 h-4" />
+              </a>
+            )}
+            {profile?.subscription_plan && profile.subscription_plan !== "free" && profile.subscription_plan !== "admin" && (
+              <a
+                href={`/dashboard/pricing?plan=${profile.subscription_plan}&cycle=yearly`}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 mt-2 bg-slate-700/80 hover:bg-slate-600 text-slate-200 rounded-xl font-medium transition-all border border-slate-600"
+              >
+                <Crown className="w-4 h-4 text-amber-400" />
+                改為年繳更省 20%
                 <ArrowRight className="w-4 h-4" />
               </a>
             )}

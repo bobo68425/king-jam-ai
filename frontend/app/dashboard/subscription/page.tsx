@@ -411,6 +411,11 @@ export default function SubscriptionPage() {
                   : `NT$${subscription?.price?.toLocaleString()} / 月`
                 }
               </p>
+              {currentPlanConfig.priceYearly != null && (
+                <p className="text-sm text-emerald-400/90 mt-1">
+                  年繳 NT${currentPlanConfig.priceYearly.toLocaleString()} 省 {YEARLY_DISCOUNT_PERCENT}%
+                </p>
+              )}
               {subscription?.monthly_credits && subscription.monthly_credits > 0 && (
                 <p className="text-sm text-emerald-400 mt-1">
                   每月獲得 {subscription.monthly_credits.toLocaleString()} 點
@@ -422,6 +427,12 @@ export default function SubscriptionPage() {
           <div className="flex flex-col sm:flex-row gap-3">
             {subscription?.current_plan !== "free" && (
               <>
+                <a
+                  href={`/dashboard/pricing?plan=${subscription?.current_plan}&cycle=yearly`}
+                  className="px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded-xl text-sm transition-colors flex items-center justify-center gap-2 border border-amber-500/30"
+                >
+                  改為年繳更省
+                </a>
                 <button
                   onClick={handleToggleAutoRenew}
                   className="px-4 py-2 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-xl text-sm transition-colors flex items-center justify-center gap-2"
