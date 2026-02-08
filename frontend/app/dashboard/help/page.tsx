@@ -247,6 +247,38 @@ const faqCategories = [
   },
 ];
 
+// 資源中心連結
+const resourceLinks = [
+  {
+    icon: Book,
+    label: "使用手冊",
+    desc: "完整圖文操作指南",
+    href: "/dashboard/help/manual",
+    color: "from-blue-500 to-indigo-500",
+  },
+  {
+    icon: Video,
+    label: "教學影片",
+    desc: "12 部影片從入門到進階",
+    href: "/dashboard/help/tutorials",
+    color: "from-purple-500 to-pink-500",
+  },
+  {
+    icon: FileText,
+    label: "API 文件",
+    desc: "企業版 RESTful API",
+    href: "/dashboard/help/api",
+    color: "from-emerald-500 to-green-500",
+  },
+  {
+    icon: Users,
+    label: "社群討論",
+    desc: "加入創作者社群交流",
+    href: "/dashboard/help/community",
+    color: "from-amber-500 to-orange-500",
+  },
+];
+
 // 快速功能導覽
 const featureGuides = [
   {
@@ -365,6 +397,34 @@ export default function HelpPage() {
           </p>
         )}
       </div>
+
+      {/* Resource Center */}
+      {!searchQuery && (
+        <div className="max-w-3xl mx-auto">
+          <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <Book className="w-5 h-5 text-indigo-400" />
+            學習資源
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {resourceLinks.map((item, idx) => {
+              const Icon = item.icon;
+              return (
+                <a
+                  key={idx}
+                  href={item.href}
+                  className="flex flex-col items-center gap-2 p-4 rounded-xl bg-slate-800/50 border border-slate-700/50 hover:border-slate-600 hover:bg-slate-800 transition-all group"
+                >
+                  <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${item.color} flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform`}>
+                    <Icon className="w-5 h-5 text-white" />
+                  </div>
+                  <span className="text-sm font-medium text-white">{item.label}</span>
+                  <span className="text-xs text-slate-500 text-center leading-tight">{item.desc}</span>
+                </a>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Quick Feature Guide */}
       {!searchQuery && (
