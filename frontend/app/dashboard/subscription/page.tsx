@@ -265,6 +265,9 @@ export default function SubscriptionPage() {
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
   const [paymentHistory, setPaymentHistory] = useState<PaymentHistory[]>([]);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [checkoutPlan, setCheckoutPlan] = useState<typeof PLANS[0] | null>(null);
+  const [checkoutCycle, setCheckoutCycle] = useState<"monthly" | "yearly">("monthly");
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
 
   useEffect(() => {
     fetchSubscriptionData();
@@ -341,16 +344,49 @@ export default function SubscriptionPage() {
     const plan = PLANS.find(p => p.id === planId);
     if (!plan) return;
 
-    // 如果是降級到免費版
+    // 降級到免費版
     if (planId === "free") {
       setShowCancelDialog(true);
       return;
     }
 
-    // 升級或變更方案 - 導向購買頁面（可帶 cycle=yearly 預選年繳）
-    toast.info("即將前往購買頁面...");
-    const params = new URLSearchParams({ plan: planId });
-    window.location.href = `/dashboard/pricing?${params.toString()}`;
+    // 升級：直接在本頁彈出結帳對話框
+    setCheckoutPlan(plan);
+    setCheckoutCycle("monthly");
+  };
+
+  const handleCheckout = async () => {
+    if (!checkoutPlan) return;
+    setCheckoutLoading(true);
+    try {
+      const isYearly = checkoutCycle === "yearly";
+      const res = await api.post("/payment/orders", {
+        order_type: "subscription",
+        item_code: checkoutPlan.id,
+        quantity: isYearly ? 1 : 1,
+        billing_cycle: checkoutCycle,
+      });
+
+      if (res.data.success) {
+        const provider = res.data.payment_provider || "ecpay";
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        if (provider === "stripe" && res.data.checkout_url) {
+          window.location.href = res.data.checkout_url;
+        } else if (provider === "ecpay" || res.data.form_html) {
+          window.location.href = `${apiUrl}/payment/ecpay/checkout/${res.data.order_no}`;
+        } else if (provider === "newebpay" && res.data.form_html) {
+          window.location.href = `${apiUrl}/payment/newebpay/checkout/${res.data.order_no}`;
+        } else {
+          toast.error("無法取得付款頁面");
+        }
+      } else {
+        toast.error(res.data.error || "建立訂單失敗");
+      }
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || "建立訂單失敗，請稍後再試");
+    } finally {
+      setCheckoutLoading(false);
+    }
   };
 
   const handleCancelSubscription = async () => {
@@ -598,6 +634,7 @@ export default function SubscriptionPage() {
       </div>
 
       {/* Cancel Subscription Dialog */}
+      {/* Cancel Subscription Dialog */}
       {showCancelDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="bg-gradient-to-b from-slate-800 to-slate-900 rounded-2xl w-full max-w-md border border-slate-700/50 shadow-2xl">
@@ -641,6 +678,150 @@ export default function SubscriptionPage() {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Checkout Dialog - 直接在訂閱管理頁結帳 */}
+      {checkoutPlan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-gradient-to-b from-slate-800 to-slate-900 rounded-2xl w-full max-w-lg border border-slate-700/50 shadow-2xl">
+            <div className="p-6">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-semibold text-white">確認升級方案</h3>
+                <button
+                  onClick={() => setCheckoutPlan(null)}
+                  className="text-slate-400 hover:text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Plan Info */}
+              <div className="p-4 bg-slate-700/50 rounded-xl border border-slate-600/50 mb-6">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                    checkoutPlan.color === "blue" ? "bg-blue-500/20" :
+                    checkoutPlan.color === "purple" ? "bg-purple-500/20" :
+                    "bg-orange-500/20"
+                  }`}>
+                    <checkoutPlan.icon className={`w-5 h-5 ${
+                      checkoutPlan.color === "blue" ? "text-blue-400" :
+                      checkoutPlan.color === "purple" ? "text-purple-400" :
+                      "text-orange-400"
+                    }`} />
+                  </div>
+                  <div>
+                    <h4 className="text-white font-semibold">{checkoutPlan.name}</h4>
+                    <p className="text-slate-400 text-sm">{checkoutPlan.description}</p>
+                  </div>
+                </div>
+                {checkoutPlan.monthlyCredits > 0 && (
+                  <p className="text-sm text-emerald-400">
+                    <Gift className="w-4 h-4 inline mr-1" />
+                    每月獲得 {checkoutPlan.monthlyCredits.toLocaleString()} 點
+                  </p>
+                )}
+              </div>
+
+              {/* Billing Cycle Toggle */}
+              {checkoutPlan.priceYearly && (
+                <div className="mb-6">
+                  <p className="text-sm text-slate-400 mb-3">選擇計費方式</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => setCheckoutCycle("monthly")}
+                      className={`p-4 rounded-xl border-2 transition-all text-left ${
+                        checkoutCycle === "monthly"
+                          ? "border-indigo-500 bg-indigo-500/10"
+                          : "border-slate-600 bg-slate-700/30 hover:border-slate-500"
+                      }`}
+                    >
+                      <div className="text-white font-semibold">月繳</div>
+                      <div className="text-2xl font-bold text-white mt-1">
+                        NT${checkoutPlan.price.toLocaleString()}
+                        <span className="text-sm font-normal text-slate-400">/月</span>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => setCheckoutCycle("yearly")}
+                      className={`p-4 rounded-xl border-2 transition-all text-left relative ${
+                        checkoutCycle === "yearly"
+                          ? "border-emerald-500 bg-emerald-500/10"
+                          : "border-slate-600 bg-slate-700/30 hover:border-slate-500"
+                      }`}
+                    >
+                      <span className="absolute -top-2.5 right-3 px-2 py-0.5 bg-emerald-500 text-white text-xs font-bold rounded-full">
+                        省 {YEARLY_DISCOUNT_PERCENT}%
+                      </span>
+                      <div className="text-white font-semibold">年繳</div>
+                      <div className="text-2xl font-bold text-white mt-1">
+                        NT${checkoutPlan.priceYearly.toLocaleString()}
+                        <span className="text-sm font-normal text-slate-400">/年</span>
+                      </div>
+                      <div className="text-xs text-emerald-400 mt-1">
+                        約 NT${Math.round(checkoutPlan.priceYearly / 12).toLocaleString()}/月
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Summary */}
+              <div className="p-4 bg-slate-700/30 rounded-xl mb-6 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-400">方案</span>
+                  <span className="text-white">{checkoutPlan.name}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-400">計費方式</span>
+                  <span className="text-white">{checkoutCycle === "yearly" ? "年繳" : "月繳"}</span>
+                </div>
+                <div className="border-t border-slate-600/50 pt-2 mt-2 flex justify-between">
+                  <span className="text-white font-semibold">應付金額</span>
+                  <span className="text-xl font-bold text-white">
+                    NT${(checkoutCycle === "yearly" && checkoutPlan.priceYearly
+                      ? checkoutPlan.priceYearly
+                      : checkoutPlan.price
+                    ).toLocaleString()}
+                  </span>
+                </div>
+                {checkoutCycle === "yearly" && checkoutPlan.priceYearly && (
+                  <div className="text-xs text-emerald-400 text-right">
+                    比月繳省 NT${(checkoutPlan.price * 12 - checkoutPlan.priceYearly).toLocaleString()}
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setCheckoutPlan(null)}
+                  className="flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-medium transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleCheckout}
+                  disabled={checkoutLoading}
+                  className="flex-1 py-3 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white rounded-xl font-semibold transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/25"
+                >
+                  {checkoutLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <CreditCard className="w-4 h-4" />
+                      前往付款
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-500 text-center mt-4">
+                付款後立即生效，系統將自動升級您的帳戶權限
+              </p>
             </div>
           </div>
         </div>
