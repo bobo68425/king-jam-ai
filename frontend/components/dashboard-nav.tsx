@@ -59,11 +59,11 @@ const navItems = [
     items: [
       { href: "/dashboard/profile", icon: User, label: "會員資料" },
       { href: "/dashboard/notifications", icon: Bell, label: "通知中心" },
-      { href: "/dashboard/subscription", icon: Crown, label: "訂閱管理" },
       { href: "/dashboard/verification", icon: Shield, label: "身份認證", isNew: true },
+      { href: "/dashboard/subscription", icon: Crown, label: "訂閱管理" },
+      { href: "/dashboard/credits", icon: Wallet, label: "點數錢包" },
       { href: "/dashboard/pricing", icon: Coins, label: "購買點數" },
       { href: "/dashboard/referral", icon: Gift, label: "推薦獎勵" },
-      { href: "/dashboard/credits", icon: Wallet, label: "點數錢包" },
       { href: "/dashboard/history", icon: History, label: "生成紀錄" },
       { href: "/dashboard/settings", icon: Settings, label: "帳號設定" },
       { href: "/dashboard/settings/brand-kit", icon: Palette, label: "品牌資產包" },
