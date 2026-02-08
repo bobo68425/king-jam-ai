@@ -78,22 +78,80 @@ def main():
             conn.commit()
             print("  ✅ 年繳欄位與預設值已確認")
 
-            # ── 4. orders 表 NewebPay 欄位 ──
+            # ── 4. orders 表（完整建立） ──
             conn.execute(text("""
-                DO $$
-                BEGIN
-                    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='orders') THEN
-                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='orders' AND column_name='newebpay_merchant_order_no') THEN
-                            ALTER TABLE orders ADD COLUMN newebpay_merchant_order_no VARCHAR(30);
-                        END IF;
-                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='orders' AND column_name='newebpay_trade_no') THEN
-                            ALTER TABLE orders ADD COLUMN newebpay_trade_no VARCHAR(30);
-                        END IF;
-                    END IF;
-                END $$;
+                CREATE TABLE IF NOT EXISTS orders (
+                    id SERIAL PRIMARY KEY,
+                    order_no VARCHAR(50) NOT NULL UNIQUE,
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    order_type VARCHAR(20) NOT NULL,
+                    item_code VARCHAR(50) NOT NULL,
+                    item_name VARCHAR(100) NOT NULL,
+                    item_description TEXT,
+                    quantity INTEGER DEFAULT 1,
+                    unit_price NUMERIC(10,2) NOT NULL,
+                    total_amount NUMERIC(10,2) NOT NULL,
+                    currency VARCHAR(3) DEFAULT 'TWD',
+                    subscription_months INTEGER,
+                    credits_amount INTEGER,
+                    bonus_credits INTEGER,
+                    payment_provider VARCHAR(20),
+                    payment_method VARCHAR(50),
+                    provider_order_id VARCHAR(100),
+                    provider_transaction_id VARCHAR(100),
+                    provider_response JSONB,
+                    stripe_payment_intent_id VARCHAR(100),
+                    stripe_checkout_session_id VARCHAR(100),
+                    stripe_subscription_id VARCHAR(100),
+                    ecpay_merchant_trade_no VARCHAR(20),
+                    ecpay_trade_no VARCHAR(20),
+                    newebpay_merchant_order_no VARCHAR(30),
+                    newebpay_trade_no VARCHAR(30),
+                    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                    paid_at TIMESTAMPTZ,
+                    completed_at TIMESTAMPTZ,
+                    refund_amount NUMERIC(10,2),
+                    refund_reason TEXT,
+                    refunded_at TIMESTAMPTZ,
+                    referrer_id INTEGER REFERENCES users(id),
+                    referral_bonus NUMERIC(10,2),
+                    referral_processed BOOLEAN DEFAULT FALSE,
+                    ip_address VARCHAR(45),
+                    user_agent TEXT,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ,
+                    expires_at TIMESTAMPTZ
+                );
             """))
             conn.commit()
-            print("  ✅ orders NewebPay 欄位已確認")
+            for idx_sql in [
+                "CREATE INDEX IF NOT EXISTS idx_order_user ON orders(user_id);",
+                "CREATE INDEX IF NOT EXISTS idx_order_status ON orders(status);",
+                "CREATE INDEX IF NOT EXISTS idx_order_payment_provider ON orders(payment_provider);",
+                "CREATE INDEX IF NOT EXISTS idx_order_created ON orders(created_at);",
+            ]:
+                conn.execute(text(idx_sql))
+            conn.commit()
+            print("  ✅ orders 表已確認")
+
+            # ── 5. payment_logs 表 ──
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS payment_logs (
+                    id SERIAL PRIMARY KEY,
+                    order_id INTEGER NOT NULL REFERENCES orders(id),
+                    action VARCHAR(50) NOT NULL,
+                    status_before VARCHAR(20),
+                    status_after VARCHAR(20),
+                    provider VARCHAR(20),
+                    provider_response JSONB,
+                    message TEXT,
+                    extra_data JSONB,
+                    ip_address VARCHAR(45),
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+            """))
+            conn.commit()
+            print("  ✅ payment_logs 表已確認")
 
         print("✅ 全部遷移完成")
     except Exception as e:

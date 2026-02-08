@@ -97,7 +97,8 @@ def _auto_init_db():
     from sqlalchemy import text
     try:
         db = SessionLocal()
-        # 建立 subscription_plans 表（若不存在）
+
+        # ── 1. subscription_plans 表 ──
         db.execute(text("""
             CREATE TABLE IF NOT EXISTS subscription_plans (
                 id SERIAL PRIMARY KEY,
@@ -118,7 +119,8 @@ def _auto_init_db():
             );
         """))
         db.commit()
-        # 寫入預設訂閱方案（若不存在）
+
+        # 寫入預設訂閱方案
         db.execute(text("""
             INSERT INTO subscription_plans (plan_code, name, tier, price_monthly, monthly_credits, features, is_popular, sort_order, is_active, description)
             VALUES
@@ -129,6 +131,7 @@ def _auto_init_db():
             ON CONFLICT (plan_code) DO NOTHING;
         """))
         db.commit()
+
         # 年繳預設值
         db.execute(text("""
             UPDATE subscription_plans
@@ -136,8 +139,94 @@ def _auto_init_db():
             WHERE plan_code IN ('basic','pro','enterprise') AND (price_yearly IS NULL OR yearly_discount_percent IS NULL);
         """))
         db.commit()
-        db.close()
         print("[Startup] ✅ subscription_plans 已初始化")
+
+        # ── 2. orders 表 ──
+        db.execute(text("""
+            CREATE TABLE IF NOT EXISTS orders (
+                id SERIAL PRIMARY KEY,
+                order_no VARCHAR(50) NOT NULL UNIQUE,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                order_type VARCHAR(20) NOT NULL,
+                item_code VARCHAR(50) NOT NULL,
+                item_name VARCHAR(100) NOT NULL,
+                item_description TEXT,
+                quantity INTEGER DEFAULT 1,
+                unit_price NUMERIC(10,2) NOT NULL,
+                total_amount NUMERIC(10,2) NOT NULL,
+                currency VARCHAR(3) DEFAULT 'TWD',
+                subscription_months INTEGER,
+                credits_amount INTEGER,
+                bonus_credits INTEGER,
+                payment_provider VARCHAR(20),
+                payment_method VARCHAR(50),
+                provider_order_id VARCHAR(100),
+                provider_transaction_id VARCHAR(100),
+                provider_response JSONB,
+                stripe_payment_intent_id VARCHAR(100),
+                stripe_checkout_session_id VARCHAR(100),
+                stripe_subscription_id VARCHAR(100),
+                ecpay_merchant_trade_no VARCHAR(20),
+                ecpay_trade_no VARCHAR(20),
+                newebpay_merchant_order_no VARCHAR(30),
+                newebpay_trade_no VARCHAR(30),
+                status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                paid_at TIMESTAMPTZ,
+                completed_at TIMESTAMPTZ,
+                refund_amount NUMERIC(10,2),
+                refund_reason TEXT,
+                refunded_at TIMESTAMPTZ,
+                referrer_id INTEGER REFERENCES users(id),
+                referral_bonus NUMERIC(10,2),
+                referral_processed BOOLEAN DEFAULT FALSE,
+                ip_address VARCHAR(45),
+                user_agent TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ,
+                expires_at TIMESTAMPTZ
+            );
+        """))
+        db.commit()
+
+        # orders 索引
+        for idx_sql in [
+            "CREATE INDEX IF NOT EXISTS idx_order_user ON orders(user_id);",
+            "CREATE INDEX IF NOT EXISTS idx_order_status ON orders(status);",
+            "CREATE INDEX IF NOT EXISTS idx_order_payment_provider ON orders(payment_provider);",
+            "CREATE INDEX IF NOT EXISTS idx_order_created ON orders(created_at);",
+            "CREATE UNIQUE INDEX IF NOT EXISTS ix_orders_order_no ON orders(order_no);",
+        ]:
+            db.execute(text(idx_sql))
+        db.commit()
+        print("[Startup] ✅ orders 表已初始化")
+
+        # ── 3. payment_logs 表 ──
+        db.execute(text("""
+            CREATE TABLE IF NOT EXISTS payment_logs (
+                id SERIAL PRIMARY KEY,
+                order_id INTEGER NOT NULL REFERENCES orders(id),
+                action VARCHAR(50) NOT NULL,
+                status_before VARCHAR(20),
+                status_after VARCHAR(20),
+                provider VARCHAR(20),
+                provider_response JSONB,
+                message TEXT,
+                extra_data JSONB,
+                ip_address VARCHAR(45),
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+        """))
+        db.commit()
+
+        for idx_sql in [
+            "CREATE INDEX IF NOT EXISTS idx_payment_log_order ON payment_logs(order_id);",
+            "CREATE INDEX IF NOT EXISTS idx_payment_log_created ON payment_logs(created_at);",
+        ]:
+            db.execute(text(idx_sql))
+        db.commit()
+        print("[Startup] ✅ payment_logs 表已初始化")
+
+        db.close()
     except Exception as e:
         print(f"[Startup] ⚠️ DB 自動初始化跳過: {e}")
 
@@ -154,12 +243,14 @@ def health_check():
 
 @app.get("/health/init-db")
 def init_db_endpoint():
-    """手動觸發 DB 初始化（建表 + seed 訂閱方案）"""
+    """手動觸發 DB 初始化（建表 + seed）"""
     from app.database import SessionLocal
     from sqlalchemy import text
     results = []
     try:
         db = SessionLocal()
+
+        # subscription_plans
         db.execute(text("""
             CREATE TABLE IF NOT EXISTS subscription_plans (
                 id SERIAL PRIMARY KEY,
@@ -180,7 +271,7 @@ def init_db_endpoint():
             );
         """))
         db.commit()
-        results.append("table created or exists")
+        results.append("subscription_plans ok")
 
         db.execute(text("""
             INSERT INTO subscription_plans (plan_code, name, tier, price_monthly, monthly_credits, features, is_popular, sort_order, is_active, description)
@@ -200,12 +291,89 @@ def init_db_endpoint():
             WHERE plan_code IN ('basic','pro','enterprise') AND (price_yearly IS NULL OR yearly_discount_percent IS NULL);
         """))
         db.commit()
-        results.append("yearly prices set")
+        results.append("yearly prices ok")
+
+        # orders
+        db.execute(text("""
+            CREATE TABLE IF NOT EXISTS orders (
+                id SERIAL PRIMARY KEY,
+                order_no VARCHAR(50) NOT NULL UNIQUE,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                order_type VARCHAR(20) NOT NULL,
+                item_code VARCHAR(50) NOT NULL,
+                item_name VARCHAR(100) NOT NULL,
+                item_description TEXT,
+                quantity INTEGER DEFAULT 1,
+                unit_price NUMERIC(10,2) NOT NULL,
+                total_amount NUMERIC(10,2) NOT NULL,
+                currency VARCHAR(3) DEFAULT 'TWD',
+                subscription_months INTEGER,
+                credits_amount INTEGER,
+                bonus_credits INTEGER,
+                payment_provider VARCHAR(20),
+                payment_method VARCHAR(50),
+                provider_order_id VARCHAR(100),
+                provider_transaction_id VARCHAR(100),
+                provider_response JSONB,
+                stripe_payment_intent_id VARCHAR(100),
+                stripe_checkout_session_id VARCHAR(100),
+                stripe_subscription_id VARCHAR(100),
+                ecpay_merchant_trade_no VARCHAR(20),
+                ecpay_trade_no VARCHAR(20),
+                newebpay_merchant_order_no VARCHAR(30),
+                newebpay_trade_no VARCHAR(30),
+                status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                paid_at TIMESTAMPTZ,
+                completed_at TIMESTAMPTZ,
+                refund_amount NUMERIC(10,2),
+                refund_reason TEXT,
+                refunded_at TIMESTAMPTZ,
+                referrer_id INTEGER REFERENCES users(id),
+                referral_bonus NUMERIC(10,2),
+                referral_processed BOOLEAN DEFAULT FALSE,
+                ip_address VARCHAR(45),
+                user_agent TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ,
+                expires_at TIMESTAMPTZ
+            );
+        """))
+        db.commit()
+        for idx_sql in [
+            "CREATE INDEX IF NOT EXISTS idx_order_user ON orders(user_id);",
+            "CREATE INDEX IF NOT EXISTS idx_order_status ON orders(status);",
+            "CREATE INDEX IF NOT EXISTS idx_order_payment_provider ON orders(payment_provider);",
+            "CREATE INDEX IF NOT EXISTS idx_order_created ON orders(created_at);",
+        ]:
+            db.execute(text(idx_sql))
+        db.commit()
+        results.append("orders ok")
+
+        # payment_logs
+        db.execute(text("""
+            CREATE TABLE IF NOT EXISTS payment_logs (
+                id SERIAL PRIMARY KEY,
+                order_id INTEGER NOT NULL REFERENCES orders(id),
+                action VARCHAR(50) NOT NULL,
+                status_before VARCHAR(20),
+                status_after VARCHAR(20),
+                provider VARCHAR(20),
+                provider_response JSONB,
+                message TEXT,
+                extra_data JSONB,
+                ip_address VARCHAR(45),
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+        """))
+        db.commit()
+        results.append("payment_logs ok")
 
         row = db.execute(text("SELECT count(*) FROM subscription_plans")).fetchone()
-        count = row[0] if row else 0
+        plan_count = row[0] if row else 0
+        row2 = db.execute(text("SELECT count(*) FROM orders")).fetchone()
+        order_count = row2[0] if row2 else 0
         db.close()
-        return {"status": "ok", "actions": results, "total_plans": count}
+        return {"status": "ok", "actions": results, "total_plans": plan_count, "total_orders": order_count}
     except Exception as e:
         return {"status": "error", "actions": results, "error": str(e)}
 

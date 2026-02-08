@@ -383,7 +383,10 @@ export default function SubscriptionPage() {
         toast.error(res.data.error || "建立訂單失敗");
       }
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || "建立訂單失敗，請稍後再試");
+      const detail = error?.response?.data?.detail;
+      const msg = typeof detail === "string" ? detail : error?.message || "建立訂單失敗，請稍後再試";
+      console.error("Checkout error:", error?.response?.data || error);
+      toast.error(msg);
     } finally {
       setCheckoutLoading(false);
     }
