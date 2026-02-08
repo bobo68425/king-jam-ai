@@ -15,7 +15,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { getQuickFingerprint } from "@/lib/fingerprint";
 import { toast } from "sonner";
 import { Loader2, Mail, Lock, AlertCircle, KeyRound, HelpCircle } from "lucide-react";
 
@@ -88,57 +87,13 @@ export default function LoginPage() {
     setRiskWarning(null);
     
     try {
-      // 收集裝置指紋（用於風險偵測）
-      let fingerprint = null;
-      let fingerprintData = null;
-      
-      try {
-        const fp = await getQuickFingerprint();
-        fingerprint = fp.hash;
-        fingerprintData = fp.data;
-      } catch (fpError) {
-        console.warn("無法收集裝置指紋:", fpError);
-        // 指紋收集失敗不影響登入
-      }
-
-      // 嘗試使用帶指紋的登入 API
-      try {
-        const res = await api.post("/auth/login-with-fingerprint", {
-          email,
-          password,
-          fingerprint,
-          fingerprint_data: fingerprintData,
-        });
-
-        // 儲存 Token
-        localStorage.setItem("token", res.data.access_token);
-        
-        // 檢查風險警告
-        if (res.data.risk_warning) {
-          setRiskWarning(res.data.risk_warning);
-          // 延遲 4 秒跳轉，讓用戶看到警告
-          setTimeout(() => {
-            router.push("/dashboard");
-          }, 4000);
-        } else {
-          router.push("/dashboard");
-        }
-        
-        return;
-      } catch (fpLoginError: any) {
-        // 如果帶指紋的登入失敗，降級到傳統登入
-        if (fpLoginError.response?.status !== 404) {
-          throw fpLoginError;
-        }
-      }
-      
-      // 降級：使用傳統登入 API (Form Data 格式)
+      // 優先使用簡單登入 API（較快、較穩定，避免指紋/詐騙偵測造成逾時）
       const formData = new FormData();
       formData.append("username", email);
       formData.append("password", password);
 
       const res = await api.post("/auth/login", formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { "Content-Type": "multipart/form-data" },
       });
 
       // 儲存 Token

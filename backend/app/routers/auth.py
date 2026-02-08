@@ -254,21 +254,12 @@ def login_with_fingerprint(
         data={"sub": user.email}, expires_delta=access_token_expires
     )
     
-    # 發送登入安全通知
+    # 發送登入安全通知（不呼叫外部 IP 查詢，避免登入延遲）
     try:
         from app.routers.notifications import create_security_notification
         from datetime import datetime
         
-        # 嘗試獲取位置資訊
         location = "未知位置"
-        try:
-            from app.services.geo_service import get_location_by_ip
-            location_info = get_location_by_ip(client_ip)
-            if location_info:
-                location = f"{location_info.get('city', '')} {location_info.get('country', '')}".strip() or "未知位置"
-        except:
-            pass
-        
         create_security_notification(
             db=db,
             user_id=user.id,
