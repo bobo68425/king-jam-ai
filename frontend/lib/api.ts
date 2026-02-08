@@ -3,9 +3,10 @@ import axios from 'axios';
 // API 基礎網址（支援環境變數配置）
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-// 建立 axios 實例
+// 建立 axios 實例（登入等請求若後端無回應，避免一直轉圈）
 const api = axios.create({
   baseURL: API_BASE_URL,
+  timeout: 20000,
   headers: {
     'Content-Type': 'application/json',
   },

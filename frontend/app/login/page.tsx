@@ -148,7 +148,21 @@ export default function LoginPage() {
     } catch (error: any) {
       const errorDetail = error.response?.data?.detail;
       const statusCode = error.response?.status;
-      
+      const hasResponse = error.response != null;
+
+      // 無法連線（逾時、網路錯誤、CORS、後端未回應）
+      if (!hasResponse) {
+        const msg =
+          error.code === "ECONNABORTED"
+            ? "連線逾時，請檢查網路或稍後再試"
+            : error.code === "ERR_NETWORK"
+              ? "無法連線至伺服器，請檢查網路或稍後再試"
+              : (error.message || "無法連線，請稍後再試");
+        toast.error(msg);
+        console.error("Login request failed (no response):", error);
+        return;
+      }
+
       // 檢查是否為社交登入帳號
       if (errorDetail?.type === "social_login_required") {
         const provider = errorDetail.provider;
@@ -171,10 +185,19 @@ export default function LoginPage() {
         setShowErrorDialog(true);
         return;
       }
-      
-      const errorMsg = typeof errorDetail === "string" ? errorDetail : "登入失敗，請稍後再試";
+
+      // 後端回傳的錯誤訊息（可能是字串或陣列）
+      let errorMsg = "登入失敗，請稍後再試";
+      if (typeof errorDetail === "string") {
+        errorMsg = errorDetail;
+      } else if (Array.isArray(errorDetail) && errorDetail.length > 0) {
+        const first = errorDetail[0];
+        errorMsg = first?.msg ?? first?.message ?? JSON.stringify(first);
+      } else if (errorDetail && typeof errorDetail === "object" && errorDetail.message) {
+        errorMsg = errorDetail.message;
+      }
       toast.error(errorMsg);
-      console.error(error);
+      console.error("Login error:", error);
     } finally {
       setIsLoading(false);
     }
