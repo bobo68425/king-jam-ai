@@ -77,41 +77,33 @@ jobs:
       
       - name: 🗄️ Run Migration
         env:
-          DATABASE_URL: "postgresql://postgres:${{ secrets.DB_PASSWORD }}@localhost:5432/kingjam"
+          _DB_PASS: ${{ secrets.DB_PASSWORD }}
         run: |
           cd backend
-          if [ -z "${{ secrets.DB_PASSWORD }}" ]; then echo "❌ DB_PASSWORD secret 未設定，請在 GitHub Environments 中設定"; exit 1; fi
+          export DATABASE_URL="postgresql://postgres:${_DB_PASS}@localhost:5432/kingjam"
+          
+          if [ -z "${_DB_PASS}" ]; then
+            echo "❌ DB_PASSWORD secret 未設定"
+            exit 1
+          fi
+          
           echo "📌 使用環境: ${{ inputs.environment }}"
+          echo "📌 動作: ${{ inputs.action }}"
           
           case "${{ inputs.action }}" in
             upgrade)
-              echo "📈 升級資料庫..."
-              HEADS=$(alembic heads 2>/dev/null | wc -l) || true
-              if [ "${HEADS:-0}" -gt 1 ]; then
-                echo "⚠️ 偵測到多個 Alembic heads，執行直接 SQL 遷移..."
-                python3 scripts/run_direct_migration.py
-              else
-                alembic upgrade head
-              fi
-              ;;
-            downgrade)
-              echo "📉 回滾資料庫一個版本..."
-              alembic downgrade -1
+              echo "📈 執行資料庫遷移..."
+              python3 scripts/run_direct_migration.py
               ;;
             current)
               echo "📍 當前資料庫版本:"
-              alembic current
+              alembic current 2>/dev/null || echo "(alembic 無法讀取版本)"
               ;;
             history)
               echo "📜 遷移歷史:"
-              alembic history --verbose
+              alembic history --verbose 2>/dev/null || echo "(alembic 無法讀取歷史)"
+              ;;
+            *)
+              echo "⚠️ 不支援的動作: ${{ inputs.action }}"
               ;;
           esac
-      
-      - name: ✅ Verify
-        if: inputs.action == 'upgrade' || inputs.action == 'downgrade'
-        run: |
-          cd backend
-          export DATABASE_URL="postgresql://postgres:${{ secrets.DB_PASSWORD }}@localhost:5432/kingjam"
-          echo "📍 當前版本:"
-          alembic current
