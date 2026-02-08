@@ -45,11 +45,16 @@ interface PaymentHistory {
 // Plan Configurations
 // ============================================================
 
+// 年繳折扣 20%（約 2 個月免費）
+const YEARLY_DISCOUNT_PERCENT = 20;
+const yearlyPrice = (monthly: number) => Math.round(monthly * 12 * (1 - YEARLY_DISCOUNT_PERCENT / 100));
+
 const PLANS = [
   {
     id: "free",
     name: "免費版",
     price: 0,
+    priceYearly: null as number | null,
     period: "永久免費",
     description: "適合個人嘗試體驗",
     monthlyCredits: 0,
@@ -70,6 +75,7 @@ const PLANS = [
     id: "basic",
     name: "入門版",
     price: 299,
+    priceYearly: yearlyPrice(299),
     period: "每月",
     description: "適合輕度使用者",
     monthlyCredits: 0,
@@ -90,6 +96,7 @@ const PLANS = [
     id: "pro",
     name: "專業版",
     price: 699,
+    priceYearly: yearlyPrice(699),
     period: "每月",
     description: "適合自媒體創作者",
     monthlyCredits: 1000,
@@ -111,6 +118,7 @@ const PLANS = [
     id: "enterprise",
     name: "企業版",
     price: 3699,
+    priceYearly: yearlyPrice(3699),
     period: "每月",
     description: "適合品牌與團隊",
     monthlyCredits: 5000,
@@ -186,13 +194,19 @@ function PlanCard({
 
       {/* Price */}
       <div className="text-center mb-6">
-        <div className="flex items-baseline justify-center gap-1">
+        <div className="flex items-baseline justify-center gap-1 flex-wrap">
           <span className="text-sm text-slate-500">NT$</span>
           <span className="text-4xl font-bold text-white">{plan.price.toLocaleString()}</span>
-          {plan.price > 0 && <span className="text-slate-500">/{plan.period}</span>}
+          {plan.price > 0 && <span className="text-slate-500">/月</span>}
         </div>
+        {plan.price > 0 && plan.priceYearly != null && (
+          <p className="text-sm text-slate-400 mt-2">
+            年繳 NT${plan.priceYearly.toLocaleString()}
+            <span className="text-emerald-400 ml-1">省 {YEARLY_DISCOUNT_PERCENT}%</span>
+          </p>
+        )}
         {plan.monthlyCredits > 0 && (
-          <p className="text-sm text-emerald-400 mt-2">
+          <p className="text-sm text-emerald-400 mt-1">
             每月獲得 {plan.monthlyCredits.toLocaleString()} 點
           </p>
         )}
@@ -333,9 +347,10 @@ export default function SubscriptionPage() {
       return;
     }
 
-    // 升級或變更方案 - 導向購買點數頁面
+    // 升級或變更方案 - 導向購買頁面（可帶 cycle=yearly 預選年繳）
     toast.info("即將前往購買頁面...");
-    window.location.href = `/dashboard/pricing?plan=${planId}`;
+    const params = new URLSearchParams({ plan: planId });
+    window.location.href = `/dashboard/pricing?${params.toString()}`;
   };
 
   const handleCancelSubscription = async () => {

@@ -400,6 +400,8 @@ class SubscriptionPlan(Base):
     name = Column(String(100), nullable=False)
     tier = Column(String(20), nullable=False)  # free, basic, pro, enterprise
     price_monthly = Column(Numeric(10, 2), nullable=False, default=0)
+    price_yearly = Column(Numeric(10, 2), nullable=True)  # 年繳價格（含折扣）
+    yearly_discount_percent = Column(Numeric(5, 2), nullable=True)  # 年繳折扣百分比，如 20 表示 8 折
     monthly_credits = Column(Integer, nullable=False, default=0)
     features = Column(JSON, default=list)
     is_popular = Column(Boolean, default=False)

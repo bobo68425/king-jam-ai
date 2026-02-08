@@ -48,6 +48,9 @@ class ProductListItem(BaseModel):
     monthly_credits: Optional[int] = None
     features: Optional[List[str]] = None
     is_popular: bool = False
+    # 訂閱年繳
+    price_yearly: Optional[float] = None
+    yearly_discount_percent: Optional[float] = None
 
 
 class ProductListResponse(BaseModel):
@@ -61,8 +64,9 @@ class CreateOrderRequest(BaseModel):
     item_code: str = Field(..., description="方案代碼或套餐代碼")
     payment_provider: Optional[str] = Field(default=None, description="金流供應商（留空自動選擇）")
     payment_method: str = Field(default="ALL", description="付款方式")
-    quantity: int = Field(default=1, ge=1, le=12, description="數量（訂閱為月數）")
+    quantity: int = Field(default=1, ge=1, le=12, description="數量（訂閱為月數；年繳時請傳 1）")
     referral_code: Optional[str] = Field(default=None, description="推薦碼")
+    billing_cycle: Optional[str] = Field(default="monthly", description="訂閱計費週期：monthly 月繳、yearly 年繳")
 
 
 # 金流額度限制
@@ -163,6 +167,8 @@ async def get_products(db: Session = Depends(get_db)):
                 "monthly_credits": p.monthly_credits,
                 "features": p.features if isinstance(p.features, list) else [],
                 "is_popular": p.is_popular or False,
+                "price_yearly": float(p.price_yearly) if p.price_yearly is not None else None,
+                "yearly_discount_percent": float(p.yearly_discount_percent) if p.yearly_discount_percent is not None else None,
             }
             for p in subscription_plans
         ],
@@ -233,12 +239,22 @@ async def create_order(
                 detail="找不到此訂閱方案"
             )
         
-        item_name = f"{plan.name} x {request.quantity}個月"
-        item_description = plan.description
-        total_amount = plan.price_monthly * request.quantity
+        is_yearly = (request.billing_cycle or "monthly").lower() == "yearly"
+        if is_yearly and plan.price_yearly is not None:
+            item_name = f"{plan.name} 年繳"
+            item_description = plan.description
+            total_amount = plan.price_yearly
+            subscription_months = 12
+            quantity = 1
+        else:
+            item_name = f"{plan.name} x {request.quantity}個月"
+            item_description = plan.description
+            total_amount = plan.price_monthly * request.quantity
+            subscription_months = request.quantity
+            quantity = request.quantity
+        
         credits_amount = None
         bonus_credits = None
-        subscription_months = request.quantity
     
     # 取得客戶端資訊
     ip_address = req.client.host if req.client else None

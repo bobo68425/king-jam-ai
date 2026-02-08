@@ -87,29 +87,40 @@ jobs:
               HEADS=$(alembic heads 2>/dev/null | wc -l)
               if [ "$HEADS" -gt 1 ]; then
                 echo "⚠️ 偵測到多個 Alembic heads，執行直接 SQL 遷移..."
-                # 直接執行 NewebPay 欄位遷移
+                # 直接執行多個遷移 (NewebPay + 訂閱年繳)
                 python -c "
 import os
 from sqlalchemy import create_engine, text
 engine = create_engine(os.environ['DATABASE_URL'])
 with engine.connect() as conn:
+    # NewebPay 欄位
     conn.execute(text('''
-        DO \$\$ 
+        DO \$\$
         BEGIN
-            IF NOT EXISTS (
-                SELECT 1 FROM information_schema.columns 
-                WHERE table_name = 'orders' AND column_name = 'newebpay_merchant_order_no'
-            ) THEN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'newebpay_merchant_order_no') THEN
                 ALTER TABLE orders ADD COLUMN newebpay_merchant_order_no VARCHAR(30);
             END IF;
-            
-            IF NOT EXISTS (
-                SELECT 1 FROM information_schema.columns 
-                WHERE table_name = 'orders' AND column_name = 'newebpay_trade_no'
-            ) THEN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'newebpay_trade_no') THEN
                 ALTER TABLE orders ADD COLUMN newebpay_trade_no VARCHAR(30);
             END IF;
         END \$\$;
+    '''))
+    # 訂閱方案年繳欄位
+    conn.execute(text('''
+        DO \$\$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'subscription_plans' AND column_name = 'price_yearly') THEN
+                ALTER TABLE subscription_plans ADD COLUMN price_yearly NUMERIC(10, 2);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'subscription_plans' AND column_name = 'yearly_discount_percent') THEN
+                ALTER TABLE subscription_plans ADD COLUMN yearly_discount_percent NUMERIC(5, 2);
+            END IF;
+        END \$\$;
+    '''))
+    conn.execute(text('''
+        UPDATE subscription_plans
+        SET price_yearly = ROUND(price_monthly * 12 * 0.8, 0), yearly_discount_percent = 20
+        WHERE plan_code IN ('basic', 'pro', 'enterprise') AND (price_yearly IS NULL OR yearly_discount_percent IS NULL);
     '''))
     conn.commit()
 print('✅ SQL 遷移完成')
