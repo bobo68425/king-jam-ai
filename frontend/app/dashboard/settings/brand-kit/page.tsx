@@ -852,29 +852,34 @@ export default function BrandKitPage() {
   }
 
   return (
-    <div className="flex-1 space-y-6 p-6">
+    <div className="flex-1 space-y-6 p-4 md:p-6 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 min-h-screen">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">品牌資產包</h1>
-          <p className="text-slate-400 mt-1">
+          <div className="flex items-center gap-3 mb-1">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+              <Palette className="w-5 h-5 text-white" />
+            </div>
+            <h1 className="text-2xl font-bold text-white">品牌資產包</h1>
+          </div>
+          <p className="text-slate-400 text-sm mt-1 ml-[52px]">
             設定品牌色彩、Logo 和風格，讓 AI 生成的內容保持品牌一致性
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 ml-[52px] sm:ml-0">
           <Button
             variant="outline"
             onClick={handleCreate}
             disabled={isCreating}
-            className="border-slate-700 hover:bg-slate-800"
+            className="border-slate-700 hover:bg-slate-800 text-slate-300"
           >
             <Plus className="w-4 h-4 mr-2" />
-            新增品牌包
+            新增
           </Button>
           <Button
             onClick={handleSave}
             disabled={isSaving}
-            className="bg-indigo-600 hover:bg-indigo-700"
+            className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/25"
           >
             <Save className="w-4 h-4 mr-2" />
             {isSaving ? "儲存中..." : "儲存變更"}
@@ -894,8 +899,8 @@ export default function BrandKitPage() {
                 populateForm(kit);
               }}
               className={selectedKit?.id === kit.id 
-                ? "bg-indigo-600" 
-                : "border-slate-700 hover:bg-slate-800"
+                ? "bg-indigo-600 text-white" 
+                : "border-slate-700 hover:bg-slate-800 text-slate-300"
               }
             >
               {kit.is_default && <Star className="w-4 h-4 mr-1 fill-yellow-400 text-yellow-400" />}
@@ -907,32 +912,34 @@ export default function BrandKitPage() {
 
       {/* Main Content */}
       <Tabs defaultValue="colors" className="space-y-6">
-        <TabsList className="bg-slate-800 border border-slate-700">
-          <TabsTrigger value="colors" className="data-[state=active]:bg-slate-700">
-            <Palette className="w-4 h-4 mr-2" />
-            色彩
-          </TabsTrigger>
-          <TabsTrigger value="logo" className="data-[state=active]:bg-slate-700">
-            <ImageIcon className="w-4 h-4 mr-2" />
-            Logo
-          </TabsTrigger>
-          <TabsTrigger value="typography" className="data-[state=active]:bg-slate-700">
-            <Type className="w-4 h-4 mr-2" />
-            字型
-          </TabsTrigger>
-          <TabsTrigger value="voice" className="data-[state=active]:bg-slate-700">
-            <Mic className="w-4 h-4 mr-2" />
-            品牌聲音
-          </TabsTrigger>
-          <TabsTrigger value="style" className="data-[state=active]:bg-slate-700">
-            <Eye className="w-4 h-4 mr-2" />
-            視覺風格
-          </TabsTrigger>
-          <TabsTrigger value="character" className="data-[state=active]:bg-slate-700">
-            <Sparkles className="w-4 h-4 mr-2" />
-            IP 角色
-          </TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
+          <TabsList className="bg-slate-800/80 border border-slate-700 backdrop-blur-sm inline-flex w-auto min-w-full md:min-w-0">
+            <TabsTrigger value="colors" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white text-slate-400 gap-2 px-4">
+              <Palette className="w-4 h-4" />
+              <span className="hidden sm:inline">色彩</span>
+            </TabsTrigger>
+            <TabsTrigger value="logo" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white text-slate-400 gap-2 px-4">
+              <ImageIcon className="w-4 h-4" />
+              <span className="hidden sm:inline">Logo</span>
+            </TabsTrigger>
+            <TabsTrigger value="typography" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white text-slate-400 gap-2 px-4">
+              <Type className="w-4 h-4" />
+              <span className="hidden sm:inline">字型</span>
+            </TabsTrigger>
+            <TabsTrigger value="voice" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white text-slate-400 gap-2 px-4">
+              <Mic className="w-4 h-4" />
+              <span className="hidden sm:inline">品牌聲音</span>
+            </TabsTrigger>
+            <TabsTrigger value="style" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white text-slate-400 gap-2 px-4">
+              <Eye className="w-4 h-4" />
+              <span className="hidden sm:inline">視覺風格</span>
+            </TabsTrigger>
+            <TabsTrigger value="character" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white text-slate-400 gap-2 px-4">
+              <Sparkles className="w-4 h-4" />
+              <span className="hidden sm:inline">IP 角色</span>
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* Colors Tab */}
         <TabsContent value="colors" className="space-y-6">
