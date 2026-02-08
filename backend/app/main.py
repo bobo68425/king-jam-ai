@@ -152,6 +152,64 @@ def health_check():
     return {"status": "ok", "service": "backend"}
 
 
+@app.get("/health/init-db")
+def init_db_endpoint():
+    """手動觸發 DB 初始化（建表 + seed 訂閱方案）"""
+    from app.database import SessionLocal
+    from sqlalchemy import text
+    results = []
+    try:
+        db = SessionLocal()
+        db.execute(text("""
+            CREATE TABLE IF NOT EXISTS subscription_plans (
+                id SERIAL PRIMARY KEY,
+                plan_code VARCHAR(50) NOT NULL UNIQUE,
+                name VARCHAR(100) NOT NULL,
+                tier VARCHAR(20) NOT NULL,
+                price_monthly NUMERIC(10,2) NOT NULL DEFAULT 0,
+                price_yearly NUMERIC(10,2),
+                yearly_discount_percent NUMERIC(5,2),
+                monthly_credits INTEGER NOT NULL DEFAULT 0,
+                features JSONB DEFAULT '[]',
+                is_popular BOOLEAN DEFAULT FALSE,
+                sort_order INTEGER DEFAULT 0,
+                is_active BOOLEAN DEFAULT TRUE,
+                description TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ
+            );
+        """))
+        db.commit()
+        results.append("table created or exists")
+
+        db.execute(text("""
+            INSERT INTO subscription_plans (plan_code, name, tier, price_monthly, monthly_credits, features, is_popular, sort_order, is_active, description)
+            VALUES
+                ('free',       '免費版', 'free',        0,    0, '["註冊贈送 100 點","基本 AI 文章生成","社群圖文設計"]',                          FALSE, 0, TRUE, '適合個人嘗試體驗'),
+                ('basic',      '入門版', 'basic',     299,    0, '["基本功能無廣告","AI 文章生成","社群圖文設計","單平台發布","Email 客服支援"]',       FALSE, 1, TRUE, '適合輕度使用者'),
+                ('pro',        '專業版', 'pro',       699, 1000, '["每月 1,000 點","全部 AI 功能解鎖","AI 短影片生成","智能排程發布","多平台同步","優先客服支援"]', TRUE,  2, TRUE, '適合自媒體創作者'),
+                ('enterprise', '企業版', 'enterprise',3699, 5000, '["每月 5,000 點","全部專業版功能","API 存取權限","團隊協作功能","專屬客戶經理","客製化需求","優先技術支援","SLA 保證"]', FALSE, 3, TRUE, '適合品牌與團隊')
+            ON CONFLICT (plan_code) DO NOTHING;
+        """))
+        db.commit()
+        results.append("plans seeded")
+
+        db.execute(text("""
+            UPDATE subscription_plans
+            SET price_yearly = ROUND(price_monthly * 12 * 0.8, 0), yearly_discount_percent = 20
+            WHERE plan_code IN ('basic','pro','enterprise') AND (price_yearly IS NULL OR yearly_discount_percent IS NULL);
+        """))
+        db.commit()
+        results.append("yearly prices set")
+
+        row = db.execute(text("SELECT count(*) FROM subscription_plans")).fetchone()
+        count = row[0] if row else 0
+        db.close()
+        return {"status": "ok", "actions": results, "total_plans": count}
+    except Exception as e:
+        return {"status": "error", "actions": results, "error": str(e)}
+
+
 @app.get("/health/db")
 def health_check_db():
     """健康檢查（含資料庫連線），用於排查 DB 連線問題"""
