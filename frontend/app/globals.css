@@ -702,8 +702,8 @@ html:not(.no-transition) * {
     overflow-wrap: break-word;
   }
   .dark & h1 {
-    @apply text-white border-indigo-500/30;
-    background: linear-gradient(to right, #fff, #cbd5e1);
+    @apply border-indigo-500/30;
+    background: linear-gradient(to right, #f8fafc, #e2e8f0);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -723,11 +723,11 @@ html:not(.no-transition) * {
     overflow-wrap: break-word;
     &::before {
       content: '';
-      @apply w-1 h-5 sm:h-6 bg-indigo-500 rounded-full shrink-0;
+      @apply w-1 h-5 sm:h-6 bg-indigo-400 rounded-full shrink-0;
     }
   }
   .dark & h2 {
-    @apply text-white border-b border-slate-700/50;
+    @apply text-slate-50 border-b border-slate-700/50;
   }
   :not(.dark) & h2 {
     @apply text-slate-800 border-b border-slate-200;
@@ -738,7 +738,7 @@ html:not(.no-transition) * {
     @apply text-xl font-semibold mt-8 mb-3;
   }
   .dark & h3 {
-    @apply text-slate-200;
+    @apply text-slate-100;
   }
   :not(.dark) & h3 {
     @apply text-slate-700;
@@ -749,7 +749,7 @@ html:not(.no-transition) * {
     @apply text-lg font-medium mt-6 mb-2;
   }
   .dark & h4, .dark & h5, .dark & h6 {
-    @apply text-slate-300;
+    @apply text-slate-200;
   }
   :not(.dark) & h4, :not(.dark) & h5, :not(.dark) & h6 {
     @apply text-slate-600;
@@ -762,7 +762,7 @@ html:not(.no-transition) * {
     overflow-wrap: break-word;
   }
   .dark & p {
-    @apply text-slate-300;
+    @apply text-slate-200;
   }
   :not(.dark) & p {
     @apply text-slate-600;
@@ -770,13 +770,13 @@ html:not(.no-transition) * {
 
   /* 強調文字 */
   .dark & strong {
-    @apply text-white font-semibold;
+    @apply text-white font-bold;
   }
   :not(.dark) & strong {
     @apply text-slate-900 font-semibold;
   }
   .dark & em {
-    @apply text-indigo-300 not-italic font-medium;
+    @apply text-amber-300 not-italic font-semibold;
   }
   :not(.dark) & em {
     @apply text-indigo-600 not-italic font-medium;
@@ -784,16 +784,16 @@ html:not(.no-transition) * {
 
   /* 連結 */
   & a {
-    @apply font-medium no-underline border-b transition-colors;
+    @apply font-medium no-underline transition-colors;
   }
   .dark & a {
-    @apply text-indigo-400 border-indigo-400/30;
+    @apply text-sky-400 underline decoration-sky-400/40 underline-offset-2;
     &:hover {
-      @apply text-indigo-300 border-indigo-300;
+      @apply text-sky-300 decoration-sky-300;
     }
   }
   :not(.dark) & a {
-    @apply text-indigo-600 border-indigo-400/30;
+    @apply text-indigo-600 border-b border-indigo-400/30;
     &:hover {
       @apply text-indigo-500 border-indigo-500;
     }
@@ -804,7 +804,7 @@ html:not(.no-transition) * {
     @apply my-6 pl-6;
   }
   .dark & ul, .dark & ol {
-    @apply text-slate-300;
+    @apply text-slate-200;
   }
   :not(.dark) & ul, :not(.dark) & ol {
     @apply text-slate-600;
@@ -813,19 +813,19 @@ html:not(.no-transition) * {
     @apply text-base md:text-lg leading-relaxed mb-2;
   }
   .dark & li::marker {
-      @apply text-indigo-400 font-bold;
-    }
+    @apply text-indigo-400 font-bold;
+  }
   :not(.dark) & li::marker {
     @apply text-indigo-500 font-bold;
   }
 
   /* 引用區塊 */
   & blockquote {
-    @apply border-l-4 border-indigo-500 py-4 px-6 my-8 rounded-r-lg not-italic text-lg font-medium shadow-lg;
+    @apply border-l-4 border-indigo-400 py-4 px-6 my-8 rounded-r-lg not-italic text-lg font-medium shadow-lg;
   }
   .dark & blockquote {
-    @apply text-slate-200;
-    background: linear-gradient(to right, rgba(99, 102, 241, 0.1), transparent);
+    @apply text-slate-100;
+    background: linear-gradient(to right, rgba(129, 140, 248, 0.15), transparent);
   }
   :not(.dark) & blockquote {
     @apply text-slate-700;
@@ -837,7 +837,7 @@ html:not(.no-transition) * {
     @apply px-2 py-1 rounded-md text-sm border;
   }
   .dark & code {
-    @apply text-amber-400 bg-slate-800/80 border-slate-700/50;
+    @apply text-amber-300 bg-slate-800/80 border-slate-600/50;
   }
   :not(.dark) & code {
     @apply text-amber-700 bg-amber-50 border-amber-200/50;
@@ -849,7 +849,7 @@ html:not(.no-transition) * {
     }
   }
   .dark & pre {
-    @apply bg-slate-800/50 border border-slate-700;
+    @apply bg-slate-800/60 border border-slate-700;
   }
   :not(.dark) & pre {
     @apply bg-slate-100 border border-slate-200;
@@ -862,7 +862,7 @@ html:not(.no-transition) * {
 
   /* 水平線 */
   .dark & hr {
-    @apply border-slate-700 my-10;
+    @apply border-slate-600 my-10;
   }
   :not(.dark) & hr {
     @apply border-slate-200 my-10;
@@ -873,16 +873,29 @@ html:not(.no-transition) * {
     @apply w-full my-8 border-collapse;
   }
   .dark & th {
-    @apply bg-slate-800 text-white font-semibold p-3 text-left;
+    @apply bg-slate-800 text-slate-100 font-semibold p-3 text-left;
   }
   :not(.dark) & th {
     @apply bg-slate-100 text-slate-900 font-semibold p-3 text-left;
   }
   .dark & td {
-    @apply border-b border-slate-700 p-3 text-slate-300;
+    @apply border-b border-slate-700 p-3 text-slate-200;
   }
   :not(.dark) & td {
     @apply border-b border-slate-200 p-3 text-slate-600;
+  }
+
+  /* ===== 深色模式內聯樣式覆蓋 ===== */
+  /* AI 生成的內容常帶有 style="color:..." 內聯樣式，需要覆蓋以確保可讀性 */
+  .dark & span[style*="color"],
+  .dark & font[color] {
+    color: #e2e8f0 !important;
+  }
+  .dark & span[style*="background"] {
+    background-color: rgba(99, 102, 241, 0.2) !important;
+    color: #c7d2fe !important;
+    padding: 1px 4px;
+    border-radius: 3px;
   }
 }
 
