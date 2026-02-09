@@ -43,6 +43,7 @@ import {
   FilePlus,
   Save,
   Download,
+  Wand2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -54,6 +55,7 @@ import TemplatesPanel from "@/components/design-studio/panels/TemplatesPanel";
 import FiltersPanel from "@/components/design-studio/panels/FiltersPanel";
 import AssetPanel from "@/components/design-studio/panels/AssetPanel";
 import GalleryPanel from "@/components/design-studio/panels/GalleryPanel";
+import AiImagePanel from "@/components/design-studio/panels/AiImagePanel";
 import { useDesignStudioStore, ExtendedFabricObject } from "@/stores/design-studio-store";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -564,27 +566,34 @@ export default function DesignStudioPage() {
         >
           {leftPanelOpen && (
             <Tabs value={activeLeftTab} onValueChange={setActiveLeftTab} className="flex-1 flex flex-col min-h-0">
-              <TabsList className="mx-2 mt-2 grid grid-cols-4 bg-slate-800/50 dark:bg-slate-800/50 h-9 shrink-0">
-                <TabsTrigger value="layers" className="text-xs px-2 data-[state=active]:!bg-indigo-500 data-[state=active]:!text-white dark:data-[state=active]:!bg-indigo-500 dark:data-[state=active]:!text-white">
-                  <Layers className="w-3.5 h-3.5 mr-1" />
+              <TabsList className="mx-2 mt-2 grid grid-cols-5 bg-slate-800/50 dark:bg-slate-800/50 h-9 shrink-0">
+                <TabsTrigger value="layers" className="text-xs px-1 data-[state=active]:!bg-indigo-500 data-[state=active]:!text-white dark:data-[state=active]:!bg-indigo-500 dark:data-[state=active]:!text-white">
+                  <Layers className="w-3.5 h-3.5 mr-0.5" />
                   圖層
                 </TabsTrigger>
-                <TabsTrigger value="gallery" className="text-xs px-2 data-[state=active]:!bg-indigo-500 data-[state=active]:!text-white dark:data-[state=active]:!bg-indigo-500 dark:data-[state=active]:!text-white">
-                  <Images className="w-3.5 h-3.5 mr-1" />
+                <TabsTrigger value="ai" className="text-xs px-1 data-[state=active]:!bg-gradient-to-r data-[state=active]:!from-indigo-500 data-[state=active]:!to-purple-500 data-[state=active]:!text-white dark:data-[state=active]:!text-white">
+                  <Wand2 className="w-3.5 h-3.5 mr-0.5" />
+                  AI圖
+                </TabsTrigger>
+                <TabsTrigger value="gallery" className="text-xs px-1 data-[state=active]:!bg-indigo-500 data-[state=active]:!text-white dark:data-[state=active]:!bg-indigo-500 dark:data-[state=active]:!text-white">
+                  <Images className="w-3.5 h-3.5 mr-0.5" />
                   圖庫
                 </TabsTrigger>
-                <TabsTrigger value="templates" className="text-xs px-2 data-[state=active]:!bg-indigo-500 data-[state=active]:!text-white dark:data-[state=active]:!bg-indigo-500 dark:data-[state=active]:!text-white">
-                  <LayoutTemplate className="w-3.5 h-3.5 mr-1" />
+                <TabsTrigger value="templates" className="text-xs px-1 data-[state=active]:!bg-indigo-500 data-[state=active]:!text-white dark:data-[state=active]:!bg-indigo-500 dark:data-[state=active]:!text-white">
+                  <LayoutTemplate className="w-3.5 h-3.5 mr-0.5" />
                   模板
                 </TabsTrigger>
-                <TabsTrigger value="assets" className="text-xs px-2 data-[state=active]:!bg-indigo-500 data-[state=active]:!text-white dark:data-[state=active]:!bg-indigo-500 dark:data-[state=active]:!text-white">
-                  <FolderOpen className="w-3.5 h-3.5 mr-1" />
+                <TabsTrigger value="assets" className="text-xs px-1 data-[state=active]:!bg-indigo-500 data-[state=active]:!text-white dark:data-[state=active]:!bg-indigo-500 dark:data-[state=active]:!text-white">
+                  <FolderOpen className="w-3.5 h-3.5 mr-0.5" />
                   素材
                 </TabsTrigger>
               </TabsList>
               
               <TabsContent value="layers" className="flex-1 mt-0 min-h-0 overflow-hidden">
                 <LayersPanel />
+              </TabsContent>
+              <TabsContent value="ai" className="flex-1 mt-0 min-h-0 overflow-hidden">
+                <AiImagePanel />
               </TabsContent>
               <TabsContent value="gallery" className="flex-1 mt-0 min-h-0 overflow-hidden">
                 <GalleryPanel />
@@ -671,13 +680,14 @@ export default function DesignStudioPage() {
         <div className="md:hidden fixed inset-x-0 bottom-[88px] z-50 animate-in slide-in-from-bottom duration-200">
           {/* 點擊遮罩關閉面板 */}
           <div className="fixed inset-0 z-[-1]" onClick={closeMobilePanel} />
-          <div className="bg-slate-900/98 backdrop-blur-xl border-t border-slate-700/50 rounded-t-2xl shadow-2xl max-h-[55vh] flex flex-col">
+          <div className="bg-slate-900/98 backdrop-blur-xl border-t border-slate-700/50 rounded-t-2xl shadow-2xl max-h-[60vh] flex flex-col">
             {/* 面板頂部把手 + 關閉 */}
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-800 shrink-0">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-1 bg-slate-600 rounded-full" />
                 <span className="text-sm font-medium text-white ml-2">
                   {mobilePanel === "layers" && "圖層"}
+                  {mobilePanel === "ai" && "AI 生圖"}
                   {mobilePanel === "properties" && "屬性"}
                   {mobilePanel === "filters" && "濾鏡"}
                   {mobilePanel === "templates" && "模板"}
@@ -695,6 +705,7 @@ export default function DesignStudioPage() {
             {/* 面板內容 */}
             <div className="flex-1 overflow-y-auto overscroll-contain">
               {mobilePanel === "layers" && <LayersPanel />}
+              {mobilePanel === "ai" && <AiImagePanel />}
               {mobilePanel === "properties" && <PropertiesPanel />}
               {mobilePanel === "filters" && <FiltersPanel />}
               {mobilePanel === "templates" && <TemplatesPanel />}
@@ -784,6 +795,7 @@ export default function DesignStudioPage() {
             },
             { icon: Type, label: "文字", id: "text", onClick: mobileAddText },
             { icon: Upload, label: "圖片", id: "image", onClick: mobileUploadImage },
+            { icon: Wand2, label: "AI圖", id: "ai", onClick: () => toggleMobilePanel("ai"), gradient: true },
             { icon: Shapes, label: "形狀", id: "shapes", onClick: () => toggleMobilePanel("shapes") },
             { icon: Layers, label: "圖層", id: "layers", onClick: () => toggleMobilePanel("layers") },
             { icon: Settings2, label: "屬性", id: "properties", onClick: () => toggleMobilePanel("properties") },
@@ -793,10 +805,10 @@ export default function DesignStudioPage() {
               key={tool.id}
               onClick={tool.onClick}
               className={cn(
-                "flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg transition-all active:scale-90",
+                "flex flex-col items-center gap-0.5 py-1 px-1.5 rounded-lg transition-all active:scale-90",
                 (tool as any).active || mobilePanel === tool.id
-                  ? "text-indigo-400"
-                  : "text-slate-400 hover:text-white"
+                  ? (tool as any).gradient ? "text-purple-400" : "text-indigo-400"
+                  : (tool as any).gradient ? "text-purple-400/60 hover:text-purple-300" : "text-slate-400 hover:text-white"
               )}
             >
               <tool.icon className="w-5 h-5" />
