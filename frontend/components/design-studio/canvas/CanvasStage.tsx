@@ -1300,6 +1300,181 @@ export default function CanvasStage({ className }: CanvasStageProps) {
     }
   }, [calculateFitZoom, setZoom]);
 
+  // ================================================
+  // 手機觸控手勢：雙指縮放物件 + 雙擊顯示工具選單
+  // ================================================
+  const [mobileToolMenu, setMobileToolMenu] = useState<{ x: number; y: number; objectId: string } | null>(null);
+  const touchStateRef = useRef<{
+    initialDistance: number;
+    initialScaleX: number;
+    initialScaleY: number;
+    isPinching: boolean;
+    lastTapTime: number;
+    lastTapTarget: string | null;
+  }>({
+    initialDistance: 0,
+    initialScaleX: 1,
+    initialScaleY: 1,
+    isPinching: false,
+    lastTapTime: 0,
+    lastTapTarget: null,
+  });
+
+  // 計算兩指之間的距離
+  const getTouchDistance = (t1: React.Touch, t2: React.Touch) => {
+    const dx = t1.clientX - t2.clientX;
+    const dy = t1.clientY - t2.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (!canvas) return;
+
+    // 雙指開始：記錄初始距離和物件縮放
+    if (e.touches.length === 2) {
+      const activeObject = canvas.getActiveObject();
+      if (activeObject && activeObject.type !== 'activeSelection') {
+        e.preventDefault();
+        const dist = getTouchDistance(e.touches[0], e.touches[1]);
+        touchStateRef.current.initialDistance = dist;
+        touchStateRef.current.initialScaleX = activeObject.scaleX || 1;
+        touchStateRef.current.initialScaleY = activeObject.scaleY || 1;
+        touchStateRef.current.isPinching = true;
+      }
+    }
+
+    // 單指：偵測雙擊
+    if (e.touches.length === 1) {
+      const now = Date.now();
+      const activeObject = canvas.getActiveObject();
+      const targetId = activeObject ? (activeObject as any).id : null;
+      const timeDiff = now - touchStateRef.current.lastTapTime;
+      const sameTarget = targetId && targetId === touchStateRef.current.lastTapTarget;
+
+      if (timeDiff < 350 && sameTarget && activeObject) {
+        // 雙擊物件 → 顯示工具選單
+        e.preventDefault();
+        const touch = e.touches[0];
+        setMobileToolMenu({
+          x: touch.clientX,
+          y: touch.clientY,
+          objectId: targetId,
+        });
+      }
+
+      touchStateRef.current.lastTapTime = now;
+      touchStateRef.current.lastTapTarget = targetId;
+    }
+  }, [canvas]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!canvas || !touchStateRef.current.isPinching) return;
+    if (e.touches.length !== 2) return;
+
+    const activeObject = canvas.getActiveObject();
+    if (!activeObject) return;
+
+    e.preventDefault();
+
+    const currentDist = getTouchDistance(e.touches[0], e.touches[1]);
+    const scale = currentDist / touchStateRef.current.initialDistance;
+
+    // 等比例縮放
+    const newScaleX = touchStateRef.current.initialScaleX * scale;
+    const newScaleY = touchStateRef.current.initialScaleY * scale;
+
+    // 限制最小/最大縮放
+    const minScale = 0.05;
+    const maxScale = 20;
+    const clampedScaleX = Math.max(minScale, Math.min(maxScale, newScaleX));
+    const clampedScaleY = Math.max(minScale, Math.min(maxScale, newScaleY));
+
+    activeObject.set({
+      scaleX: clampedScaleX,
+      scaleY: clampedScaleY,
+    });
+    activeObject.setCoords();
+    canvas.renderAll();
+  }, [canvas]);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (touchStateRef.current.isPinching) {
+      touchStateRef.current.isPinching = false;
+      // 結束手勢後觸發 object:modified 以保存歷史
+      if (canvas) {
+        const activeObject = canvas.getActiveObject();
+        if (activeObject) {
+          canvas.fire('object:modified', { target: activeObject });
+        }
+      }
+    }
+  }, [canvas]);
+
+  // 關閉手機工具選單
+  const closeMobileToolMenu = useCallback(() => setMobileToolMenu(null), []);
+
+  // 手機工具選單操作
+  const mobileToolAction = useCallback((action: string) => {
+    if (!canvas) return;
+    const activeObject = canvas.getActiveObject();
+    if (!activeObject) { closeMobileToolMenu(); return; }
+
+    const { layers, updateLayer, addLayer, removeLayer } = useDesignStudioStore.getState();
+
+    switch (action) {
+      case 'copy': {
+        activeObject.clone((cloned: fabric.Object) => {
+          const id = Math.random().toString(36).substring(2, 10);
+          cloned.set({ left: (cloned.left || 0) + 20, top: (cloned.top || 0) + 20 });
+          (cloned as any).id = id;
+          (cloned as any).name = `複製 ${id}`;
+          canvas.add(cloned);
+          canvas.setActiveObject(cloned);
+          canvas.renderAll();
+          addLayer({ id, name: `複製 ${id}`, type: 'shape', visible: true, locked: false, opacity: 1, blendMode: 'source-over', fabricObject: cloned });
+        });
+        break;
+      }
+      case 'delete': {
+        canvas.remove(activeObject);
+        canvas.discardActiveObject();
+        canvas.renderAll();
+        break;
+      }
+      case 'flipH': {
+        activeObject.set('flipX', !activeObject.flipX);
+        canvas.renderAll();
+        canvas.fire('object:modified', { target: activeObject });
+        break;
+      }
+      case 'flipV': {
+        activeObject.set('flipY', !activeObject.flipY);
+        canvas.renderAll();
+        canvas.fire('object:modified', { target: activeObject });
+        break;
+      }
+      case 'bringForward': {
+        canvas.bringForward(activeObject);
+        canvas.renderAll();
+        break;
+      }
+      case 'sendBackward': {
+        canvas.sendBackwards(activeObject);
+        canvas.renderAll();
+        break;
+      }
+      case 'lock': {
+        const layer = layers.find(l => l.fabricObject === activeObject);
+        const isLocked = !activeObject.selectable;
+        activeObject.set({ selectable: isLocked, evented: isLocked });
+        if (layer) updateLayer(layer.id, { locked: !isLocked });
+        canvas.renderAll();
+        break;
+      }
+    }
+    closeMobileToolMenu();
+  }, [canvas, closeMobileToolMenu]);
+
   // 計算畫布容器樣式
   const containerStyle = {
     transform: `scale(${zoom})`,
@@ -1310,11 +1485,14 @@ export default function CanvasStage({ className }: CanvasStageProps) {
     <div 
       ref={containerRef}
       className={cn(
-        "relative flex items-center justify-center bg-slate-800/50 overflow-auto",
+        "relative flex items-center justify-center bg-slate-800/50 overflow-auto touch-none md:touch-auto",
         className
       )}
       onWheel={handleWheel}
       onDoubleClick={handleDoubleClick}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
     >
       {/* 畫布陰影效果 */}
       <div 
@@ -1425,6 +1603,43 @@ export default function CanvasStage({ className }: CanvasStageProps) {
       <div className="absolute top-4 left-4 px-3 py-1.5 bg-slate-900/80 backdrop-blur-sm rounded-lg border border-slate-700/50 text-xs text-slate-400">
         <span className="font-mono">{canvasWidth} × {canvasHeight}</span>
       </div>
+
+      {/* ===== 手機版：雙擊物件工具選單 ===== */}
+      {mobileToolMenu && (
+        <>
+          {/* 遮罩 */}
+          <div className="md:hidden fixed inset-0 z-[60]" onClick={closeMobileToolMenu} />
+          {/* 選單 */}
+          <div
+            className="md:hidden fixed z-[61] animate-in fade-in zoom-in-95 duration-150"
+            style={{
+              left: Math.min(mobileToolMenu.x, window.innerWidth - 220),
+              top: Math.max(mobileToolMenu.y - 60, 8),
+            }}
+          >
+            <div className="bg-slate-900/98 backdrop-blur-xl rounded-2xl border border-slate-700/50 shadow-2xl p-2 flex flex-wrap gap-1 max-w-[210px]">
+              {[
+                { icon: "📋", label: "複製", action: "copy" },
+                { icon: "🗑️", label: "刪除", action: "delete" },
+                { icon: "↔️", label: "水平翻轉", action: "flipH" },
+                { icon: "↕️", label: "垂直翻轉", action: "flipV" },
+                { icon: "⬆️", label: "上移一層", action: "bringForward" },
+                { icon: "⬇️", label: "下移一層", action: "sendBackward" },
+                { icon: "🔒", label: "鎖定", action: "lock" },
+              ].map((item) => (
+                <button
+                  key={item.action}
+                  onClick={() => mobileToolAction(item.action)}
+                  className="flex flex-col items-center gap-0.5 w-[60px] py-2 rounded-xl hover:bg-slate-800 active:bg-slate-700 transition-colors"
+                >
+                  <span className="text-lg">{item.icon}</span>
+                  <span className="text-[10px] text-slate-300">{item.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
