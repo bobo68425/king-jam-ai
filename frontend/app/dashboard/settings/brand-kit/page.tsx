@@ -914,30 +914,23 @@ export default function BrandKitPage() {
       <Tabs defaultValue="colors" className="space-y-6">
         <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide">
           <TabsList className="bg-slate-800/80 border border-slate-700 backdrop-blur-sm inline-flex w-auto h-auto p-1">
-            <TabsTrigger value="colors" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md text-slate-400 hover:text-slate-200 flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap">
-              <Palette className="w-4 h-4 shrink-0" />
-              色彩
-            </TabsTrigger>
-            <TabsTrigger value="logo" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md text-slate-400 hover:text-slate-200 flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap">
-              <ImageIcon className="w-4 h-4 shrink-0" />
-              Logo
-            </TabsTrigger>
-            <TabsTrigger value="typography" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md text-slate-400 hover:text-slate-200 flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap">
-              <Type className="w-4 h-4 shrink-0" />
-              字型
-            </TabsTrigger>
-            <TabsTrigger value="voice" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md text-slate-400 hover:text-slate-200 flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap">
-              <Mic className="w-4 h-4 shrink-0" />
-              品牌聲音
-            </TabsTrigger>
-            <TabsTrigger value="style" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md text-slate-400 hover:text-slate-200 flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap">
-              <Eye className="w-4 h-4 shrink-0" />
-              視覺風格
-            </TabsTrigger>
-            <TabsTrigger value="character" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md text-slate-400 hover:text-slate-200 flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap">
-              <Sparkles className="w-4 h-4 shrink-0" />
-              IP 角色
-            </TabsTrigger>
+            {[
+              { value: "colors", icon: Palette, label: "色彩" },
+              { value: "logo", icon: ImageIcon, label: "Logo" },
+              { value: "typography", icon: Type, label: "字型" },
+              { value: "voice", icon: Mic, label: "品牌聲音" },
+              { value: "style", icon: Eye, label: "視覺風格" },
+              { value: "character", icon: Sparkles, label: "IP 角色" },
+            ].map(tab => (
+              <TabsTrigger
+                key={tab.value}
+                value={tab.value}
+                className="data-[state=active]:!bg-indigo-600 data-[state=active]:!text-white dark:data-[state=active]:!bg-indigo-600 dark:data-[state=active]:!text-white data-[state=active]:shadow-md text-slate-400 dark:text-slate-400 hover:text-slate-200 !flex-none !overflow-visible items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap"
+              >
+                <tab.icon className="w-4 h-4 shrink-0" />
+                {tab.label}
+              </TabsTrigger>
+            ))}
           </TabsList>
         </div>
 
