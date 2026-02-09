@@ -525,7 +525,7 @@ export default function DesignStudioPage() {
       {/* 頂部工具列 */}
       <TopToolbar />
 
-      {/* 主體內容 */}
+      {/* 主體內容 - 手機版畫布佔滿剩餘空間 */}
       <div className="flex-1 flex overflow-hidden relative">
         {/* 左側工具列 - 桌面版 */}
         <div className="hidden md:flex">
@@ -609,86 +609,6 @@ export default function DesignStudioPage() {
           )}
         </div>
 
-        {/* ===== 手機版底部滑出面板 ===== */}
-        {mobilePanel && (
-          <div className="md:hidden absolute inset-x-0 bottom-0 z-40 animate-in slide-in-from-bottom duration-200">
-            <div className="bg-slate-900/98 backdrop-blur-xl border-t border-slate-700/50 rounded-t-2xl shadow-2xl max-h-[60vh] flex flex-col">
-              {/* 面板頂部把手 + 關閉 */}
-              <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 shrink-0">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-1 bg-slate-700 rounded-full mx-auto" />
-                  <span className="text-sm font-medium text-white ml-2">
-                    {mobilePanel === "layers" && "圖層"}
-                    {mobilePanel === "properties" && "屬性"}
-                    {mobilePanel === "filters" && "濾鏡"}
-                    {mobilePanel === "templates" && "模板"}
-                    {mobilePanel === "gallery" && "圖庫"}
-                    {mobilePanel === "assets" && "素材"}
-                    {mobilePanel === "shapes" && "形狀"}
-                    {mobilePanel === "more" && "更多工具"}
-                  </span>
-                </div>
-                <Button variant="ghost" size="sm" onClick={closeMobilePanel} className="w-8 h-8 p-0 text-slate-400 hover:text-white">
-                  <X className="w-5 h-5" />
-                </Button>
-              </div>
-              
-              {/* 面板內容 */}
-              <div className="flex-1 overflow-y-auto overscroll-contain">
-                {mobilePanel === "layers" && <LayersPanel />}
-                {mobilePanel === "properties" && <PropertiesPanel />}
-                {mobilePanel === "filters" && <FiltersPanel />}
-                {mobilePanel === "templates" && <TemplatesPanel />}
-                {mobilePanel === "gallery" && <GalleryPanel />}
-                {mobilePanel === "assets" && <AssetPanel />}
-                
-                {mobilePanel === "shapes" && (
-                  <div className="p-4">
-                    <div className="grid grid-cols-3 gap-3">
-                      {mobileShapeOptions.map(s => (
-                        <button
-                          key={s.id}
-                          onClick={() => mobileAddShape(s.id)}
-                          className="flex flex-col items-center gap-2 p-3 rounded-xl bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 transition-all active:scale-95"
-                        >
-                          <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${s.color}20` }}>
-                            <s.icon className="w-5 h-5" style={{ color: s.color }} />
-                          </div>
-                          <span className="text-xs text-slate-300">{s.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {mobilePanel === "more" && (
-                  <div className="p-4 space-y-2">
-                    {[
-                      { icon: Hand, label: "平移工具", onClick: () => { useDesignStudioStore.getState().setActiveTool("pan"); closeMobilePanel(); } },
-                      { icon: LayoutTemplate, label: "範本庫", onClick: () => setMobilePanel("templates") },
-                      { icon: Images, label: "圖庫", onClick: () => setMobilePanel("gallery") },
-                      { icon: FolderOpen, label: "素材", onClick: () => setMobilePanel("assets") },
-                      { icon: Sparkles, label: "濾鏡", onClick: () => setMobilePanel("filters") },
-                      { icon: Eraser, label: isRemovingBg ? "去背中..." : "圖片去背", onClick: () => { mobileRemoveBg(); closeMobilePanel(); }, disabled: isRemovingBg },
-                    ].map((item, i) => (
-                      <button
-                        key={i}
-                        onClick={item.onClick}
-                        disabled={(item as any).disabled}
-                        className="w-full flex items-center gap-3 p-3 rounded-xl bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 text-left transition-all active:scale-[0.98] disabled:opacity-50"
-                      >
-                        <div className="w-10 h-10 rounded-lg bg-slate-700/50 flex items-center justify-center">
-                          <item.icon className="w-5 h-5 text-slate-300" />
-                        </div>
-                        <span className="text-sm text-slate-200">{item.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* 底部狀態列 - 桌面版 */}
@@ -723,51 +643,135 @@ export default function DesignStudioPage() {
         </div>
       </div>
 
-      {/* ===== 手機版底部工具列 ===== */}
-      <div className="md:hidden bg-slate-900/98 backdrop-blur-xl border-t border-slate-700/50 safe-area-bottom">
+      {/* ===== 手機版底部滑出面板 (fixed，在工具列上方) ===== */}
+      {mobilePanel && (
+        <div className="md:hidden fixed inset-x-0 bottom-[88px] z-50 animate-in slide-in-from-bottom duration-200">
+          {/* 點擊遮罩關閉面板 */}
+          <div className="fixed inset-0 z-[-1]" onClick={closeMobilePanel} />
+          <div className="bg-slate-900/98 backdrop-blur-xl border-t border-slate-700/50 rounded-t-2xl shadow-2xl max-h-[55vh] flex flex-col">
+            {/* 面板頂部把手 + 關閉 */}
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-800 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-1 bg-slate-600 rounded-full" />
+                <span className="text-sm font-medium text-white ml-2">
+                  {mobilePanel === "layers" && "圖層"}
+                  {mobilePanel === "properties" && "屬性"}
+                  {mobilePanel === "filters" && "濾鏡"}
+                  {mobilePanel === "templates" && "模板"}
+                  {mobilePanel === "gallery" && "圖庫"}
+                  {mobilePanel === "assets" && "素材"}
+                  {mobilePanel === "shapes" && "形狀"}
+                  {mobilePanel === "more" && "更多工具"}
+                </span>
+              </div>
+              <Button variant="ghost" size="sm" onClick={closeMobilePanel} className="w-8 h-8 p-0 text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+            
+            {/* 面板內容 */}
+            <div className="flex-1 overflow-y-auto overscroll-contain">
+              {mobilePanel === "layers" && <LayersPanel />}
+              {mobilePanel === "properties" && <PropertiesPanel />}
+              {mobilePanel === "filters" && <FiltersPanel />}
+              {mobilePanel === "templates" && <TemplatesPanel />}
+              {mobilePanel === "gallery" && <GalleryPanel />}
+              {mobilePanel === "assets" && <AssetPanel />}
+              
+              {mobilePanel === "shapes" && (
+                <div className="p-4">
+                  <div className="grid grid-cols-3 gap-3">
+                    {mobileShapeOptions.map(s => (
+                      <button
+                        key={s.id}
+                        onClick={() => mobileAddShape(s.id)}
+                        className="flex flex-col items-center gap-2 p-3 rounded-xl bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 transition-all active:scale-95"
+                      >
+                        <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${s.color}20` }}>
+                          <s.icon className="w-5 h-5" style={{ color: s.color }} />
+                        </div>
+                        <span className="text-xs text-slate-300">{s.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {mobilePanel === "more" && (
+                <div className="p-4 space-y-2">
+                  {[
+                    { icon: Hand, label: "平移工具", onClick: () => { useDesignStudioStore.getState().setActiveTool("pan"); closeMobilePanel(); } },
+                    { icon: LayoutTemplate, label: "範本庫", onClick: () => setMobilePanel("templates") },
+                    { icon: Images, label: "圖庫", onClick: () => setMobilePanel("gallery") },
+                    { icon: FolderOpen, label: "素材", onClick: () => setMobilePanel("assets") },
+                    { icon: Sparkles, label: "濾鏡", onClick: () => setMobilePanel("filters") },
+                    { icon: Eraser, label: isRemovingBg ? "去背中..." : "圖片去背", onClick: () => { mobileRemoveBg(); closeMobilePanel(); }, disabled: isRemovingBg },
+                  ].map((item, i) => (
+                    <button
+                      key={i}
+                      onClick={item.onClick}
+                      disabled={(item as any).disabled}
+                      className="w-full flex items-center gap-3 p-3 rounded-xl bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 text-left transition-all active:scale-[0.98] disabled:opacity-50"
+                    >
+                      <div className="w-10 h-10 rounded-lg bg-slate-700/50 flex items-center justify-center">
+                        <item.icon className="w-5 h-5 text-slate-300" />
+                      </div>
+                      <span className="text-sm text-slate-200">{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== 手機版底部工具列 (fixed 浮動在最底層) ===== */}
+      <div className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-slate-900/95 backdrop-blur-xl border-t border-slate-700/50" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
         {/* 第一行：復原/重做 + 快捷動作 */}
-        <div className="flex items-center justify-between px-2 py-1 border-b border-slate-800/50">
+        <div className="flex items-center justify-between px-2 py-0.5 border-b border-slate-800/50">
           <div className="flex items-center gap-1">
             <Button
               variant="ghost" size="sm"
               onClick={() => useDesignStudioStore.getState().undo()}
-              className="w-8 h-8 p-0 text-slate-400 hover:text-white"
+              className="w-7 h-7 p-0 text-slate-400 hover:text-white"
             >
-              <Undo2 className="w-4 h-4" />
+              <Undo2 className="w-3.5 h-3.5" />
             </Button>
             <Button
               variant="ghost" size="sm"
               onClick={() => useDesignStudioStore.getState().redo()}
-              className="w-8 h-8 p-0 text-slate-400 hover:text-white"
+              className="w-7 h-7 p-0 text-slate-400 hover:text-white"
             >
-              <Redo2 className="w-4 h-4" />
+              <Redo2 className="w-3.5 h-3.5" />
             </Button>
           </div>
           <span className="text-[10px] text-slate-500">{layers.length} 個圖層</span>
         </div>
 
         {/* 第二行：主要工具列 */}
-        <div className="flex items-center justify-around px-1 py-2">
+        <div className="flex items-center justify-around px-1 py-1.5">
           {[
             { 
               icon: MousePointer2, 
               label: "選取", 
+              id: "select",
               active: useDesignStudioStore.getState().activeTool === "select",
               onClick: () => { useDesignStudioStore.getState().setActiveTool("select"); setMobilePanel(null); },
             },
-            { icon: Type, label: "文字", onClick: mobileAddText },
-            { icon: Upload, label: "圖片", onClick: mobileUploadImage },
-            { icon: Shapes, label: "形狀", onClick: () => toggleMobilePanel("shapes") },
-            { icon: Layers, label: "圖層", onClick: () => toggleMobilePanel("layers") },
-            { icon: Settings2, label: "屬性", onClick: () => toggleMobilePanel("properties") },
-            { icon: MoreHorizontal, label: "更多", onClick: () => toggleMobilePanel("more") },
-          ].map((tool, i) => (
+            { icon: Type, label: "文字", id: "text", onClick: mobileAddText },
+            { icon: Upload, label: "圖片", id: "image", onClick: mobileUploadImage },
+            { icon: Shapes, label: "形狀", id: "shapes", onClick: () => toggleMobilePanel("shapes") },
+            { icon: Layers, label: "圖層", id: "layers", onClick: () => toggleMobilePanel("layers") },
+            { icon: Settings2, label: "屬性", id: "properties", onClick: () => toggleMobilePanel("properties") },
+            { icon: MoreHorizontal, label: "更多", id: "more", onClick: () => toggleMobilePanel("more") },
+          ].map((tool) => (
             <button
-              key={i}
+              key={tool.id}
               onClick={tool.onClick}
               className={cn(
                 "flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg transition-all active:scale-90",
-                (tool as any).active || mobilePanel === tool.label.toLowerCase()
+                (tool as any).active || mobilePanel === tool.id
                   ? "text-indigo-400"
                   : "text-slate-400 hover:text-white"
               )}
