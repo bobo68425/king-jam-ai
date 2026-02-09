@@ -1677,9 +1677,9 @@ export default function CanvasStage({ className }: CanvasStageProps) {
       {/* 右鍵選單 */}
       <ContextMenu containerRef={containerRef} />
       
-      {/* 縮放控制器 - 改進版 */}
+      {/* 縮放控制器 - 手機版浮動在底部工具列上方 */}
       <TooltipProvider delayDuration={200}>
-        <div className="absolute bottom-4 right-4 flex items-center gap-1 px-2 py-1.5 bg-slate-900/95 backdrop-blur-md rounded-xl border border-slate-700/50 shadow-xl">
+        <div className="fixed md:absolute bottom-[96px] md:bottom-4 right-3 md:right-4 z-40 flex items-center gap-1 px-2 py-1.5 bg-slate-900/95 backdrop-blur-md rounded-xl border border-slate-700/50 shadow-xl">
           {/* 縮小 */}
           <Tooltip>
             <TooltipTrigger asChild>
@@ -1752,7 +1752,7 @@ export default function CanvasStage({ className }: CanvasStageProps) {
       </TooltipProvider>
 
       {/* 畫布尺寸提示 */}
-      <div className="absolute top-4 left-4 px-3 py-1.5 bg-slate-900/80 backdrop-blur-sm rounded-lg border border-slate-700/50 text-xs text-slate-400">
+      <div className="absolute top-2 left-2 md:top-4 md:left-4 px-2 py-1 md:px-3 md:py-1.5 bg-slate-900/80 backdrop-blur-sm rounded-lg border border-slate-700/50 text-[10px] md:text-xs text-slate-400 z-10">
         <span className="font-mono">{canvasWidth} × {canvasHeight}</span>
       </div>
 
