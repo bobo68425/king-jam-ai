@@ -79,7 +79,8 @@ const PRESET_CATEGORIES = [
 
 const PRESET_TEMPLATES: PresetTemplate[] = [
   // 社群媒體
-  { id: 'ig-post', name: 'Instagram 貼文', width: 1080, height: 1080, category: 'social', icon: <Instagram className="w-5 h-5" /> },
+  { id: 'ig-post', name: 'Instagram 貼文', width: 1080, height: 1080, category: 'social', icon: <Instagram className="w-5 h-5" />, description: '1:1' },
+  { id: 'ig-portrait', name: 'Instagram 4:5', width: 1080, height: 1350, category: 'social', icon: <Instagram className="w-5 h-5" />, description: '4:5 直式' },
   { id: 'ig-story', name: 'Instagram 限時動態', width: 1080, height: 1920, category: 'social', icon: <Instagram className="w-5 h-5" /> },
   { id: 'ig-reel', name: 'Instagram Reels', width: 1080, height: 1920, category: 'social', icon: <Instagram className="w-5 h-5" /> },
   { id: 'fb-post', name: 'Facebook 貼文', width: 1200, height: 630, category: 'social', icon: <Facebook className="w-5 h-5" /> },
@@ -353,11 +354,11 @@ export default function NewProjectDialog({
                 <div className="grid grid-cols-3 gap-2">
                   {[
                     { name: 'IG 貼文', w: 1080, h: 1080 },
+                    { name: 'IG 4:5', w: 1080, h: 1350 },
                     { name: 'IG 限動', w: 1080, h: 1920 },
                     { name: 'FB 封面', w: 1200, h: 630 },
                     { name: 'YT 封面', w: 1280, h: 720 },
                     { name: 'A4 直式', w: 2480, h: 3508 },
-                    { name: '名片', w: 1050, h: 600 },
                   ].map((t) => (
                     <button
                       key={t.name}

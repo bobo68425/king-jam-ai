@@ -199,6 +199,7 @@ interface DesignStudioState {
 export const CANVAS_PRESETS: CanvasPreset[] = [
   // 社群媒體
   { id: 'ig-post', name: 'Instagram 貼文', width: 1080, height: 1080, category: '社群媒體' },
+  { id: 'ig-portrait', name: 'Instagram 4:5', width: 1080, height: 1350, category: '社群媒體' },
   { id: 'ig-story', name: 'Instagram 限動', width: 1080, height: 1920, category: '社群媒體' },
   { id: 'fb-post', name: 'Facebook 貼文', width: 1200, height: 630, category: '社群媒體' },
   { id: 'fb-cover', name: 'Facebook 封面', width: 1640, height: 624, category: '社群媒體' },
