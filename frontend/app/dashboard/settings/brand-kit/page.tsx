@@ -879,7 +879,7 @@ export default function BrandKitPage() {
           <Button
             onClick={handleSave}
             disabled={isSaving}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/25"
+            className="!bg-indigo-600 hover:!bg-indigo-700 !text-white shadow-lg shadow-indigo-500/25"
           >
             <Save className="w-4 h-4 mr-2" />
             {isSaving ? "儲存中..." : "儲存變更"}
