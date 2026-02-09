@@ -150,6 +150,7 @@ interface DesignStudioState {
   removeLayer: (id: string) => void;
   updateLayer: (id: string, updates: Partial<LayerData>) => void;
   reorderLayers: (startIndex: number, endIndex: number) => void;
+  syncLayersFromCanvas: () => void; // 從畫布物件同步/重建圖層參照
   
   // 活動工具
   activeTool: 'select' | 'text' | 'shape' | 'image' | 'pan';
@@ -304,6 +305,115 @@ export const useDesignStudioStore = create<DesignStudioState>()(
         newLayers.splice(endIndex, 0, removed);
         return { layers: newLayers };
       }),
+
+      // 從畫布物件同步/重建圖層參照
+      // 解決問題：編輯多次後 fabricObject 參照失效，導致圖層消失或無法操作
+      // 使用 set(fn) 原子操作避免競態條件
+      syncLayersFromCanvas: () => {
+        const canvas = get().canvas;
+        if (!canvas) return;
+        
+        // 如果正在恢復歷史，跳過同步（undo/redo 有自己的圖層重建邏輯）
+        if (get().isRestoringHistory) return;
+
+        const canvasObjects = canvas.getObjects() as ExtendedFabricObject[];
+        // 建立 ID → 畫布物件的映射（排除網格和參考線）
+        const objectMap = new Map<string, ExtendedFabricObject>();
+        for (const obj of canvasObjects) {
+          if (obj.isGrid || obj.isGuide || !obj.id) continue;
+          objectMap.set(obj.id, obj);
+        }
+
+        // 如果畫布沒有任何有效物件，不做同步（避免錯誤清空圖層）
+        // 注意：canvas.clear() 期間不應觸發同步
+        if (objectMap.size === 0) return;
+
+        // 使用 set(fn) 保證原子操作，避免 get/set 之間被其他 set 插入
+        set((state) => {
+          const { layers } = state;
+
+          // 快速檢查是否需要更新
+          let needsUpdate = false;
+          
+          // 檢查圖層數量與畫布物件數量是否一致
+          if (layers.length !== objectMap.size) {
+            needsUpdate = true;
+          }
+          
+          if (!needsUpdate) {
+            for (const layer of layers) {
+              const canvasObj = objectMap.get(layer.id);
+              if (!canvasObj) {
+                needsUpdate = true;
+                break;
+              }
+              if (layer.fabricObject !== canvasObj || !layer.fabricObject?.canvas) {
+                needsUpdate = true;
+                break;
+              }
+            }
+          }
+          
+          if (!needsUpdate) {
+            for (const [id] of objectMap) {
+              if (!layers.find(l => l.id === id)) {
+                needsUpdate = true;
+                break;
+              }
+            }
+          }
+
+          if (!needsUpdate) return {}; // 不需要更新，返回空物件不觸發 re-render
+
+          // 重建圖層列表，保留已有圖層的順序和元資料
+          const updatedLayers: LayerData[] = [];
+          const processedIds = new Set<string>();
+
+          // 先按照現有圖層順序處理，更新 fabricObject 參照
+          for (const layer of layers) {
+            const canvasObj = objectMap.get(layer.id);
+            if (canvasObj) {
+              updatedLayers.push({
+                ...layer,
+                fabricObject: canvasObj,
+                visible: canvasObj.visible !== false,
+                locked: canvasObj.selectable === false,
+                opacity: canvasObj.opacity ?? 1,
+              });
+              processedIds.add(layer.id);
+            }
+            // 畫布物件不存在 → 清理失效圖層
+          }
+
+          // 加入畫布上有但圖層列表中沒有的新物件（從頂到底遍歷）
+          const newLayers: LayerData[] = [];
+          for (let i = canvasObjects.length - 1; i >= 0; i--) {
+            const obj = canvasObjects[i] as ExtendedFabricObject;
+            if (obj.isGrid || obj.isGuide || !obj.id) continue;
+            if (!processedIds.has(obj.id)) {
+              newLayers.push({
+                id: obj.id,
+                name: obj.name || `物件 ${obj.id.slice(0, 6)}`,
+                type: obj.type === 'i-text' || obj.type === 'text' || obj.type === 'textbox' ? 'text'
+                  : obj.type === 'image' ? 'image' 
+                  : obj.type === 'group' ? 'group' : 'shape',
+                visible: obj.visible !== false,
+                locked: obj.selectable === false,
+                opacity: obj.opacity ?? 1,
+                blendMode: ((obj as any).globalCompositeOperation as BlendMode) || 'source-over',
+                fabricObject: obj,
+                isGroup: (obj as any).isGroup,
+                childIds: (obj as any).childIds,
+                clipMaskId: (obj as any).clipMaskId,
+                isClipMask: (obj as any).isClipMask,
+              });
+            }
+          }
+
+          const finalLayers = [...newLayers, ...updatedLayers];
+          return { layers: finalLayers };
+        });
+      },
       
       // 活動工具
       activeTool: 'select',

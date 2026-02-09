@@ -13,7 +13,7 @@
  * - 移到最上/最下功能
  */
 
-import React, { useRef, useState, useCallback } from "react";
+import React, { useRef, useState, useCallback, useEffect } from "react";
 import { fabric } from "fabric";
 import { ExtendedFabricObject } from "@/stores/design-studio-store";
 import { 
@@ -139,9 +139,23 @@ export default function LayersPanel() {
     addLayer,
     canvasWidth,
     canvasHeight,
+    syncLayersFromCanvas,
   } = useDesignStudioStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 圖層面板開啟時，同步圖層參照以確保一致性
+  useEffect(() => {
+    if (canvas && layers.length > 0) {
+      // 檢查是否有失效的 fabricObject 參照
+      const hasStaleRef = layers.some(l => 
+        l.fabricObject && (!l.fabricObject.canvas || l.fabricObject.canvas !== canvas)
+      );
+      if (hasStaleRef) {
+        syncLayersFromCanvas();
+      }
+    }
+  }, [canvas, layers.length, syncLayersFromCanvas]);
   
   // 拖曳排序狀態
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -428,9 +442,17 @@ export default function LayersPanel() {
 
   // 選取圖層（支援多選）
   const handleSelectLayer = (layer: LayerData, index: number, e: React.MouseEvent) => {
-    if (!canvas || !layer.fabricObject) return;
+    if (!canvas || !layer.fabricObject) {
+      // fabricObject 不存在，嘗試同步修復
+      syncLayersFromCanvas();
+      return;
+    }
     // 確保 fabricObject 有綁定到 canvas
-    if (!layer.fabricObject.canvas) return;
+    if (!layer.fabricObject.canvas) {
+      // fabricObject 參照失效，觸發同步修復
+      syncLayersFromCanvas();
+      return;
+    }
     
     const isCtrlOrCmd = e.ctrlKey || e.metaKey;
     const isShift = e.shiftKey;
@@ -501,24 +523,45 @@ export default function LayersPanel() {
     }
   };
 
+  // 從畫布取得有效的 fabricObject（若參照失效則嘗試修復）
+  const getValidFabricObject = (layer: LayerData): fabric.Object | null => {
+    if (layer.fabricObject && layer.fabricObject.canvas === canvas) {
+      return layer.fabricObject;
+    }
+    // 參照失效，從畫布中搜尋
+    if (canvas) {
+      const canvasObj = canvas.getObjects().find(
+        (obj) => (obj as ExtendedFabricObject).id === layer.id
+      );
+      if (canvasObj) {
+        // 修復參照
+        updateLayer(layer.id, { fabricObject: canvasObj });
+        return canvasObj;
+      }
+    }
+    return null;
+  };
+
   // 切換可見性
   const toggleVisibility = (layer: LayerData) => {
-    if (!canvas || !layer.fabricObject) return;
-    if (!layer.fabricObject.canvas) return;
+    if (!canvas) return;
+    const obj = getValidFabricObject(layer);
+    if (!obj) return;
     
     const newVisible = !layer.visible;
-    layer.fabricObject.set("visible", newVisible);
+    obj.set("visible", newVisible);
     canvas.renderAll();
     updateLayer(layer.id, { visible: newVisible });
   };
 
   // 切換鎖定
   const toggleLock = (layer: LayerData) => {
-    if (!canvas || !layer.fabricObject) return;
-    if (!layer.fabricObject.canvas) return;
+    if (!canvas) return;
+    const obj = getValidFabricObject(layer);
+    if (!obj) return;
     
     const newLocked = !layer.locked;
-    layer.fabricObject.set({
+    obj.set({
       selectable: !newLocked,
       evented: !newLocked,
     });
@@ -1357,6 +1400,59 @@ export default function LayersPanel() {
         </Button>
       </div>
       
+      {/* 全選/取消全選 工具列 */}
+      {layers.length > 0 && (
+        <div className="px-2 py-1.5 border-b border-slate-200 dark:border-slate-700/50 flex items-center justify-between">
+          <button
+            onClick={() => {
+              if (!canvas) return;
+              const allSelected = selectedObjectIds.length === layers.length;
+              if (allSelected) {
+                // 取消全選
+                canvas.discardActiveObject();
+                canvas.renderAll();
+                setSelectedObjects([]);
+              } else {
+                // 全選
+                const allIds = layers.map(l => l.id);
+                const allObjs = layers.filter(l => l.fabricObject).map(l => l.fabricObject!);
+                if (allObjs.length > 1) {
+                  const sel = new fabric.ActiveSelection(allObjs, { canvas });
+                  canvas.setActiveObject(sel);
+                } else if (allObjs.length === 1) {
+                  canvas.setActiveObject(allObjs[0]);
+                }
+                canvas.renderAll();
+                setSelectedObjects(allIds);
+              }
+            }}
+            className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors"
+          >
+            <div className={cn(
+              "w-3.5 h-3.5 rounded border flex items-center justify-center transition-all",
+              selectedObjectIds.length === layers.length && layers.length > 0
+                ? "bg-indigo-500 border-indigo-500 text-white"
+                : selectedObjectIds.length > 0
+                  ? "bg-indigo-500/50 border-indigo-400 text-white"
+                  : "border-slate-300 dark:border-slate-600"
+            )}>
+              {selectedObjectIds.length > 0 && <Check className="w-2.5 h-2.5" />}
+            </div>
+            {selectedObjectIds.length === layers.length && layers.length > 0
+              ? "取消全選"
+              : selectedObjectIds.length > 0
+                ? `已選 ${selectedObjectIds.length} 個`
+                : "全選"
+            }
+          </button>
+          {selectedObjectIds.length >= 2 && (
+            <span className="text-[10px] text-indigo-400 dark:text-indigo-300">
+              可群組 / 批量操作
+            </span>
+          )}
+        </div>
+      )}
+
       {/* 圖層列表 */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {layers.length === 0 ? (
@@ -1397,6 +1493,46 @@ export default function LayersPanel() {
                         isDragOver && "border-indigo-400 border-dashed bg-indigo-50 dark:bg-indigo-500/10"
                       )}
                     >
+                  {/* 勾選框 - 多選 */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!canvas || !layer.fabricObject || !layer.fabricObject.canvas) return;
+                      
+                      const isCurrentlySelected = selectedObjectIds.includes(layer.id);
+                      let newIds: string[];
+                      
+                      if (isCurrentlySelected) {
+                        newIds = selectedObjectIds.filter(id => id !== layer.id);
+                      } else {
+                        newIds = [...selectedObjectIds, layer.id];
+                      }
+                      
+                      if (newIds.length === 0) {
+                        canvas.discardActiveObject();
+                      } else if (newIds.length === 1) {
+                        const l = layers.find(l => l.id === newIds[0]);
+                        if (l?.fabricObject) canvas.setActiveObject(l.fabricObject);
+                      } else {
+                        const objs = layers.filter(l => newIds.includes(l.id) && l.fabricObject).map(l => l.fabricObject!);
+                        if (objs.length > 0) {
+                          const sel = new fabric.ActiveSelection(objs, { canvas });
+                          canvas.setActiveObject(sel);
+                        }
+                      }
+                      canvas.renderAll();
+                      setSelectedObjects(newIds);
+                    }}
+                    className={cn(
+                      "w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all",
+                      isSelected
+                        ? "bg-indigo-500 border-indigo-500 text-white"
+                        : "border-slate-300 dark:border-slate-600 hover:border-indigo-400 dark:hover:border-indigo-500"
+                    )}
+                  >
+                    {isSelected && <Check className="w-3 h-3" />}
+                  </button>
+
                   <TooltipProvider delayDuration={400}>
                     {/* 拖曳手柄 */}
                     <Tooltip>

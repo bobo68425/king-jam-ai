@@ -17,6 +17,7 @@ import { fabric } from "fabric";
 import { useDesignStudioStore, ExtendedFabricObject } from "@/stores/design-studio-store";
 import { autosaveService } from "@/lib/services/autosave-service";
 import { toast } from "sonner";
+import { v4 as uuidv4 } from "uuid";
 
 // Fabric 事件類型
 interface FabricTransformEvent {
@@ -243,6 +244,11 @@ export default function CanvasStage({ className }: CanvasStageProps) {
       if ((e.ctrlKey || e.metaKey) && e.key === 'd' && activeObject) {
         e.preventDefault();
         activeObject.clone((cloned: fabric.Object) => {
+          const newId = uuidv4();
+          const extCloned = cloned as ExtendedFabricObject;
+          const origName = (activeObject as ExtendedFabricObject).name || '物件';
+          extCloned.id = newId;
+          extCloned.name = `${origName} (複製)`;
           cloned.set({
             left: (cloned.left || 0) + 20,
             top: (cloned.top || 0) + 20,
@@ -250,6 +256,22 @@ export default function CanvasStage({ className }: CanvasStageProps) {
           fabricCanvas.add(cloned);
           fabricCanvas.setActiveObject(cloned);
           fabricCanvas.renderAll();
+          // 建立對應圖層
+          const { addLayer } = useDesignStudioStore.getState();
+          let objType: 'text' | 'image' | 'shape' | 'group' = 'shape';
+          if (cloned.type === 'i-text' || cloned.type === 'textbox' || cloned.type === 'text') objType = 'text';
+          else if (cloned.type === 'image') objType = 'image';
+          else if (cloned.type === 'group') objType = 'group';
+          addLayer({
+            id: newId,
+            name: extCloned.name,
+            type: objType,
+            visible: cloned.visible !== false,
+            locked: !cloned.selectable,
+            opacity: cloned.opacity || 1,
+            blendMode: 'source-over',
+            fabricObject: cloned,
+          });
         });
         return;
       }
@@ -1102,6 +1124,10 @@ export default function CanvasStage({ className }: CanvasStageProps) {
       const activeObjects = canvas.getActiveObjects();
       const ids = activeObjects.map((obj) => (obj as ExtendedFabricObject).id).filter(Boolean) as string[];
       setSelectedObjects(ids);
+      // 選取時延遲同步圖層參照（避免在事件處理中頻繁更新 state）
+      requestAnimationFrame(() => {
+        useDesignStudioStore.getState().syncLayersFromCanvas();
+      });
     };
 
     // 取消選取
@@ -1156,25 +1182,40 @@ export default function CanvasStage({ className }: CanvasStageProps) {
       });
     };
 
-    // 物件修改後保存歷史
+    // 物件修改後保存歷史 + 同步圖層
     const handleModified = (e: FabricObjectEvent) => {
+      // 如果正在恢復歷史（undo/redo），跳過
+      const { isRestoringHistory } = useDesignStudioStore.getState();
+      if (isRestoringHistory) return;
+      
       const target = e.target;
       const objectId = target?.id;
       
-      // clipPath 使用相對位置（absolutePositioned: false），會自動跟著物件移動
-      // 不需要手動同步
-      
       saveHistory('modify', objectId ? [objectId] : undefined);
+      
+      // 延遲同步圖層參照，避免在事件處理中觸發頻繁 state 更新
+      requestAnimationFrame(() => {
+        useDesignStudioStore.getState().syncLayersFromCanvas();
+      });
     };
 
-    // 物件新增後保存歷史
+    // 物件新增後保存歷史 + 同步圖層
     const handleAdded = (e: FabricObjectEvent) => {
       const target = e.target;
       // 跳過網格線和參考線
       if (target?.isGrid || target?.isGuide) return;
+      
+      // 如果正在恢復歷史（undo/redo），跳過
+      const { isRestoringHistory } = useDesignStudioStore.getState();
+      if (isRestoringHistory) return;
+      
       const objectId = target?.id;
       if (objectId) {
         saveHistory('add', [objectId]);
+        // 同步：確保新物件有對應的圖層
+        requestAnimationFrame(() => {
+          useDesignStudioStore.getState().syncLayersFromCanvas();
+        });
       }
     };
 
@@ -1183,14 +1224,19 @@ export default function CanvasStage({ className }: CanvasStageProps) {
       const target = e.target;
       // 跳過網格線和參考線
       if (target?.isGrid || target?.isGuide) return;
+      
+      // 如果正在恢復歷史（undo/redo），跳過所有圖層操作
+      // undo/redo 會在 loadFromJSON 回調中重建圖層
+      const { isRestoringHistory, layers: currentLayers, updateLayer: storeUpdateLayer } = useDesignStudioStore.getState();
+      if (isRestoringHistory) return;
+      
       const objectId = target?.id;
       if (objectId) {
-        const { layers, updateLayer } = useDesignStudioStore.getState();
-        const currentLayer = layers.find(l => l.id === objectId);
+        const currentLayer = currentLayers.find(l => l.id === objectId);
         
         // 如果此物件有遮罩，同時刪除遮罩物件
         if (currentLayer?.clipMaskId) {
-          const maskLayer = layers.find(l => l.id === currentLayer.clipMaskId);
+          const maskLayer = currentLayers.find(l => l.id === currentLayer.clipMaskId);
           if (maskLayer?.fabricObject && maskLayer.fabricObject.canvas) {
             canvas.remove(maskLayer.fabricObject);
             removeLayer(maskLayer.id);
@@ -1199,12 +1245,12 @@ export default function CanvasStage({ className }: CanvasStageProps) {
         
         // 如果此物件是遮罩，清除被遮罩物件的 clipPath
         if (currentLayer?.isClipMask) {
-          const maskedLayers = layers.filter(l => l.clipMaskId === objectId);
+          const maskedLayers = currentLayers.filter(l => l.clipMaskId === objectId);
           maskedLayers.forEach(maskedLayer => {
             if (maskedLayer.fabricObject) {
               maskedLayer.fabricObject.clipPath = undefined;
               maskedLayer.fabricObject.dirty = true;
-              updateLayer(maskedLayer.id, { clipMaskId: undefined });
+              storeUpdateLayer(maskedLayer.id, { clipMaskId: undefined });
             }
           });
           canvas.renderAll();
@@ -1233,6 +1279,16 @@ export default function CanvasStage({ className }: CanvasStageProps) {
       canvas.off("object:removed", handleRemoved);
     };
   }, [canvas, setSelectedObjects, pushHistory, removeLayer]);
+
+  // 定期同步圖層參照（安全網機制）
+  // 每 5 秒檢查一次，確保圖層和畫布物件同步
+  useEffect(() => {
+    if (!canvas) return;
+    const intervalId = setInterval(() => {
+      useDesignStudioStore.getState().syncLayersFromCanvas();
+    }, 5000);
+    return () => clearInterval(intervalId);
+  }, [canvas]);
 
   // 計算最佳縮放比例，讓畫布適應容器
   const calculateFitZoom = useCallback(() => {
@@ -1304,6 +1360,7 @@ export default function CanvasStage({ className }: CanvasStageProps) {
   // 手機觸控手勢：雙指縮放物件 + 雙擊顯示工具選單
   // ================================================
   const [mobileToolMenu, setMobileToolMenu] = useState<{ x: number; y: number; objectId: string } | null>(null);
+  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const touchStateRef = useRef<{
     initialDistance: number;
     initialScaleX: number;
@@ -1311,6 +1368,9 @@ export default function CanvasStage({ className }: CanvasStageProps) {
     isPinching: boolean;
     lastTapTime: number;
     lastTapTarget: string | null;
+    longPressTimer: ReturnType<typeof setTimeout> | null;
+    longPressTriggered: boolean;
+    touchStartPos: { x: number; y: number } | null;
   }>({
     initialDistance: 0,
     initialScaleX: 1,
@@ -1318,6 +1378,9 @@ export default function CanvasStage({ className }: CanvasStageProps) {
     isPinching: false,
     lastTapTime: 0,
     lastTapTarget: null,
+    longPressTimer: null,
+    longPressTriggered: false,
+    touchStartPos: null,
   });
 
   // 計算兩指之間的距離
@@ -1330,8 +1393,20 @@ export default function CanvasStage({ className }: CanvasStageProps) {
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (!canvas) return;
 
+    // 清除之前的長按計時器
+    if (touchStateRef.current.longPressTimer) {
+      clearTimeout(touchStateRef.current.longPressTimer);
+      touchStateRef.current.longPressTimer = null;
+    }
+    touchStateRef.current.longPressTriggered = false;
+
     // 雙指開始：記錄初始距離和物件縮放
     if (e.touches.length === 2) {
+      // 取消長按
+      if (touchStateRef.current.longPressTimer) {
+        clearTimeout(touchStateRef.current.longPressTimer);
+        touchStateRef.current.longPressTimer = null;
+      }
       const activeObject = canvas.getActiveObject();
       if (activeObject && activeObject.type !== 'activeSelection') {
         e.preventDefault();
@@ -1343,31 +1418,98 @@ export default function CanvasStage({ className }: CanvasStageProps) {
       }
     }
 
-    // 單指：偵測雙擊
+    // 單指
     if (e.touches.length === 1) {
       const now = Date.now();
+      const touch = e.touches[0];
+      touchStateRef.current.touchStartPos = { x: touch.clientX, y: touch.clientY };
+      
       const activeObject = canvas.getActiveObject();
       const targetId = activeObject ? (activeObject as any).id : null;
       const timeDiff = now - touchStateRef.current.lastTapTime;
       const sameTarget = targetId && targetId === touchStateRef.current.lastTapTarget;
 
+      // 如果在多選模式下，點擊物件 → 加入/移除選取
+      if (isMultiSelectMode && targetId) {
+        const { selectedObjectIds, setSelectedObjects, layers } = useDesignStudioStore.getState();
+
+        // 延遲一幀，讓 Fabric.js 先處理完 touch 事件
+        setTimeout(() => {
+          const tappedObj = canvas.getActiveObject();
+          const tappedId = tappedObj ? (tappedObj as any).id : null;
+          if (!tappedId) return;
+
+          const isAlreadySelected = selectedObjectIds.includes(tappedId);
+          let newIds: string[];
+
+          if (isAlreadySelected) {
+            newIds = selectedObjectIds.filter(id => id !== tappedId);
+          } else {
+            newIds = [...selectedObjectIds, tappedId];
+          }
+
+          if (newIds.length === 0) {
+            canvas.discardActiveObject();
+          } else if (newIds.length === 1) {
+            const l = layers.find(l => l.id === newIds[0]);
+            if (l?.fabricObject) canvas.setActiveObject(l.fabricObject);
+          } else {
+            const objs = layers.filter(l => newIds.includes(l.id) && l.fabricObject).map(l => l.fabricObject!);
+            if (objs.length > 0) {
+              const sel = new fabric.ActiveSelection(objs, { canvas });
+              canvas.setActiveObject(sel);
+            }
+          }
+          canvas.renderAll();
+          setSelectedObjects(newIds);
+        }, 50);
+        
+        touchStateRef.current.lastTapTime = now;
+        touchStateRef.current.lastTapTarget = targetId;
+        return;
+      }
+
+      // 雙擊偵測
       if (timeDiff < 350 && sameTarget && activeObject) {
-        // 雙擊物件 → 顯示工具選單
         e.preventDefault();
-        const touch = e.touches[0];
         setMobileToolMenu({
           x: touch.clientX,
           y: touch.clientY,
           objectId: targetId,
         });
+        touchStateRef.current.lastTapTime = now;
+        touchStateRef.current.lastTapTarget = targetId;
+        return;
+      }
+
+      // 長按偵測（500ms）→ 進入多選模式
+      if (targetId) {
+        touchStateRef.current.longPressTimer = setTimeout(() => {
+          touchStateRef.current.longPressTriggered = true;
+          setIsMultiSelectMode(true);
+          // 震動反饋（如果瀏覽器支援）
+          if (navigator.vibrate) navigator.vibrate(30);
+          toast.info("多選模式：點選其他物件加入選取", { duration: 2000, id: "multi-select" });
+        }, 500);
       }
 
       touchStateRef.current.lastTapTime = now;
       touchStateRef.current.lastTapTarget = targetId;
     }
-  }, [canvas]);
+  }, [canvas, isMultiSelectMode]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    // 取消長按：手指移動超過 10px
+    if (touchStateRef.current.longPressTimer && e.touches.length === 1 && touchStateRef.current.touchStartPos) {
+      const touch = e.touches[0];
+      const dx = touch.clientX - touchStateRef.current.touchStartPos.x;
+      const dy = touch.clientY - touchStateRef.current.touchStartPos.y;
+      if (Math.sqrt(dx * dx + dy * dy) > 10) {
+        clearTimeout(touchStateRef.current.longPressTimer);
+        touchStateRef.current.longPressTimer = null;
+      }
+    }
+
     if (!canvas || !touchStateRef.current.isPinching) return;
     if (e.touches.length !== 2) return;
 
@@ -1398,9 +1540,14 @@ export default function CanvasStage({ className }: CanvasStageProps) {
   }, [canvas]);
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    // 清除長按計時器
+    if (touchStateRef.current.longPressTimer) {
+      clearTimeout(touchStateRef.current.longPressTimer);
+      touchStateRef.current.longPressTimer = null;
+    }
+
     if (touchStateRef.current.isPinching) {
       touchStateRef.current.isPinching = false;
-      // 結束手勢後觸發 object:modified 以保存歷史
       if (canvas) {
         const activeObject = canvas.getActiveObject();
         if (activeObject) {
@@ -1424,14 +1571,19 @@ export default function CanvasStage({ className }: CanvasStageProps) {
     switch (action) {
       case 'copy': {
         activeObject.clone((cloned: fabric.Object) => {
-          const id = Math.random().toString(36).substring(2, 10);
+          const newId = uuidv4();
+          const origName = (activeObject as ExtendedFabricObject).name || '物件';
           cloned.set({ left: (cloned.left || 0) + 20, top: (cloned.top || 0) + 20 });
-          (cloned as any).id = id;
-          (cloned as any).name = `複製 ${id}`;
+          (cloned as any).id = newId;
+          (cloned as any).name = `${origName} (複製)`;
           canvas.add(cloned);
           canvas.setActiveObject(cloned);
           canvas.renderAll();
-          addLayer({ id, name: `複製 ${id}`, type: 'shape', visible: true, locked: false, opacity: 1, blendMode: 'source-over', fabricObject: cloned });
+          let objType: 'text' | 'image' | 'shape' | 'group' = 'shape';
+          if (cloned.type === 'i-text' || cloned.type === 'textbox' || cloned.type === 'text') objType = 'text';
+          else if (cloned.type === 'image') objType = 'image';
+          else if (cloned.type === 'group') objType = 'group';
+          addLayer({ id: newId, name: `${origName} (複製)`, type: objType, visible: true, locked: false, opacity: 1, blendMode: 'source-over', fabricObject: cloned });
         });
         break;
       }
@@ -1603,6 +1755,22 @@ export default function CanvasStage({ className }: CanvasStageProps) {
       <div className="absolute top-4 left-4 px-3 py-1.5 bg-slate-900/80 backdrop-blur-sm rounded-lg border border-slate-700/50 text-xs text-slate-400">
         <span className="font-mono">{canvasWidth} × {canvasHeight}</span>
       </div>
+
+      {/* 手機版：多選模式提示 */}
+      {isMultiSelectMode && (
+        <div className="md:hidden absolute top-4 left-1/2 -translate-x-1/2 z-[55] animate-in fade-in slide-in-from-top duration-200">
+          <button
+            onClick={() => {
+              setIsMultiSelectMode(false);
+              toast.dismiss("multi-select");
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-full shadow-lg shadow-indigo-500/30 active:scale-95 transition-transform"
+          >
+            <span>多選模式中</span>
+            <span className="text-xs bg-white/20 px-1.5 py-0.5 rounded">點此退出</span>
+          </button>
+        </div>
+      )}
 
       {/* ===== 手機版：雙擊物件工具選單 ===== */}
       {mobileToolMenu && (

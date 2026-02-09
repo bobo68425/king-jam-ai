@@ -275,6 +275,10 @@ export default function DesignStudioPage() {
         const activeObject = canvas.getActiveObject();
         if (activeObject) {
           activeObject.clone((cloned: fabric.Object) => {
+            const newId = uuidv4();
+            const origName = (activeObject as any).name || '物件';
+            (cloned as any).id = newId;
+            (cloned as any).name = `${origName} (複製)`;
             cloned.set({
               left: (cloned.left || 0) + 20,
               top: (cloned.top || 0) + 20,
@@ -282,6 +286,22 @@ export default function DesignStudioPage() {
             canvas.add(cloned);
             canvas.setActiveObject(cloned);
             canvas.renderAll();
+            // 建立對應圖層
+            const { addLayer } = useDesignStudioStore.getState();
+            let objType: 'text' | 'image' | 'shape' | 'group' = 'shape';
+            if (cloned.type === 'i-text' || cloned.type === 'textbox' || cloned.type === 'text') objType = 'text';
+            else if (cloned.type === 'image') objType = 'image';
+            else if (cloned.type === 'group') objType = 'group';
+            addLayer({
+              id: newId,
+              name: `${origName} (複製)`,
+              type: objType,
+              visible: true,
+              locked: false,
+              opacity: cloned.opacity || 1,
+              blendMode: 'source-over',
+              fabricObject: cloned,
+            });
           });
         }
       }
