@@ -912,31 +912,31 @@ export default function BrandKitPage() {
 
       {/* Main Content */}
       <Tabs defaultValue="colors" className="space-y-6">
-        <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
-          <TabsList className="bg-slate-800/80 border border-slate-700 backdrop-blur-sm inline-flex w-auto min-w-full md:min-w-0">
-            <TabsTrigger value="colors" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white text-slate-400 gap-2 px-4">
-              <Palette className="w-4 h-4" />
-              <span className="hidden sm:inline">色彩</span>
+        <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide">
+          <TabsList className="bg-slate-800/80 border border-slate-700 backdrop-blur-sm inline-flex w-auto h-auto p-1">
+            <TabsTrigger value="colors" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md text-slate-400 hover:text-slate-200 flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap">
+              <Palette className="w-4 h-4 shrink-0" />
+              色彩
             </TabsTrigger>
-            <TabsTrigger value="logo" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white text-slate-400 gap-2 px-4">
-              <ImageIcon className="w-4 h-4" />
-              <span className="hidden sm:inline">Logo</span>
+            <TabsTrigger value="logo" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md text-slate-400 hover:text-slate-200 flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap">
+              <ImageIcon className="w-4 h-4 shrink-0" />
+              Logo
             </TabsTrigger>
-            <TabsTrigger value="typography" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white text-slate-400 gap-2 px-4">
-              <Type className="w-4 h-4" />
-              <span className="hidden sm:inline">字型</span>
+            <TabsTrigger value="typography" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md text-slate-400 hover:text-slate-200 flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap">
+              <Type className="w-4 h-4 shrink-0" />
+              字型
             </TabsTrigger>
-            <TabsTrigger value="voice" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white text-slate-400 gap-2 px-4">
-              <Mic className="w-4 h-4" />
-              <span className="hidden sm:inline">品牌聲音</span>
+            <TabsTrigger value="voice" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md text-slate-400 hover:text-slate-200 flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap">
+              <Mic className="w-4 h-4 shrink-0" />
+              品牌聲音
             </TabsTrigger>
-            <TabsTrigger value="style" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white text-slate-400 gap-2 px-4">
-              <Eye className="w-4 h-4" />
-              <span className="hidden sm:inline">視覺風格</span>
+            <TabsTrigger value="style" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md text-slate-400 hover:text-slate-200 flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap">
+              <Eye className="w-4 h-4 shrink-0" />
+              視覺風格
             </TabsTrigger>
-            <TabsTrigger value="character" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white text-slate-400 gap-2 px-4">
-              <Sparkles className="w-4 h-4" />
-              <span className="hidden sm:inline">IP 角色</span>
+            <TabsTrigger value="character" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md text-slate-400 hover:text-slate-200 flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap">
+              <Sparkles className="w-4 h-4 shrink-0" />
+              IP 角色
             </TabsTrigger>
           </TabsList>
         </div>
