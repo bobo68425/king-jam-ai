@@ -718,20 +718,20 @@ export default function TopToolbar() {
   }, {} as Record<string, typeof CANVAS_PRESETS>);
 
   return (
-    <div className="h-12 bg-slate-900/95 backdrop-blur-sm border-b border-slate-700/50 flex items-center justify-between px-4">
+    <div className="h-12 bg-slate-900/95 backdrop-blur-sm border-b border-slate-700/50 flex items-center justify-between px-2 md:px-4">
       {/* 左側：檔案選單 & 專案名稱 */}
-      <div className="flex items-center gap-3">
-        {/* 切換左側面板 */}
+      <div className="flex items-center gap-1.5 md:gap-3 min-w-0">
+        {/* 切換左側面板 - 桌面版 */}
         <Button
           variant="ghost"
           size="sm"
           onClick={toggleLeftPanel}
-          className="w-8 h-8 p-0 text-slate-400 hover:text-white"
+          className="hidden md:flex w-8 h-8 p-0 text-slate-400 hover:text-white"
         >
           <PanelLeftClose className={`w-4 h-4 transition-transform ${!leftPanelOpen ? "rotate-180" : ""}`} />
         </Button>
 
-        <Separator orientation="vertical" className="h-6 bg-slate-700" />
+        <Separator orientation="vertical" className="hidden md:block h-6 bg-slate-700" />
 
         {/* 檔案選單 */}
         <DropdownMenu>
@@ -920,16 +920,16 @@ export default function TopToolbar() {
         <Separator orientation="vertical" className="h-6 bg-slate-700" />
 
         {/* 專案名稱 + 保存狀態 */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 md:gap-2 min-w-0">
           <Input
             value={currentProject?.name || templateName}
             onChange={(e) => setTemplateName(e.target.value)}
-            className="w-40 h-8 bg-transparent border-transparent text-sm font-medium hover:bg-slate-800/50 focus:bg-slate-800 focus:border-slate-600"
+            className="w-20 md:w-40 h-8 bg-transparent border-transparent text-xs md:text-sm font-medium hover:bg-slate-800/50 focus:bg-slate-800 focus:border-slate-600 truncate"
           />
           <TooltipProvider delayDuration={300}>
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="flex items-center">
+                <div className="flex items-center shrink-0">
                   <SaveStatusIcon />
                 </div>
               </TooltipTrigger>
@@ -945,11 +945,11 @@ export default function TopToolbar() {
           </TooltipProvider>
         </div>
 
-        <Separator orientation="vertical" className="h-6 bg-slate-700" />
+        <Separator orientation="vertical" className="hidden md:block h-6 bg-slate-700" />
 
-        {/* Undo/Redo */}
+        {/* Undo/Redo - 桌面版（手機版由底部工具列處理） */}
         <TooltipProvider delayDuration={300}>
-          <div className="flex items-center gap-1">
+          <div className="hidden md:flex items-center gap-1">
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -1021,8 +1021,8 @@ export default function TopToolbar() {
         </TooltipProvider>
       </div>
 
-      {/* 中間：畫布設定 */}
-      <div className="flex items-center gap-2">
+      {/* 中間：畫布設定 - 桌面版 */}
+      <div className="hidden md:flex items-center gap-2">
         {/* 畫布尺寸 */}
         <Dialog open={showSizeDialog} onOpenChange={setShowSizeDialog}>
           <DialogTrigger asChild>
@@ -1035,7 +1035,7 @@ export default function TopToolbar() {
               <ChevronDown className="w-3 h-3 ml-1" />
             </Button>
           </DialogTrigger>
-          <DialogContent className="bg-slate-900 border-slate-700 max-w-lg">
+          <DialogContent className="bg-slate-900 border-slate-700 max-w-lg w-[95vw] md:w-auto">
             <DialogHeader>
               <DialogTitle className="text-white">畫布尺寸</DialogTitle>
             </DialogHeader>
@@ -1208,14 +1208,14 @@ export default function TopToolbar() {
       </div>
 
       {/* 右側：快捷鍵 & 匯出 & 面板切換 */}
-      <div className="flex items-center gap-2">
-        {/* 快捷鍵說明 */}
+      <div className="flex items-center gap-1 md:gap-2">
+        {/* 快捷鍵說明 - 桌面版 */}
         <Dialog>
           <DialogTrigger asChild>
             <Button
               variant="ghost"
               size="sm"
-              className="w-8 h-8 p-0 text-slate-400 hover:text-white"
+              className="hidden md:flex w-8 h-8 p-0 text-slate-400 hover:text-white"
             >
               <Keyboard className="w-4 h-4" />
             </Button>
@@ -1284,18 +1284,18 @@ export default function TopToolbar() {
           </DialogContent>
         </Dialog>
 
-        <Separator orientation="vertical" className="h-6 bg-slate-700" />
+        <Separator orientation="vertical" className="hidden md:block h-6 bg-slate-700" />
         
         {/* 匯出選單 */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button 
               size="sm" 
-              className="h-8 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600"
+              className="h-8 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-xs md:text-sm"
             >
-              <Download className="w-4 h-4 mr-1" />
-              匯出
-              <ChevronDown className="w-3 h-3 ml-1" />
+              <Download className="w-4 h-4 md:mr-1" />
+              <span className="hidden md:inline">匯出</span>
+              <ChevronDown className="w-3 h-3 ml-0.5 md:ml-1" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="bg-slate-800 border-slate-700 min-w-[180px]">
@@ -1345,14 +1345,14 @@ export default function TopToolbar() {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <Separator orientation="vertical" className="h-6 bg-slate-700" />
+        <Separator orientation="vertical" className="hidden md:block h-6 bg-slate-700" />
 
-        {/* 切換右側面板 */}
+        {/* 切換右側面板 - 桌面版 */}
         <Button
           variant="ghost"
           size="sm"
           onClick={toggleRightPanel}
-          className="w-8 h-8 p-0 text-slate-400 hover:text-white"
+          className="hidden md:flex w-8 h-8 p-0 text-slate-400 hover:text-white"
         >
           <PanelRightClose className={`w-4 h-4 transition-transform ${!rightPanelOpen ? "rotate-180" : ""}`} />
         </Button>

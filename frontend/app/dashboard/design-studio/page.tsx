@@ -40,6 +40,9 @@ import {
   MoreHorizontal,
   Undo2,
   Redo2,
+  FilePlus,
+  Save,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";

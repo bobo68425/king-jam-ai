@@ -250,14 +250,14 @@ export default function NewProjectDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl h-[85vh] p-0 bg-slate-900 border-slate-700 flex flex-col">
-        <DialogHeader className="px-6 py-4 border-b border-slate-700 flex-shrink-0">
-          <DialogTitle className="text-xl font-semibold text-white">新建專案</DialogTitle>
+      <DialogContent className="max-w-5xl md:h-[85vh] h-[90vh] p-0 bg-slate-900 border-slate-700 flex flex-col w-[95vw] md:w-auto">
+        <DialogHeader className="px-4 md:px-6 py-3 md:py-4 border-b border-slate-700 flex-shrink-0">
+          <DialogTitle className="text-lg md:text-xl font-semibold text-white">新建專案</DialogTitle>
         </DialogHeader>
 
-        <div className="flex flex-1 overflow-hidden">
-          {/* 左側：分類和模板 */}
-          <div className="flex-1 flex flex-col border-r border-slate-700">
+        <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
+          {/* 左側：分類和模板（手機版隱藏，設定優先） */}
+          <div className="hidden md:flex flex-1 flex-col border-r border-slate-700">
             {/* 分類標籤 */}
             <Tabs value={selectedCategory} onValueChange={setSelectedCategory} className="flex-shrink-0">
               <TabsList className="w-full justify-start px-4 py-2 bg-slate-800/50 rounded-none border-b border-slate-700 h-auto flex-wrap gap-1">
@@ -344,9 +344,43 @@ export default function NewProjectDialog({
             </ScrollArea>
           </div>
 
-          {/* 右側：自訂設定 */}
-          <div className="w-80 flex-shrink-0 p-6 bg-slate-800/30 overflow-y-auto">
-            <div className="space-y-6">
+          {/* 右側：自訂設定（手機版佔滿寬度） */}
+          <div className="w-full md:w-80 flex-shrink-0 p-4 md:p-6 bg-slate-800/30 overflow-y-auto flex-1 md:flex-none">
+            <div className="space-y-5 md:space-y-6">
+              {/* 手機版：快速模板選擇 */}
+              <div className="md:hidden space-y-2">
+                <Label className="text-slate-300 text-sm">快速選擇模板</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { name: 'IG 貼文', w: 1080, h: 1080 },
+                    { name: 'IG 限動', w: 1080, h: 1920 },
+                    { name: 'FB 封面', w: 1200, h: 630 },
+                    { name: 'YT 封面', w: 1280, h: 720 },
+                    { name: 'A4 直式', w: 2480, h: 3508 },
+                    { name: '名片', w: 1050, h: 600 },
+                  ].map((t) => (
+                    <button
+                      key={t.name}
+                      onClick={() => {
+                        setWidth(t.w);
+                        setHeight(t.h);
+                        if (t.w > t.h) setOrientation('landscape');
+                        else setOrientation('portrait');
+                      }}
+                      className={cn(
+                        "p-2 rounded-lg border text-xs text-center transition-all",
+                        width === t.w && height === t.h
+                          ? "border-indigo-500 bg-indigo-500/20 text-indigo-300"
+                          : "border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-500"
+                      )}
+                    >
+                      <div className="font-medium">{t.name}</div>
+                      <div className="text-[10px] text-slate-500 mt-0.5">{t.w}×{t.h}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* 專案名稱 */}
               <div>
                 <Label className="text-slate-300 text-sm">專案名稱</Label>
@@ -517,26 +551,29 @@ export default function NewProjectDialog({
         </div>
 
         {/* 底部按鈕 */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-700 bg-slate-800/50 flex-shrink-0">
+        <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4 border-t border-slate-700 bg-slate-800/50 flex-shrink-0">
           <Button
             variant="ghost"
+            size="sm"
             onClick={handleReset}
-            className="text-slate-400 hover:text-white"
+            className="text-slate-400 hover:text-white text-xs md:text-sm"
           >
-            <RotateCcw className="w-4 h-4 mr-2" />
+            <RotateCcw className="w-3.5 h-3.5 mr-1 md:w-4 md:h-4 md:mr-2" />
             重置
           </Button>
-          <div className="flex gap-3">
+          <div className="flex gap-2 md:gap-3">
             <Button
               variant="outline"
+              size="sm"
               onClick={() => onOpenChange(false)}
-              className="bg-slate-800 border-slate-600 hover:bg-slate-700"
+              className="bg-slate-800 border-slate-600 hover:bg-slate-700 text-xs md:text-sm"
             >
               取消
             </Button>
             <Button
+              size="sm"
               onClick={handleCreate}
-              className="bg-indigo-600 hover:bg-indigo-700 px-8"
+              className="bg-indigo-600 hover:bg-indigo-700 px-4 md:px-8 text-xs md:text-sm"
             >
               建立
             </Button>
