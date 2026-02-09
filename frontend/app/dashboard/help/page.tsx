@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   HelpCircle, Book, MessageCircle, Mail,
   ChevronDown, ChevronRight, Search, ExternalLink,
@@ -8,9 +8,17 @@ import {
   Sparkles, PenTool, Image as ImageIcon, Calendar,
   Share2, BarChart3, Layers, Crown, Coins, Wallet,
   Gift, Settings, Bell, Palette, User, Rocket,
-  CheckCircle, ArrowRight, Clock, AlertTriangle
+  CheckCircle, ArrowRight, Clock, AlertTriangle,
+  Eye, EyeOff, Minimize2, Bot,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import {
+  getAssistantMode,
+  getLineMode,
+  setAssistantModeGlobal,
+  setLineModeGlobal,
+  type BubbleMode,
+} from "@/components/ai-assistant";
 
 // ============================================================
 // FAQ 資料（依平台最新功能結構整理）
@@ -329,10 +337,46 @@ const featureGuides = [
 // 元件
 // ============================================================
 
+// LINE SVG Icon
+function LineIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63h2.386c.349 0 .63.285.63.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63.349 0 .631.285.631.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.281.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314" />
+    </svg>
+  );
+}
+
 export default function HelpPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedCategory, setExpandedCategory] = useState<string | null>("getting-started");
   const [expandedQuestions, setExpandedQuestions] = useState<Set<string>>(new Set());
+
+  // 泡泡設定狀態
+  const [assistantBubble, setAssistantBubble] = useState<BubbleMode>("full");
+  const [lineBubble, setLineBubble] = useState<BubbleMode>("full");
+
+  useEffect(() => {
+    setAssistantBubble(getAssistantMode());
+    setLineBubble(getLineMode());
+
+    const handler = (e: Event) => {
+      const { key, mode } = (e as CustomEvent).detail;
+      if (key === "kingjam_assistant_mode") setAssistantBubble(mode);
+      if (key === "kingjam_line_mode") setLineBubble(mode);
+    };
+    window.addEventListener("bubble-mode-change", handler);
+    return () => window.removeEventListener("bubble-mode-change", handler);
+  }, []);
+
+  const handleAssistantChange = (mode: BubbleMode) => {
+    setAssistantBubble(mode);
+    setAssistantModeGlobal(mode);
+  };
+
+  const handleLineChange = (mode: BubbleMode) => {
+    setLineBubble(mode);
+    setLineModeGlobal(mode);
+  };
 
   const toggleQuestion = (categoryId: string, index: number) => {
     const key = `${categoryId}-${index}`;
@@ -451,6 +495,94 @@ export default function HelpPage() {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* 小工具設定 */}
+      {!searchQuery && (
+        <div className="max-w-3xl mx-auto">
+          <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <Settings className="w-5 h-5 text-slate-400" />
+            浮動小工具設定
+          </h2>
+          <div className="grid md:grid-cols-2 gap-4">
+            {/* 智能助手泡泡 */}
+            <div className="rounded-xl bg-slate-800/50 border border-slate-700/50 p-4">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center shadow-lg">
+                  <Bot className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-white text-sm">智能助手</h3>
+                  <p className="text-xs text-slate-500">右下角 AI 問答泡泡</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                {([
+                  { mode: "full" as BubbleMode, icon: Eye, label: "顯示", color: "indigo" },
+                  { mode: "minimized" as BubbleMode, icon: Minimize2, label: "最小化", color: "amber" },
+                  { mode: "hidden" as BubbleMode, icon: EyeOff, label: "關閉", color: "slate" },
+                ]).map((opt) => (
+                  <button
+                    key={opt.mode}
+                    onClick={() => handleAssistantChange(opt.mode)}
+                    className={`flex-1 flex flex-col items-center gap-1 p-2 rounded-lg border text-xs transition-all ${
+                      assistantBubble === opt.mode
+                        ? opt.color === "indigo"
+                          ? "border-indigo-500 bg-indigo-500/10 text-indigo-400"
+                          : opt.color === "amber"
+                          ? "border-amber-500 bg-amber-500/10 text-amber-400"
+                          : "border-slate-500 bg-slate-500/10 text-slate-400"
+                        : "border-slate-700/50 bg-slate-800/30 text-slate-500 hover:border-slate-600 hover:text-slate-400"
+                    }`}
+                  >
+                    <opt.icon className="w-4 h-4" />
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* LINE 客服泡泡 */}
+            <div className="rounded-xl bg-slate-800/50 border border-slate-700/50 p-4">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg" style={{ background: "#06C755" }}>
+                  <LineIcon size={22} />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-white text-sm">LINE 客服</h3>
+                  <p className="text-xs text-slate-500">右下角 LINE 對話泡泡</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                {([
+                  { mode: "full" as BubbleMode, icon: Eye, label: "顯示", color: "green" },
+                  { mode: "minimized" as BubbleMode, icon: Minimize2, label: "最小化", color: "amber" },
+                  { mode: "hidden" as BubbleMode, icon: EyeOff, label: "關閉", color: "slate" },
+                ]).map((opt) => (
+                  <button
+                    key={opt.mode}
+                    onClick={() => handleLineChange(opt.mode)}
+                    className={`flex-1 flex flex-col items-center gap-1 p-2 rounded-lg border text-xs transition-all ${
+                      lineBubble === opt.mode
+                        ? opt.color === "green"
+                          ? "border-emerald-500 bg-emerald-500/10 text-emerald-400"
+                          : opt.color === "amber"
+                          ? "border-amber-500 bg-amber-500/10 text-amber-400"
+                          : "border-slate-500 bg-slate-500/10 text-slate-400"
+                        : "border-slate-700/50 bg-slate-800/30 text-slate-500 hover:border-slate-600 hover:text-slate-400"
+                    }`}
+                  >
+                    <opt.icon className="w-4 h-4" />
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <p className="text-[11px] text-slate-600 mt-2 text-center">
+            設定會自動儲存，下次訪問時生效。關閉後可隨時回到這裡重新開啟。
+          </p>
         </div>
       )}
 
