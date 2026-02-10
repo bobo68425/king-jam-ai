@@ -263,7 +263,11 @@ class MetaPlatform(BasePlatform):
             avatar_url=page.get("picture", {}).get("data", {}).get("url"),
             profile_url=f"https://facebook.com/{page['id']}",
             followers_count=page.get("followers_count"),
-            extra_data={"page_access_token": page.get("access_token")}
+            extra_data={
+                "page_access_token": page.get("access_token"),
+                "page_id": page["id"],
+                "page_name": page["name"]
+            }
         )
     
     async def _get_threads_profile(self, access_token: str) -> UserProfile:
@@ -398,10 +402,27 @@ class MetaPlatform(BasePlatform):
                 return data["id"]
     
     async def _publish_to_facebook(self, access_token: str, content: PublishContent) -> PublishResult:
-        """發布到 Facebook Page"""
+        """
+        發布到 Facebook Page
+        
+        注意：Facebook Graph API 發布到粉絲專頁需要使用 Page Access Token，
+        而非 User Access Token。此方法會自動從 /me/accounts 取得 Page Access Token。
+        """
         try:
-            if not self._page_id:
-                await self._get_facebook_profile(access_token)
+            # 取得 Page 資料（含 Page Access Token）
+            pages = await self._get_facebook_pages(access_token)
+            if not pages:
+                return PublishResult(
+                    success=False,
+                    error_message="找不到 Facebook 粉絲專頁。請確認帳號已連結粉絲專頁。"
+                )
+            
+            page = pages[0]
+            self._page_id = page["id"]
+            # 使用 Page Access Token（非 User Token）來發布
+            page_access_token = page.get("access_token", access_token)
+            
+            print(f"[Meta] 發布到 Facebook Page: {page.get('name')} (ID: {self._page_id})")
             
             async with aiohttp.ClientSession() as session:
                 if content.content_type == ContentType.TEXT:
@@ -409,7 +430,7 @@ class MetaPlatform(BasePlatform):
                     url = f"{self.GRAPH_API_BASE}/{self._page_id}/feed"
                     params = {
                         "message": content.caption,
-                        "access_token": access_token
+                        "access_token": page_access_token
                     }
                 elif content.content_type == ContentType.IMAGE:
                     # 圖片貼文
@@ -417,7 +438,7 @@ class MetaPlatform(BasePlatform):
                     params = {
                         "url": content.media_urls[0],
                         "caption": content.caption,
-                        "access_token": access_token
+                        "access_token": page_access_token
                     }
                 elif content.content_type == ContentType.VIDEO:
                     # 影片貼文
@@ -425,7 +446,7 @@ class MetaPlatform(BasePlatform):
                     params = {
                         "file_url": content.media_urls[0],
                         "description": content.caption,
-                        "access_token": access_token
+                        "access_token": page_access_token
                     }
                 else:
                     return PublishResult(
@@ -437,6 +458,7 @@ class MetaPlatform(BasePlatform):
                     data = await response.json()
                     
                     if "error" in data:
+                        print(f"[Meta] Facebook 發布失敗: {data['error']}")
                         return PublishResult(
                             success=False,
                             error_message=data["error"]["message"],
@@ -444,6 +466,7 @@ class MetaPlatform(BasePlatform):
                         )
                     
                     post_id = data.get("id") or data.get("post_id")
+                    print(f"[Meta] Facebook 發布成功: post_id={post_id}")
                     return PublishResult(
                         success=True,
                         platform_post_id=post_id,
@@ -451,6 +474,7 @@ class MetaPlatform(BasePlatform):
                     )
                     
         except Exception as e:
+            print(f"[Meta] Facebook 發布異常: {str(e)}")
             return PublishResult(success=False, error_message=str(e))
     
     async def _publish_to_threads(self, access_token: str, content: PublishContent) -> PublishResult:

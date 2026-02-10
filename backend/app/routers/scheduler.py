@@ -724,9 +724,11 @@ async def publish_now(
         from app.tasks.scheduler_tasks import get_platform_publisher
         from app.services.social_platforms import PublishContent, ContentType
         
+        print(f"[PublishNow] 取得平台發布器: platform={social_account.platform}")
         platform_publisher = get_platform_publisher(social_account.platform)
         
         if not platform_publisher:
+            print(f"[PublishNow] 平台 {social_account.platform} 尚未有發布器實作")
             post.status = "published"
             post.published_at = datetime.utcnow()
             log4 = PublishLog(
@@ -738,12 +740,21 @@ async def publish_now(
             return {"message": f"已記錄（{social_account.platform} 待實作）", "status": "published"}
         
         # 準備發布內容
+        content_type_map = {
+            "social_image": ContentType.IMAGE,
+            "short_video": ContentType.VIDEO,
+            "blog_post": ContentType.TEXT,
+        }
+        publish_content_type = content_type_map.get(post.content_type, ContentType.IMAGE)
+        
         content = PublishContent(
-            content_type=ContentType.IMAGE if post.content_type == "social_image" else ContentType.VIDEO,
+            content_type=publish_content_type,
             caption=post.caption or "",
             media_urls=post.media_urls or [],
             hashtags=post.hashtags or [],
         )
+        
+        print(f"[PublishNow] 執行發布: platform={social_account.platform}, content_type={publish_content_type}, media_count={len(post.media_urls or [])}")
         
         # 執行發布
         result = await platform_publisher.publish(

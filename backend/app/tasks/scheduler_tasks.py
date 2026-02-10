@@ -380,10 +380,22 @@ def get_platform_publisher(platform: str):
     Returns:
         平台發布器實例，若尚未實作則返回 None
     """
-    # 動態載入平台實作
+    # Meta 系列平台：使用 MetaPlatform 並帶入對應配置
+    if platform in ("instagram", "facebook", "threads"):
+        try:
+            from app.services.social_platforms.meta import MetaPlatform
+            if platform == "instagram":
+                return MetaPlatform(MetaPlatform.create_instagram_config())
+            elif platform == "facebook":
+                return MetaPlatform(MetaPlatform.create_facebook_config())
+            elif platform == "threads":
+                return MetaPlatform(MetaPlatform.create_threads_config())
+        except Exception as e:
+            logger.warning(f"[Publisher] 無法建立 Meta 平台 {platform}: {e}")
+            return None
+    
+    # 其他平台：動態載入
     platform_map = {
-        "instagram": "app.services.social_platforms.meta.InstagramPublisher",
-        "facebook": "app.services.social_platforms.meta.FacebookPublisher",
         "tiktok": "app.services.social_platforms.tiktok.TikTokPublisher",
         "youtube": "app.services.social_platforms.youtube.YouTubePublisher",
         "linkedin": "app.services.social_platforms.linkedin.LinkedInPublisher",

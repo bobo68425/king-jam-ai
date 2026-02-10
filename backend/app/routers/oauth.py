@@ -153,6 +153,16 @@ async def meta_oauth_callback(
         # 獲取用戶資料
         profile = await platform_instance.get_user_profile(token.access_token)
         
+        # 構建 extra_settings（儲存平台特定資料，如 Page Access Token）
+        extra_settings = {}
+        if profile.extra_data:
+            if "page_access_token" in profile.extra_data:
+                extra_settings["page_access_token"] = profile.extra_data["page_access_token"]
+            if "page_id" in profile.extra_data:
+                extra_settings["page_id"] = profile.extra_data["page_id"]
+        
+        print(f"[OAuth] Meta {platform} 連結成功: user_id={user_id}, platform_user_id={profile.platform_user_id}, username={profile.username}, has_page_token={bool(extra_settings.get('page_access_token'))}")
+        
         # 檢查是否已存在連結
         existing = db.query(SocialAccount).filter(
             SocialAccount.user_id == user_id,
@@ -169,6 +179,10 @@ async def meta_oauth_callback(
             existing.platform_avatar = profile.avatar_url
             existing.is_active = True
             existing.updated_at = datetime.utcnow()
+            # 合併 extra_settings（保留既有設定，更新新的）
+            current_settings = existing.extra_settings or {}
+            current_settings.update(extra_settings)
+            existing.extra_settings = current_settings
         else:
             # 創建新帳號連結
             new_account = SocialAccount(
@@ -180,7 +194,8 @@ async def meta_oauth_callback(
                 access_token=token.access_token,
                 refresh_token=token.refresh_token,
                 token_expires_at=token.expires_at,
-                is_active=True
+                is_active=True,
+                extra_settings=extra_settings
             )
             db.add(new_account)
         
@@ -189,6 +204,7 @@ async def meta_oauth_callback(
         return _success_redirect(platform, profile.username)
         
     except Exception as e:
+        print(f"[OAuth] Meta {platform} 連結失敗: {str(e)}")
         return _error_redirect(f"連結失敗: {str(e)}")
 
 
