@@ -50,11 +50,19 @@ interface UserInfo {
 interface Notification {
   id: number;
   notification_type: string;
+  priority: string; // important | reminder | general
   title: string;
   message: string;
   is_read: boolean;
   created_at: string;
 }
+
+// 優先級配置
+const PRIORITY_CONFIG: Record<string, { label: string; color: string; dot: string }> = {
+  important: { label: "重要", color: "text-rose-400", dot: "bg-rose-500" },
+  reminder: { label: "提醒", color: "text-amber-400", dot: "bg-amber-500" },
+  general: { label: "一般", color: "text-slate-400", dot: "bg-slate-500" },
+};
 
 // 通知類型配置
 const NOTIFICATION_CONFIG: Record<string, { icon: typeof Sparkles; color: string }> = {
@@ -107,10 +115,10 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
     setMounted(true);
   }, []);
   
-  // 獲取通知列表
+  // 獲取通知列表（導覽列只顯示重要+提醒通知）
   const fetchNotifications = async (showToast = false) => {
     try {
-      const res = await api.get("/notifications?limit=10");
+      const res = await api.get("/notifications?limit=10&navbar_only=true");
       const newNotifications = res.data.notifications || [];
       const newUnreadCount = res.data.unread_count || 0;
       
@@ -384,6 +392,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                 ) : (
                   notifications.map(notification => {
                     const config = NOTIFICATION_CONFIG[notification.notification_type] || NOTIFICATION_CONFIG.system;
+                    const priorityConfig = PRIORITY_CONFIG[notification.priority] || PRIORITY_CONFIG.general;
                     const Icon = config.icon;
                     return (
                       <div
@@ -394,31 +403,43 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                         onClick={() => markAsRead(notification.id)}
                       >
                         <div className="flex gap-3">
-                          <div className={`w-8 h-8 rounded-lg bg-muted flex items-center justify-center flex-shrink-0`}>
-                            <Icon className={`w-4 h-4 ${config.color}`} />
+                          <div className="relative flex-shrink-0">
+                            <div className={`w-8 h-8 rounded-lg bg-muted flex items-center justify-center`}>
+                              <Icon className={`w-4 h-4 ${config.color}`} />
+                            </div>
+                            {notification.priority === 'important' && !notification.is_read && (
+                              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-500 rounded-full border-2 border-card animate-pulse" />
+                            )}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between gap-2">
-                              <p className={`text-sm font-medium ${notification.is_read ? 'text-muted-foreground' : 'text-foreground'}`}>
-                                {notification.title}
-                              </p>
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <p className={`text-sm font-medium truncate ${notification.is_read ? 'text-muted-foreground' : 'text-foreground'}`}>
+                                  {notification.title}
+                                </p>
+                                {notification.priority === 'important' && (
+                                  <span className="flex-shrink-0 text-[9px] px-1 py-0 rounded bg-rose-500/15 text-rose-400 font-medium">
+                                    重要
+                                  </span>
+                                )}
+                              </div>
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   removeNotification(notification.id);
                                 }}
-                                className="text-muted-foreground hover:text-foreground p-0.5"
+                                className="text-muted-foreground hover:text-foreground p-0.5 flex-shrink-0"
                               >
                                 <X className="w-3 h-3" />
                               </button>
                             </div>
-                            <p className={`text-xs mt-0.5 ${notification.is_read ? 'text-muted-foreground/70' : 'text-muted-foreground'}`}>
+                            <p className={`text-xs mt-0.5 line-clamp-2 ${notification.is_read ? 'text-muted-foreground/70' : 'text-muted-foreground'}`}>
                               {notification.message}
                             </p>
                             <p className="text-[10px] text-muted-foreground/70 mt-1" suppressHydrationWarning>{formatNotificationTime(notification.created_at, mounted)}</p>
                           </div>
                           {!notification.is_read && (
-                            <div className="w-2 h-2 bg-primary rounded-full flex-shrink-0 mt-2" />
+                            <div className={`w-2 h-2 rounded-full flex-shrink-0 mt-2 ${priorityConfig.dot}`} />
                           )}
                         </div>
                       </div>

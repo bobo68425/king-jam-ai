@@ -249,6 +249,7 @@ async def bulk_grant_credits(
                 notification = Notification(
                     user_id=user_id,
                     notification_type="marketing",
+                    priority="general",
                     title=title,
                     message=message,
                     data={

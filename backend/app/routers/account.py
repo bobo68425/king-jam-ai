@@ -43,6 +43,9 @@ class NotificationSettings(BaseModel):
     email_updates: bool = True
     email_security: bool = True
     email_referral: bool = True
+    # 各通知類型的通知方式偏好
+    # navbar = 導覽列顯示, email = 郵件通知, center = 通知中心
+    type_preferences: Optional[dict] = None  # e.g. {"payment": {"navbar": true, "email": true}, ...}
 
 
 # 臨時存儲 email 變更驗證碼（實際應用應使用 Redis）
@@ -373,18 +376,42 @@ async def get_notification_settings(
     current_user: User = Depends(get_current_user)
 ):
     """
-    獲取通知設定
+    獲取通知設定（含各類型通知方式偏好）
     """
-    # 從用戶 extra_data 中獲取通知設定，或返回預設值
     settings = getattr(current_user, 'notification_settings', None)
     
     if not settings:
-        settings = {
-            "email_marketing": True,
-            "email_updates": True,
-            "email_security": True,
-            "email_referral": True,
-        }
+        settings = {}
+    
+    # 確保基本 email 設定存在
+    defaults = {
+        "email_marketing": True,
+        "email_updates": True,
+        "email_security": True,
+        "email_referral": True,
+    }
+    for key, val in defaults.items():
+        if key not in settings:
+            settings[key] = val
+    
+    # 確保 type_preferences 存在（各通知類型的通知方式）
+    default_prefs = {
+        "payment":  {"navbar": True, "email": True},
+        "security": {"navbar": True, "email": True},
+        "credit":   {"navbar": True, "email": False},
+        "referral": {"navbar": True, "email": False},
+        "schedule": {"navbar": True, "email": False},
+        "content":  {"navbar": False, "email": False},
+        "system":   {"navbar": False, "email": False},
+        "marketing":{"navbar": False, "email": False},
+    }
+    if "type_preferences" not in settings or settings["type_preferences"] is None:
+        settings["type_preferences"] = default_prefs
+    else:
+        # 填充缺少的類型
+        for k, v in default_prefs.items():
+            if k not in settings["type_preferences"]:
+                settings["type_preferences"][k] = v
     
     return settings
 

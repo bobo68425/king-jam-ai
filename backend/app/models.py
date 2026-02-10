@@ -715,6 +715,12 @@ class Notification(Base):
     # 通知類型: system, credit, referral, security, content
     notification_type = Column(String(20), nullable=False, default="system")
     
+    # 通知優先級: important(重要), reminder(提醒), general(一般)
+    # important = 導覽列顯示 + 郵件通知
+    # reminder  = 導覽列顯示
+    # general   = 只在通知中心顯示
+    priority = Column(String(20), nullable=False, default="general")
+    
     # 通知內容
     title = Column(String(200), nullable=False)
     message = Column(Text, nullable=False)

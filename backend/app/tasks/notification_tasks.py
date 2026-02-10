@@ -133,18 +133,35 @@ def send_instant_notification(
         if not user:
             return {"success": False, "error": "用戶不存在"}
         
-        # 1. 儲存站內通知到資料庫
+        # 1. 儲存站內通知到資料庫（含優先級）
         from app.models import Notification
+        from app.routers.notifications import DEFAULT_PRIORITY_MAP, PRIORITY_GENERAL, _should_show_navbar, _should_send_email as _check_email
+        
+        # 根據用戶偏好決定 priority
+        navbar_enabled = _should_show_navbar(user, notification_type)
+        email_pref = _check_email(user, notification_type)
+        if email_pref and navbar_enabled:
+            priority = "important"
+        elif navbar_enabled:
+            priority = "reminder"
+        else:
+            priority = "general"
+        
         notification = Notification(
             user_id=user_id,
             notification_type=notification_type,
+            priority=priority,
             title=title,
             message=message,
             data=data
         )
         db.add(notification)
         db.commit()
-        logger.info(f"[Notification] 站內通知已儲存: ID={notification.id}")
+        logger.info(f"[Notification] 站內通知已儲存: ID={notification.id}, priority={priority}")
+        
+        # 根據用戶偏好覆蓋 send_email
+        if not send_email and email_pref:
+            send_email = True
         
         # 2. 可選：發送郵件通知
         if send_email and user.email:

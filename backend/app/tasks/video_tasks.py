@@ -69,7 +69,7 @@ def render_video_async(
             user_id=user_id,
             title="影片開始生成",
             message=f"您的影片正在生成中，預計需要 2-5 分鐘...",
-            notification_type="info"
+            notification_type="content"
         )
         
         # 調用 Veo 生成影片
@@ -123,7 +123,7 @@ def render_video_async(
             user_id=user_id,
             title="影片生成完成",
             message=f"您的影片已生成完成！",
-            notification_type="success",
+            notification_type="content",
             data={"video_url": cloud_url or video_url}
         )
         
@@ -158,7 +158,7 @@ def render_video_async(
             user_id=user_id,
             title="影片生成失敗",
             message=f"很抱歉，影片生成過程中發生錯誤：{str(e)}",
-            notification_type="error"
+            notification_type="content"
         )
         
         # 重試

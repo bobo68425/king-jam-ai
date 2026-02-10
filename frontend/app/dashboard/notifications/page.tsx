@@ -25,12 +25,18 @@ import Link from "next/link";
 interface Notification {
   id: number;
   notification_type: string;
+  priority: string; // important | reminder | general
   title: string;
   message: string;
   data: any;
   is_read: boolean;
   created_at: string;
   read_at: string | null;
+}
+
+interface TypePreference {
+  navbar: boolean;
+  email: boolean;
 }
 
 interface NotificationStats {
@@ -47,6 +53,12 @@ interface DateGroup {
 // ============================================================
 // Constants
 // ============================================================
+
+const PRIORITY_CONFIG: Record<string, { label: string; color: string; bgColor: string; dot: string }> = {
+  important: { label: "重要", color: "text-rose-400", bgColor: "bg-rose-500/10", dot: "bg-rose-500" },
+  reminder: { label: "提醒", color: "text-amber-400", bgColor: "bg-amber-500/10", dot: "bg-amber-500" },
+  general: { label: "一般", color: "text-slate-400", bgColor: "bg-slate-500/10", dot: "bg-slate-500" },
+};
 
 const NOTIFICATION_TYPES: Record<string, {
   label: string;
@@ -194,9 +206,14 @@ function NotificationItem({
         expanded && "bg-slate-800/30"
       )}
     >
-      {/* 未讀指示條 */}
+      {/* 未讀指示條 - 依優先級顯示不同顏色 */}
       {!notification.is_read && (
-        <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-gradient-to-b from-indigo-500 to-purple-500 rounded-r-full" />
+        <div className={cn(
+          "absolute left-0 top-0 bottom-0 w-[3px] rounded-r-full",
+          notification.priority === "important" ? "bg-gradient-to-b from-rose-500 to-red-600" :
+          notification.priority === "reminder" ? "bg-gradient-to-b from-amber-500 to-orange-500" :
+          "bg-gradient-to-b from-indigo-500 to-purple-500"
+        )} />
       )}
 
       <div
@@ -233,6 +250,16 @@ function NotificationItem({
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
+              {notification.priority === "important" && (
+                <span className="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-400 font-semibold">
+                  重要
+                </span>
+              )}
+              {notification.priority === "reminder" && (
+                <span className="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 font-semibold">
+                  提醒
+                </span>
+              )}
               <h3 className={cn(
                 "text-sm font-medium truncate",
                 notification.is_read ? "text-slate-400" : "text-white"
@@ -240,7 +267,12 @@ function NotificationItem({
                 {notification.title}
               </h3>
               {!notification.is_read && (
-                <span className="flex-shrink-0 w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                <span className={cn(
+                  "flex-shrink-0 w-2 h-2 rounded-full animate-pulse",
+                  notification.priority === "important" ? "bg-rose-500" :
+                  notification.priority === "reminder" ? "bg-amber-500" :
+                  "bg-indigo-500"
+                )} />
               )}
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
@@ -270,10 +302,18 @@ function NotificationItem({
               </div>
 
               {/* Meta info */}
-              <div className="flex items-center gap-3 text-xs text-slate-500">
+              <div className="flex items-center flex-wrap gap-2 text-xs text-slate-500">
                 <Badge className={cn("text-[10px] px-2 py-0", typeConfig.bgColor, typeConfig.color)}>
                   {typeConfig.label}
                 </Badge>
+                {(() => {
+                  const pCfg = PRIORITY_CONFIG[notification.priority];
+                  return pCfg ? (
+                    <Badge className={cn("text-[10px] px-2 py-0", pCfg.bgColor, pCfg.color)}>
+                      {notification.priority === "important" ? "導覽列+郵件" : notification.priority === "reminder" ? "導覽列" : "通知中心"}
+                    </Badge>
+                  ) : null;
+                })()}
                 <span>{format(new Date(notification.created_at), "yyyy/MM/dd HH:mm:ss", { locale: zhTW })}</span>
                 {notification.read_at && (
                   <span className="flex items-center gap-1">
@@ -315,54 +355,24 @@ function NotificationItem({
 }
 
 // ============================================================
-// Email Notification Settings Component
+// Notification Settings Component
 // ============================================================
 
-const EMAIL_SETTING_ITEMS = [
-  {
-    key: "email_security" as const,
-    label: "安全性通知",
-    desc: "登入提醒、密碼變更等安全警報",
-    icon: Shield,
-    color: "text-red-400",
-    bgColor: "bg-red-500/10",
-    recommended: true,
-  },
-  {
-    key: "email_updates" as const,
-    label: "產品更新通知",
-    desc: "平台功能更新與系統公告",
-    icon: Bell,
-    color: "text-blue-400",
-    bgColor: "bg-blue-500/10",
-  },
-  {
-    key: "email_marketing" as const,
-    label: "行銷活動通知",
-    desc: "促銷、優惠活動和新功能推薦",
-    icon: Megaphone,
-    color: "text-pink-400",
-    bgColor: "bg-pink-500/10",
-  },
-  {
-    key: "email_referral" as const,
-    label: "推薦獎勵通知",
-    desc: "推薦獎金入帳、邀請進度通知",
-    icon: Users,
-    color: "text-purple-400",
-    bgColor: "bg-purple-500/10",
-  },
+const SETTING_TYPE_ITEMS = [
+  { key: "payment",  label: "付款通知",   desc: "付款成功、退款處理",         defaultPriority: "important" },
+  { key: "security", label: "安全通知",   desc: "登入提醒、密碼變更",         defaultPriority: "important" },
+  { key: "credit",   label: "點數通知",   desc: "點數變動、餘額提醒",         defaultPriority: "reminder" },
+  { key: "referral", label: "推薦通知",   desc: "推薦獎金入帳",              defaultPriority: "reminder" },
+  { key: "schedule", label: "排程通知",   desc: "排程發布結果",              defaultPriority: "reminder" },
+  { key: "content",  label: "內容通知",   desc: "內容生成完成",              defaultPriority: "general" },
+  { key: "system",   label: "系統通知",   desc: "平台更新、維護公告",         defaultPriority: "general" },
+  { key: "marketing",label: "行銷通知",   desc: "優惠活動、促銷資訊",         defaultPriority: "general" },
 ];
 
-function EmailNotificationSettings() {
+function NotificationMethodSettings() {
   const [expanded, setExpanded] = useState(false);
-  const [settings, setSettings] = useState({
-    email_marketing: true,
-    email_updates: true,
-    email_security: true,
-    email_referral: true,
-  });
-  const [originalSettings, setOriginalSettings] = useState(settings);
+  const [typePreferences, setTypePreferences] = useState<Record<string, TypePreference>>({});
+  const [originalPreferences, setOriginalPreferences] = useState<Record<string, TypePreference>>({});
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -371,17 +381,29 @@ function EmailNotificationSettings() {
     setLoadingSettings(true);
     try {
       const res = await api.get("/users/notification-settings");
-      const data = {
-        email_marketing: res.data.email_marketing ?? true,
-        email_updates: res.data.email_updates ?? true,
-        email_security: res.data.email_security ?? true,
-        email_referral: res.data.email_referral ?? true,
-      };
-      setSettings(data);
-      setOriginalSettings(data);
+      const prefs = res.data.type_preferences || {};
+      // Fill defaults
+      const fullPrefs: Record<string, TypePreference> = {};
+      SETTING_TYPE_ITEMS.forEach(item => {
+        fullPrefs[item.key] = {
+          navbar: prefs[item.key]?.navbar ?? (item.defaultPriority !== "general"),
+          email: prefs[item.key]?.email ?? (item.defaultPriority === "important"),
+        };
+      });
+      setTypePreferences(fullPrefs);
+      setOriginalPreferences(JSON.parse(JSON.stringify(fullPrefs)));
       setLoaded(true);
     } catch {
-      // 使用預設值
+      // Fill defaults
+      const fullPrefs: Record<string, TypePreference> = {};
+      SETTING_TYPE_ITEMS.forEach(item => {
+        fullPrefs[item.key] = {
+          navbar: item.defaultPriority !== "general",
+          email: item.defaultPriority === "important",
+        };
+      });
+      setTypePreferences(fullPrefs);
+      setOriginalPreferences(JSON.parse(JSON.stringify(fullPrefs)));
       setLoaded(true);
     } finally {
       setLoadingSettings(false);
@@ -395,17 +417,28 @@ function EmailNotificationSettings() {
     setExpanded(!expanded);
   };
 
-  const toggleSetting = (key: keyof typeof settings) => {
-    setSettings(prev => ({ ...prev, [key]: !prev[key] }));
+  const togglePref = (typeKey: string, field: "navbar" | "email") => {
+    setTypePreferences(prev => ({
+      ...prev,
+      [typeKey]: { ...prev[typeKey], [field]: !prev[typeKey][field] }
+    }));
   };
 
-  const hasChanges = JSON.stringify(settings) !== JSON.stringify(originalSettings);
+  const hasChanges = JSON.stringify(typePreferences) !== JSON.stringify(originalPreferences);
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.put("/users/notification-settings", settings);
-      setOriginalSettings(settings);
+      // Build the legacy email settings + new type_preferences
+      const payload: any = {
+        email_marketing: typePreferences.marketing?.email ?? false,
+        email_updates: typePreferences.system?.email ?? false,
+        email_security: typePreferences.security?.email ?? true,
+        email_referral: typePreferences.referral?.email ?? false,
+        type_preferences: typePreferences,
+      };
+      await api.put("/users/notification-settings", payload);
+      setOriginalPreferences(JSON.parse(JSON.stringify(typePreferences)));
       toast.success("通知設定已更新！");
     } catch (err: any) {
       toast.error(err.response?.data?.detail || "儲存失敗，請稍後再試");
@@ -414,7 +447,9 @@ function EmailNotificationSettings() {
     }
   };
 
-  const enabledCount = Object.values(settings).filter(Boolean).length;
+  // Count stats
+  const navbarCount = Object.values(typePreferences).filter(p => p.navbar).length;
+  const emailCount = Object.values(typePreferences).filter(p => p.email).length;
 
   return (
     <Card className={cn(
@@ -424,29 +459,31 @@ function EmailNotificationSettings() {
         : "bg-gradient-to-r from-indigo-500/5 to-purple-500/5 border-indigo-500/10"
     )}>
       {/* Header - always visible */}
-      <button
-        onClick={handleToggle}
-        className="w-full text-left"
-      >
+      <button onClick={handleToggle} className="w-full text-left">
         <CardContent className="p-4">
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 flex items-center justify-center flex-shrink-0">
-              <Mail className="w-5 h-5 text-indigo-400" />
+              <Settings className="w-5 h-5 text-indigo-400" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <h3 className="font-medium text-white text-sm">Email 通知設定</h3>
+                <h3 className="font-medium text-white text-sm">通知方式設定</h3>
                 {loaded && (
-                  <Badge className="text-[10px] px-1.5 py-0 bg-slate-700/50 text-slate-400">
-                    {enabledCount}/{EMAIL_SETTING_ITEMS.length} 已啟用
-                  </Badge>
+                  <div className="flex items-center gap-1.5">
+                    <Badge className="text-[10px] px-1.5 py-0 bg-amber-500/10 text-amber-400">
+                      導覽列 {navbarCount}
+                    </Badge>
+                    <Badge className="text-[10px] px-1.5 py-0 bg-rose-500/10 text-rose-400">
+                      郵件 {emailCount}
+                    </Badge>
+                  </div>
                 )}
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                管理哪些通知會發送至您的信箱
+                自訂各類型通知的顯示方式與郵件通知
               </p>
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex-shrink-0">
               {expanded ? (
                 <ChevronUp className="w-4 h-4 text-indigo-400" />
               ) : (
@@ -457,7 +494,7 @@ function EmailNotificationSettings() {
         </CardContent>
       </button>
 
-      {/* Settings panel - expandable */}
+      {/* Settings panel */}
       {expanded && (
         <div className="px-4 pb-4 animate-in slide-in-from-top-2 duration-200">
           <div className="border-t border-slate-700/50 pt-4">
@@ -466,75 +503,105 @@ function EmailNotificationSettings() {
                 <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
               </div>
             ) : (
-              <div className="space-y-2.5">
-                {EMAIL_SETTING_ITEMS.map((item) => {
-                  const Icon = item.icon;
-                  const isEnabled = settings[item.key];
+              <div className="space-y-3">
+                {/* Legend */}
+                <div className="flex items-center gap-4 px-1 pb-2">
+                  <div className="flex-1" />
+                  <div className="flex items-center gap-4 text-[10px] text-slate-500">
+                    <span className="flex items-center gap-1 w-14 justify-center">
+                      <Bell className="w-3 h-3" /> 導覽列
+                    </span>
+                    <span className="flex items-center gap-1 w-14 justify-center">
+                      <Mail className="w-3 h-3" /> 郵件
+                    </span>
+                  </div>
+                </div>
+
+                {/* Priority groups */}
+                {(["important", "reminder", "general"] as const).map((priorityLevel) => {
+                  const groupItems = SETTING_TYPE_ITEMS.filter(i => i.defaultPriority === priorityLevel);
+                  const pCfg = PRIORITY_CONFIG[priorityLevel];
                   return (
-                    <div
-                      key={item.key}
-                      className={cn(
-                        "flex items-center gap-3 p-3 rounded-xl border transition-all",
-                        isEnabled
-                          ? "bg-slate-800/40 border-slate-700/50"
-                          : "bg-slate-800/20 border-slate-800/30 opacity-60"
-                      )}
-                    >
-                      <div className={cn(
-                        "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
-                        item.bgColor
-                      )}>
-                        <Icon className={cn("w-4 h-4", item.color)} />
+                    <div key={priorityLevel}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className={cn("w-1.5 h-1.5 rounded-full", pCfg.dot)} />
+                        <span className={cn("text-[11px] font-medium", pCfg.color)}>
+                          {pCfg.label}
+                        </span>
+                        <span className="text-[10px] text-slate-600">
+                          {priorityLevel === "important" ? "導覽列 + 郵件" :
+                           priorityLevel === "reminder" ? "導覽列" : "通知中心"}
+                          （預設）
+                        </span>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className={cn(
-                            "text-sm font-medium",
-                            isEnabled ? "text-white" : "text-slate-400"
-                          )}>
-                            {item.label}
-                          </span>
-                          {item.recommended && (
-                            <Badge className="text-[9px] px-1 py-0 bg-red-500/15 text-red-400 border-0">
-                              建議開啟
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-slate-500 mt-0.5">{item.desc}</p>
+                      <div className="space-y-1.5">
+                        {groupItems.map((item) => {
+                          const typeConfig = NOTIFICATION_TYPES[item.key];
+                          const Icon = typeConfig?.icon || Bell;
+                          const pref = typePreferences[item.key] || { navbar: false, email: false };
+                          return (
+                            <div
+                              key={item.key}
+                              className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-800/30 border border-slate-800/50"
+                            >
+                              <div className={cn(
+                                "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
+                                typeConfig?.bgColor || "bg-slate-700/50"
+                              )}>
+                                <Icon className={cn("w-3.5 h-3.5", typeConfig?.color || "text-slate-400")} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <span className="text-sm text-white">{item.label}</span>
+                                <p className="text-[10px] text-slate-500">{item.desc}</p>
+                              </div>
+                              <div className="flex items-center gap-4 flex-shrink-0">
+                                {/* Navbar toggle */}
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); togglePref(item.key, "navbar"); }}
+                                  className={cn(
+                                    "w-9 h-5 rounded-full transition-colors relative",
+                                    pref.navbar ? "bg-amber-500" : "bg-slate-700"
+                                  )}
+                                  title="導覽列顯示"
+                                >
+                                  <div className={cn(
+                                    "absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform shadow-sm",
+                                    pref.navbar ? "translate-x-[18px]" : "translate-x-0.5"
+                                  )} />
+                                </button>
+                                {/* Email toggle */}
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); togglePref(item.key, "email"); }}
+                                  className={cn(
+                                    "w-9 h-5 rounded-full transition-colors relative",
+                                    pref.email ? "bg-rose-500" : "bg-slate-700"
+                                  )}
+                                  title="郵件通知"
+                                >
+                                  <div className={cn(
+                                    "absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform shadow-sm",
+                                    pref.email ? "translate-x-[18px]" : "translate-x-0.5"
+                                  )} />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleSetting(item.key);
-                        }}
-                        className={cn(
-                          "relative w-11 h-6 rounded-full transition-colors flex-shrink-0",
-                          isEnabled ? "bg-indigo-600" : "bg-slate-700"
-                        )}
-                      >
-                        <div
-                          className={cn(
-                            "absolute top-1 w-4 h-4 bg-white rounded-full transition-transform shadow-sm",
-                            isEnabled ? "translate-x-6" : "translate-x-1"
-                          )}
-                        />
-                      </button>
                     </div>
                   );
                 })}
 
-                {/* Save Button */}
-                <div className="flex items-center justify-between pt-2">
-                  <p className="text-[11px] text-slate-600">
-                    變更後請點擊儲存以套用設定
-                  </p>
+                {/* Note + Save */}
+                <div className="flex items-center justify-between pt-3 border-t border-slate-800/50">
+                  <div className="text-[10px] text-slate-600 space-y-0.5">
+                    <p>所有通知都會顯示於通知中心</p>
+                    <p>導覽列 = 上方鈴鐺圖示顯示，郵件 = 寄送 Email</p>
+                  </div>
                   <Button
                     size="sm"
                     disabled={!hasChanges || saving}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSave();
-                    }}
+                    onClick={(e) => { e.stopPropagation(); handleSave(); }}
                     className={cn(
                       "h-8 text-xs transition-all",
                       hasChanges
@@ -812,12 +879,18 @@ export default function NotificationsPage() {
             >
               <RefreshCw className="w-4 h-4" />
             </Button>
-            <Link href="/dashboard/profile">
-              <Button variant="outline" size="sm" className="bg-slate-800/50 border-slate-700 text-slate-300 hidden sm:flex">
-                <Settings className="w-4 h-4 mr-2" />
-                通知設定
-              </Button>
-            </Link>
+            <Button
+              variant="outline"
+              size="sm"
+              className="bg-slate-800/50 border-slate-700 text-slate-300 hidden sm:flex"
+              onClick={() => {
+                const el = document.getElementById("notification-settings");
+                if (el) el.scrollIntoView({ behavior: "smooth" });
+              }}
+            >
+              <Settings className="w-4 h-4 mr-2" />
+              通知設定
+            </Button>
           </div>
         </div>
 
@@ -1116,8 +1189,10 @@ export default function NotificationsPage() {
           </div>
         )}
 
-        {/* ==================== Email Settings Card ==================== */}
-        <EmailNotificationSettings />
+        {/* ==================== Notification Method Settings ==================== */}
+        <div id="notification-settings">
+          <NotificationMethodSettings />
+        </div>
       </div>
     </div>
   );

@@ -243,6 +243,19 @@ def _auto_init_db():
         db.commit()
         print("[Startup] ✅ payment_logs 表已初始化")
 
+        # ── 4. notifications 表: 新增 priority 欄位 ──
+        db.execute(text("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='notifications' AND column_name='priority') THEN
+                    ALTER TABLE notifications ADD COLUMN priority VARCHAR(20) NOT NULL DEFAULT 'general';
+                    CREATE INDEX IF NOT EXISTS idx_notification_priority ON notifications(priority);
+                END IF;
+            END $$;
+        """))
+        db.commit()
+        print("[Startup] ✅ notifications.priority 欄位已確認")
+
         db.close()
     except Exception as e:
         print(f"[Startup] ⚠️ DB 自動初始化跳過: {e}")
