@@ -725,10 +725,12 @@ export default function SchedulerPage() {
   };
 
   const getEventsForDate = (date: Date) => {
-    return calendarEvents.filter(event => {
-      const eventDate = new Date(event.start);
-      return eventDate.toDateString() === date.toDateString();
-    });
+    return calendarEvents
+      .filter(event => {
+        const eventDate = new Date(event.start);
+        return eventDate.toDateString() === date.toDateString();
+      })
+      .sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime());
   };
 
   const filteredPosts = posts.filter(post => {
@@ -745,7 +747,7 @@ export default function SchedulerPage() {
     }
     if (contentTypeFilter !== "all" && post.content_type !== contentTypeFilter) return false;
     return true;
-  });
+  }).sort((a, b) => new Date(b.scheduled_at).getTime() - new Date(a.scheduled_at).getTime());
 
   const prevMonth = () => {
     if (!currentDate) return;

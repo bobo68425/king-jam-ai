@@ -310,7 +310,7 @@ async def get_scheduled_posts(
     if end_date:
         query = query.filter(ScheduledPost.scheduled_at <= end_date)
     
-    posts = query.order_by(ScheduledPost.scheduled_at.asc()).offset(offset).limit(limit).all()
+    posts = query.order_by(ScheduledPost.scheduled_at.desc()).offset(offset).limit(limit).all()
     return posts
 
 
@@ -1041,7 +1041,7 @@ async def get_calendar_events(
             ScheduledPost.scheduled_at >= start,
             ScheduledPost.scheduled_at <= end
         )
-    ).all()
+    ).order_by(ScheduledPost.scheduled_at.desc()).all()
     
     events = []
     for post in posts:
