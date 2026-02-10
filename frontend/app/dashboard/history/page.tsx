@@ -247,7 +247,12 @@ export default function HistoryPage() {
     const output = detailData.output_data || {};
     const caption = output.caption || output.title || "";
     const hashtags = output.hashtags || [];
-    const mediaUrl = getMediaUrl(selectedItem) || detailData.thumbnail_url || detailData.media_cloud_url;
+    const mediaUrl =
+      getFullUrl(detailData.media_cloud_url) ||
+      getFullUrl(detailData.thumbnail_url) ||
+      getFullUrl(output.image_url) ||
+      getFullUrl(output.image) ||
+      getMediaUrl(selectedItem);
 
     if (!mediaUrl && !caption) {
       toast.error("沒有可發布的內容");
@@ -315,7 +320,12 @@ export default function HistoryPage() {
     const output = detailData.output_data || {};
     const caption = output.caption || output.title || "";
     const hashtags = output.hashtags || [];
-    const mediaUrl = getMediaUrl(selectedItem) || detailData.thumbnail_url || detailData.media_cloud_url;
+    const mediaUrl =
+      getFullUrl(detailData.media_cloud_url) ||
+      getFullUrl(detailData.thumbnail_url) ||
+      getFullUrl(output.image_url) ||
+      getFullUrl(output.image) ||
+      getMediaUrl(selectedItem);
     const contentType = selectedItem.generation_type === "short_video"
       ? "short_video"
       : selectedItem.generation_type === "blog_post"
@@ -1309,7 +1319,15 @@ export default function HistoryPage() {
                     {/* 左側：圖片/影片預覽 */}
                     <div className="lg:w-1/2 flex-shrink-0">
                       {(() => {
-                        const mediaUrl = getMediaUrl(selectedItem);
+                        // 優先使用 detailData（完整資料），fallback 到列表資料
+                        const detailOutput = detailData?.output_data || {};
+                        const detailMediaUrl =
+                          getFullUrl(detailData?.media_cloud_url) ||
+                          getFullUrl(detailData?.thumbnail_url) ||
+                          getFullUrl(detailOutput.image_url) ||
+                          getFullUrl(detailOutput.image) ||
+                          getFullUrl(detailOutput.video_url);
+                        const mediaUrl = detailMediaUrl || getMediaUrl(selectedItem);
                         const isVideo = selectedItem.generation_type === "short_video";
 
                         if (!mediaUrl) {
@@ -1341,7 +1359,7 @@ export default function HistoryPage() {
                       })()}
 
                       {/* 下載按鈕 */}
-                      {hasMedia(selectedItem) && (
+                      {(hasMedia(selectedItem) || detailData?.media_cloud_url || detailData?.output_data?.image_url) && (
                         <Button
                           variant="outline"
                           size="sm"
