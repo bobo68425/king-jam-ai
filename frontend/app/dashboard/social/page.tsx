@@ -2051,7 +2051,7 @@ export default function SocialPage() {
     toast.success("已添加圖片");
   };
   
-  // 從 API 載入歷史記錄
+  // 從 API 載入歷史記錄（輕量版：不含 base64 圖片資料）
   const loadHistory = async () => {
     setHistoryLoading(true);
     try {
@@ -2059,7 +2059,7 @@ export default function SocialPage() {
         params: { generation_type: "social_image", page: 1, page_size: 50 }
       });
       
-      // 轉換 API 回應格式
+      // 轉換 API 回應格式（列表 API 不含 output_data，改用 output_caption）
       const records: SocialHistoryRecord[] = res.data.items.map((item: any) => ({
         id: item.id,
         topic: item.input_params?.topic || "",
@@ -2069,8 +2069,8 @@ export default function SocialPage() {
         keywords: item.input_params?.keywords || "",
         imagePrompt: item.input_params?.imagePrompt || "",
         productInfo: item.input_params?.productInfo || "",
-        image_url: item.output_data?.image_url || item.media_cloud_url || "",
-        caption: item.output_data?.caption || "",
+        image_url: item.thumbnail_url || item.media_cloud_url || "",
+        caption: item.output_caption || "",
         createdAt: item.created_at,
         credits_used: item.credits_used,
         media_cloud_url: item.media_cloud_url,
@@ -2216,6 +2216,9 @@ export default function SocialPage() {
   // 添加到歷史記錄（保存到 API）
   const addToHistory = async (result: { image_url: string; caption: string }, creditsUsed: number = 0) => {
     try {
+      // 判斷 image_url 是否為 base64 data URL
+      const isBase64 = result.image_url?.startsWith("data:");
+      
       await api.post("/history", {
         generation_type: "social_image",
         status: "completed",
@@ -2229,10 +2232,11 @@ export default function SocialPage() {
           productInfo,
         },
         output_data: {
-          image_url: result.image_url,
+          // 只存文字 caption，不存 base64 圖片（避免 DB 和 API 回應過大）
           caption: result.caption,
         },
-        media_cloud_url: result.image_url,
+        // 如果是 base64，不要存到 media_cloud_url（那是給真正雲端 URL 的）
+        media_cloud_url: isBase64 ? null : result.image_url,
         credits_used: creditsUsed,
       });
       

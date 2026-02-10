@@ -49,7 +49,7 @@ class HistoryUpdate(BaseModel):
 
 
 class HistoryResponse(BaseModel):
-    """歷史紀錄回應"""
+    """歷史紀錄回應（完整版，用於單筆查詢）"""
     id: int
     user_id: int
     generation_type: str
@@ -70,9 +70,30 @@ class HistoryResponse(BaseModel):
         from_attributes = True
 
 
+class HistoryListItem(BaseModel):
+    """歷史紀錄列表項目（輕量版，不含 base64 圖片資料）"""
+    id: int
+    user_id: int
+    generation_type: str
+    status: str
+    input_params: dict
+    # output_data 不在列表回傳 —— 可能包含巨大的 base64 圖片
+    # 僅回傳 caption 等輕量文字資訊
+    output_caption: Optional[str] = None
+    media_local_path: Optional[str]
+    media_cloud_url: Optional[str]  # 會被清理，不回傳 base64
+    media_cloud_key: Optional[str]
+    thumbnail_url: Optional[str]
+    credits_used: int
+    error_message: Optional[str]
+    generation_duration_ms: Optional[int]
+    file_size_bytes: Optional[int]
+    created_at: datetime
+
+
 class HistoryListResponse(BaseModel):
     """歷史紀錄列表回應"""
-    items: List[HistoryResponse]
+    items: List[HistoryListItem]
     total: int
     page: int
     page_size: int
@@ -135,8 +156,8 @@ async def list_history(
     current_user: User = Depends(get_current_user)
 ):
     """
-    獲取生成歷史紀錄列表
-    支援分頁和過濾
+    獲取生成歷史紀錄列表（輕量版）
+    不回傳 output_data 以避免巨大的 base64 圖片資料拖慢回應
     """
     query = db.query(GenerationHistory).filter(
         GenerationHistory.user_id == current_user.id,
@@ -158,8 +179,38 @@ async def list_history(
                  .limit(page_size) \
                  .all()
     
+    # 轉為輕量回應：不含巨大的 output_data，且清理 base64 data URL
+    light_items = []
+    for item in items:
+        # 提取 caption（從 output_data 中提取文字，不含圖片）
+        output = item.output_data or {}
+        caption = output.get("caption", "")
+        
+        # 清理 media_cloud_url：如果是 base64 data URL 則替換為空
+        cloud_url = item.media_cloud_url
+        if cloud_url and cloud_url.startswith("data:"):
+            cloud_url = None  # base64 不是有效的雲端 URL
+        
+        light_items.append(HistoryListItem(
+            id=item.id,
+            user_id=item.user_id,
+            generation_type=item.generation_type,
+            status=item.status,
+            input_params=item.input_params or {},
+            output_caption=caption,
+            media_local_path=item.media_local_path,
+            media_cloud_url=cloud_url,
+            media_cloud_key=item.media_cloud_key,
+            thumbnail_url=item.thumbnail_url,
+            credits_used=item.credits_used,
+            error_message=item.error_message,
+            generation_duration_ms=item.generation_duration_ms,
+            file_size_bytes=item.file_size_bytes,
+            created_at=item.created_at,
+        ))
+    
     return HistoryListResponse(
-        items=items,
+        items=light_items,
         total=total,
         page=page,
         page_size=page_size,

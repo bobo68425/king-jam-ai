@@ -45,7 +45,8 @@ interface GenerationHistoryItem {
   generation_type: string;
   status: string;
   input_params: Record<string, any>;
-  output_data: Record<string, any>;
+  output_data?: Record<string, any>;  // 列表 API 不含此欄位（避免巨大 base64）
+  output_caption?: string;  // 列表 API 回傳的輕量 caption
   media_local_path: string | null;
   media_cloud_url: string | null;
   thumbnail_url: string | null;
@@ -54,7 +55,7 @@ interface GenerationHistoryItem {
   file_size_bytes: number | null;
   error_message: string | null;
   created_at: string;
-  updated_at: string | null;
+  updated_at?: string | null;
 }
 
 interface HistoryResponse {
@@ -290,16 +291,18 @@ export default function HistoryPage() {
     return `${apiBase}${url.startsWith("/") ? url : `/${url}`}`;
   };
 
-  // 獲取圖片/媒體 URL（優先順序：thumbnail_url > media_cloud_url > output_data.image_url/video_url）
+  // 獲取圖片/媒體 URL（優先順序：thumbnail_url > media_cloud_url）
+  // 注意：列表 API 不再回傳 output_data（避免巨大 base64），改用 thumbnail_url 和 media_cloud_url
   const getMediaUrl = (item: GenerationHistoryItem): string | null => {
-    // 對於短影片，優先使用 video_url
+    // 對於短影片，優先使用 media_cloud_url
     if (item.generation_type === "short_video") {
-      const videoUrl = item.output_data?.video_url || item.media_cloud_url;
+      const videoUrl = item.media_cloud_url || item.output_data?.video_url;
       return getFullUrl(videoUrl);
     }
     // 其他類型
     if (item.thumbnail_url) return getFullUrl(item.thumbnail_url);
     if (item.media_cloud_url) return getFullUrl(item.media_cloud_url);
+    // fallback: 如果有 output_data（例如從詳情 API 載入的完整資料）
     if (item.output_data?.image_url) return getFullUrl(item.output_data.image_url);
     if (item.output_data?.video_url) return getFullUrl(item.output_data.video_url);
     return null;

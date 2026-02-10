@@ -90,14 +90,15 @@ interface SmartScheduleResponse {
   next_available_slots: string[];
 }
 
-// 歷史記錄 API 回應類型
+// 歷史記錄 API 回應類型（輕量版列表）
 interface HistoryApiItem {
   id: number;
   user_id: number;
   generation_type: string;
   status: string;
   input_params: Record<string, any>;
-  output_data: Record<string, any>;
+  output_data?: Record<string, any>;  // 列表 API 不含此欄位
+  output_caption?: string;  // 列表 API 回傳的輕量 caption
   media_local_path: string | null;
   media_cloud_url: string | null;
   media_cloud_key: string | null;
@@ -187,8 +188,8 @@ function convertSocialHistory(item: HistoryApiItem): SocialHistoryRecord {
     platform: item.input_params?.platform || "instagram",
     quality: item.input_params?.quality || "standard",
     topic: item.input_params?.topic || "",
-    caption: item.output_data?.caption || "",
-    image_url: item.output_data?.image_url || item.media_cloud_url || "",
+    caption: item.output_caption || item.output_data?.caption || "",
+    image_url: item.thumbnail_url || item.media_cloud_url || item.output_data?.image_url || "",
     keywords: item.input_params?.keywords || "",
     product_info: item.input_params?.productInfo || "",
     image_prompt: item.input_params?.imagePrompt || "",
@@ -204,7 +205,7 @@ function convertVideoHistory(item: HistoryApiItem): VideoHistoryRecord {
     aspectRatio: item.input_params?.aspectRatio || "9:16",
     quality: item.input_params?.quality || "standard",
     model: item.input_params?.model || "veo-fast",
-    videoUrl: item.output_data?.video_url || item.media_cloud_url || "",
+    videoUrl: item.media_cloud_url || item.output_data?.video_url || "",
   };
 }
 
