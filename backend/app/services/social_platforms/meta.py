@@ -77,8 +77,7 @@ class MetaPlatform(BasePlatform):
                 "pages_show_list",
                 "pages_read_engagement",
                 "pages_manage_posts",
-                "pages_manage_engagement",
-                "publish_video"
+                "pages_manage_engagement"
             ],
             auth_url="https://www.facebook.com/v18.0/dialog/oauth",
             token_url=f"https://graph.facebook.com/{cls.GRAPH_API_VERSION}/oauth/access_token",

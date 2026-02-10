@@ -363,15 +363,14 @@ def _upload_to_cloud(local_path: str, user_id: int) -> Dict[str, Any]:
     import os
     
     try:
-        from app.services.cloud_storage import cloud_storage_service
+        from app.services.cloud_storage import cloud_storage
         
-        # 生成雲端路徑
-        timestamp = datetime.now().strftime("%Y/%m")
-        filename = os.path.basename(local_path)
-        cloud_key = f"videos/user_{user_id}/{timestamp}/{filename}"
-        
-        # 上傳
-        result = cloud_storage_service.upload_file(local_path, cloud_key)
+        # 使用 cloud_storage 的 upload_file 方法上傳
+        result = cloud_storage.upload_file(
+            file_path=local_path,
+            user_id=user_id,
+            file_type="videos"
+        )
         
         return result
         
