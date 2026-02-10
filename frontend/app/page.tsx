@@ -475,7 +475,7 @@ function HowItWorksSection() {
                 <div className="hidden lg:block absolute top-14 left-1/2 w-full h-0.5 bg-gradient-to-r from-indigo-500/50 to-transparent"></div>
               )}
               
-              <div className="relative p-6 bg-slate-800/50 backdrop-blur rounded-2xl border border-slate-700/50 hover:border-indigo-500/50 transition-all group">
+              <div className="relative p-6 h-full flex flex-col bg-slate-800/50 backdrop-blur rounded-2xl border border-slate-700/50 hover:border-indigo-500/50 transition-all group">
                 <div className="absolute -top-3 -left-3 w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-sm font-bold text-white shadow-lg">
                   {step.number}
                 </div>
@@ -485,7 +485,7 @@ function HowItWorksSection() {
                 </div>
                 
                 <h3 className="text-lg font-semibold text-white mb-2">{step.title}</h3>
-                <p className="text-slate-400 text-sm">{step.description}</p>
+                <p className="text-slate-400 text-sm flex-grow">{step.description}</p>
               </div>
             </div>
           ))}
