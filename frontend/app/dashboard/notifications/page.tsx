@@ -8,9 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import {
   Bell, Check, CheckCheck, Trash2, Filter, RefreshCw,
   Coins, Shield, CreditCard, Users, FileText, Calendar,
-  Megaphone, Settings, ChevronRight, ChevronDown, Clock, AlertCircle,
+  Megaphone, Settings, ChevronRight, ChevronDown, ChevronUp, Clock, AlertCircle,
   Loader2, BellOff, Mail, MailOpen, Inbox, X, Eye,
-  Sparkles, MoreHorizontal, Archive
+  Sparkles, MoreHorizontal, Archive, Save
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, formatDistanceToNow, isToday, isYesterday, isThisWeek } from "date-fns";
@@ -311,6 +311,251 @@ function NotificationItem({
         </div>
       </div>
     </div>
+  );
+}
+
+// ============================================================
+// Email Notification Settings Component
+// ============================================================
+
+const EMAIL_SETTING_ITEMS = [
+  {
+    key: "email_security" as const,
+    label: "安全性通知",
+    desc: "登入提醒、密碼變更等安全警報",
+    icon: Shield,
+    color: "text-red-400",
+    bgColor: "bg-red-500/10",
+    recommended: true,
+  },
+  {
+    key: "email_updates" as const,
+    label: "產品更新通知",
+    desc: "平台功能更新與系統公告",
+    icon: Bell,
+    color: "text-blue-400",
+    bgColor: "bg-blue-500/10",
+  },
+  {
+    key: "email_marketing" as const,
+    label: "行銷活動通知",
+    desc: "促銷、優惠活動和新功能推薦",
+    icon: Megaphone,
+    color: "text-pink-400",
+    bgColor: "bg-pink-500/10",
+  },
+  {
+    key: "email_referral" as const,
+    label: "推薦獎勵通知",
+    desc: "推薦獎金入帳、邀請進度通知",
+    icon: Users,
+    color: "text-purple-400",
+    bgColor: "bg-purple-500/10",
+  },
+];
+
+function EmailNotificationSettings() {
+  const [expanded, setExpanded] = useState(false);
+  const [settings, setSettings] = useState({
+    email_marketing: true,
+    email_updates: true,
+    email_security: true,
+    email_referral: true,
+  });
+  const [originalSettings, setOriginalSettings] = useState(settings);
+  const [loadingSettings, setLoadingSettings] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  const loadSettings = async () => {
+    setLoadingSettings(true);
+    try {
+      const res = await api.get("/users/notification-settings");
+      const data = {
+        email_marketing: res.data.email_marketing ?? true,
+        email_updates: res.data.email_updates ?? true,
+        email_security: res.data.email_security ?? true,
+        email_referral: res.data.email_referral ?? true,
+      };
+      setSettings(data);
+      setOriginalSettings(data);
+      setLoaded(true);
+    } catch {
+      // 使用預設值
+      setLoaded(true);
+    } finally {
+      setLoadingSettings(false);
+    }
+  };
+
+  const handleToggle = () => {
+    if (!expanded && !loaded) {
+      loadSettings();
+    }
+    setExpanded(!expanded);
+  };
+
+  const toggleSetting = (key: keyof typeof settings) => {
+    setSettings(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const hasChanges = JSON.stringify(settings) !== JSON.stringify(originalSettings);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await api.put("/users/notification-settings", settings);
+      setOriginalSettings(settings);
+      toast.success("通知設定已更新！");
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || "儲存失敗，請稍後再試");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const enabledCount = Object.values(settings).filter(Boolean).length;
+
+  return (
+    <Card className={cn(
+      "border transition-all duration-300",
+      expanded
+        ? "bg-slate-900/70 border-indigo-500/30"
+        : "bg-gradient-to-r from-indigo-500/5 to-purple-500/5 border-indigo-500/10"
+    )}>
+      {/* Header - always visible */}
+      <button
+        onClick={handleToggle}
+        className="w-full text-left"
+      >
+        <CardContent className="p-4">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 flex items-center justify-center flex-shrink-0">
+              <Mail className="w-5 h-5 text-indigo-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <h3 className="font-medium text-white text-sm">Email 通知設定</h3>
+                {loaded && (
+                  <Badge className="text-[10px] px-1.5 py-0 bg-slate-700/50 text-slate-400">
+                    {enabledCount}/{EMAIL_SETTING_ITEMS.length} 已啟用
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                管理哪些通知會發送至您的信箱
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {expanded ? (
+                <ChevronUp className="w-4 h-4 text-indigo-400" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-slate-500" />
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </button>
+
+      {/* Settings panel - expandable */}
+      {expanded && (
+        <div className="px-4 pb-4 animate-in slide-in-from-top-2 duration-200">
+          <div className="border-t border-slate-700/50 pt-4">
+            {loadingSettings ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {EMAIL_SETTING_ITEMS.map((item) => {
+                  const Icon = item.icon;
+                  const isEnabled = settings[item.key];
+                  return (
+                    <div
+                      key={item.key}
+                      className={cn(
+                        "flex items-center gap-3 p-3 rounded-xl border transition-all",
+                        isEnabled
+                          ? "bg-slate-800/40 border-slate-700/50"
+                          : "bg-slate-800/20 border-slate-800/30 opacity-60"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
+                        item.bgColor
+                      )}>
+                        <Icon className={cn("w-4 h-4", item.color)} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={cn(
+                            "text-sm font-medium",
+                            isEnabled ? "text-white" : "text-slate-400"
+                          )}>
+                            {item.label}
+                          </span>
+                          {item.recommended && (
+                            <Badge className="text-[9px] px-1 py-0 bg-red-500/15 text-red-400 border-0">
+                              建議開啟
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5">{item.desc}</p>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleSetting(item.key);
+                        }}
+                        className={cn(
+                          "relative w-11 h-6 rounded-full transition-colors flex-shrink-0",
+                          isEnabled ? "bg-indigo-600" : "bg-slate-700"
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            "absolute top-1 w-4 h-4 bg-white rounded-full transition-transform shadow-sm",
+                            isEnabled ? "translate-x-6" : "translate-x-1"
+                          )}
+                        />
+                      </button>
+                    </div>
+                  );
+                })}
+
+                {/* Save Button */}
+                <div className="flex items-center justify-between pt-2">
+                  <p className="text-[11px] text-slate-600">
+                    變更後請點擊儲存以套用設定
+                  </p>
+                  <Button
+                    size="sm"
+                    disabled={!hasChanges || saving}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSave();
+                    }}
+                    className={cn(
+                      "h-8 text-xs transition-all",
+                      hasChanges
+                        ? "bg-indigo-600 hover:bg-indigo-500 text-white"
+                        : "bg-slate-800 text-slate-500 cursor-not-allowed"
+                    )}
+                  >
+                    {saving ? (
+                      <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                    ) : (
+                      <Save className="w-3.5 h-3.5 mr-1.5" />
+                    )}
+                    {saving ? "儲存中..." : hasChanges ? "儲存設定" : "已儲存"}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -872,27 +1117,7 @@ export default function NotificationsPage() {
         )}
 
         {/* ==================== Email Settings Card ==================== */}
-        <Card className="bg-gradient-to-r from-indigo-500/5 to-purple-500/5 border-indigo-500/10">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 flex items-center justify-center flex-shrink-0">
-                <Mail className="w-5 h-5 text-indigo-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-medium text-white text-sm">Email 通知設定</h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  管理哪些通知會發送至您的信箱
-                </p>
-              </div>
-              <Link href="/dashboard/profile">
-                <Button variant="ghost" size="sm" className="text-indigo-400 hover:text-indigo-300 text-xs">
-                  前往設定
-                  <ChevronRight className="w-3.5 h-3.5 ml-1" />
-                </Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
+        <EmailNotificationSettings />
       </div>
     </div>
   );
