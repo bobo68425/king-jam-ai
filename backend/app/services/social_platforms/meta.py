@@ -435,14 +435,42 @@ class MetaPlatform(BasePlatform):
                 elif content.content_type == ContentType.IMAGE:
                     # 圖片貼文
                     url = f"{self.GRAPH_API_BASE}/{self._page_id}/photos"
-                    params = {
-                        "url": content.media_urls[0],
-                        "caption": content.caption,
-                        "access_token": page_access_token
-                    }
+                    media_url = content.media_urls[0]
+                    
+                    if media_url.startswith("data:"):
+                        # Base64 Data URI → 用 source 參數上傳 (multipart/form-data)
+                        import base64 as b64_module
+                        import re
+                        match = re.match(r'data:([^;]+);base64,(.+)', media_url)
+                        if not match:
+                            return PublishResult(
+                                success=False,
+                                error_message="無效的 Base64 圖片格式"
+                            )
+                        content_type_str = match.group(1)
+                        image_bytes = b64_module.b64decode(match.group(2))
+                        
+                        ext_map = {"image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp"}
+                        ext = ext_map.get(content_type_str, "png")
+                        
+                        form_data = aiohttp.FormData()
+                        form_data.add_field('source', image_bytes, filename=f"image.{ext}", content_type=content_type_str)
+                        form_data.add_field('caption', content.caption or "")
+                        form_data.add_field('access_token', page_access_token)
+                        
+                        print(f"[Meta] 使用 source 參數上傳 Base64 圖片 ({len(image_bytes)} bytes)")
+                    else:
+                        # 一般 HTTP URL → 用 url 參數
+                        form_data = None
+                        params = {
+                            "url": media_url,
+                            "caption": content.caption,
+                            "access_token": page_access_token
+                        }
                 elif content.content_type == ContentType.VIDEO:
                     # 影片貼文
                     url = f"{self.GRAPH_API_BASE}/{self._page_id}/videos"
+                    form_data = None
                     params = {
                         "file_url": content.media_urls[0],
                         "description": content.caption,
@@ -454,35 +482,40 @@ class MetaPlatform(BasePlatform):
                         error_message=f"Unsupported content type: {content.content_type}"
                     )
                 
-                async with session.post(url, params=params) as response:
-                    data = await response.json()
-                    
-                    if "error" in data:
-                        print(f"[Meta] Facebook 發布失敗: {data['error']}")
-                        return PublishResult(
-                            success=False,
-                            error_message=data["error"]["message"],
-                            error_code=str(data["error"].get("code"))
-                        )
-                    
-                    # photos API 回傳 {"id": photoId, "post_id": pageId_postId}
-                    # feed API 回傳 {"id": pageId_postId}
-                    post_id = data.get("post_id") or data.get("id")
-                    
-                    # 建構可靠的 Facebook 貼文 URL
-                    # post_id 格式為 pageId_postId，例如 "123456_789012"
-                    if post_id and "_" in str(post_id):
-                        parts = str(post_id).split("_", 1)
-                        fb_url = f"https://www.facebook.com/permalink.php?story_fbid={parts[1]}&id={parts[0]}"
-                    else:
-                        fb_url = f"https://www.facebook.com/{post_id}"
-                    
-                    print(f"[Meta] Facebook 發布成功: post_id={post_id}, url={fb_url}, raw_data={data}")
+                # 根據是否有 form_data 決定上傳方式
+                if content.content_type == ContentType.IMAGE and form_data is not None:
+                    async with session.post(url, data=form_data) as response:
+                        data = await response.json()
+                else:
+                    async with session.post(url, params=params) as response:
+                        data = await response.json()
+                
+                if "error" in data:
+                    print(f"[Meta] Facebook 發布失敗: {data['error']}")
                     return PublishResult(
-                        success=True,
-                        platform_post_id=str(post_id),
-                        platform_post_url=fb_url
+                        success=False,
+                        error_message=data["error"]["message"],
+                        error_code=str(data["error"].get("code"))
                     )
+                
+                # photos API 回傳 {"id": photoId, "post_id": pageId_postId}
+                # feed API 回傳 {"id": pageId_postId}
+                post_id = data.get("post_id") or data.get("id")
+                
+                # 建構可靠的 Facebook 貼文 URL
+                # post_id 格式為 pageId_postId，例如 "123456_789012"
+                if post_id and "_" in str(post_id):
+                    parts = str(post_id).split("_", 1)
+                    fb_url = f"https://www.facebook.com/permalink.php?story_fbid={parts[1]}&id={parts[0]}"
+                else:
+                    fb_url = f"https://www.facebook.com/{post_id}"
+                
+                print(f"[Meta] Facebook 發布成功: post_id={post_id}, url={fb_url}, raw_data={data}")
+                return PublishResult(
+                    success=True,
+                    platform_post_id=str(post_id),
+                    platform_post_url=fb_url
+                )
                     
         except Exception as e:
             print(f"[Meta] Facebook 發布異常: {str(e)}")

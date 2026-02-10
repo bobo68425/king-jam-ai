@@ -1258,87 +1258,86 @@ export default function BlogPage() {
 
         {/* 文章預覽區 */}
         <Card className="overflow-hidden flex flex-col bg-slate-900 border-slate-700 min-w-0">
-          <CardHeader className="border-b border-slate-700 py-3 bg-slate-800 shrink-0">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-              <CardTitle className="text-base flex items-center gap-2 text-white min-w-0">
-                <FileText className="w-4 h-4 shrink-0 text-indigo-400"/>
-                <span className="truncate">{currentPost ? currentPost.title : "文章預覽"}</span>
-                {currentPost?.cover_image && (
-                  <Badge className="shrink-0 text-xs bg-green-500/20 text-green-400 border-0">
-                    <CheckCircle2 className="w-3 h-3 mr-1"/>
-                    已完成
-                  </Badge>
-                )}
-              </CardTitle>
-              {currentPost && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleCopy}
-                    className="h-8 px-2 sm:px-3 text-slate-400 hover:text-white hover:bg-slate-700"
-                    title="複製純文字"
-                  >
-                    {copied ? (
-                      <><Check className="w-4 h-4 sm:mr-1.5 text-green-400"/><span className="hidden sm:inline">已複製</span></>
-                    ) : (
-                      <><Copy className="w-4 h-4 sm:mr-1.5"/><span className="hidden sm:inline">複製</span></>
-                    )}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleCopyHtml}
-                    className="h-8 px-2 sm:px-3 text-slate-400 hover:text-white hover:bg-slate-700"
-                    title="複製 HTML 原始碼"
-                  >
-                    <Code className="w-4 h-4 sm:mr-1.5"/><span className="hidden sm:inline">原始碼</span>
-                  </Button>
-                  {/* 排程上架按鈕 */}
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      // 從 HTML 中提取純文字摘要
-                      const tempDiv = document.createElement("div");
-                      tempDiv.innerHTML = currentPost.content;
-                      const textContent = tempDiv.textContent || tempDiv.innerText || "";
-                      const summary = textContent.slice(0, 200);
-                      
-                      setScheduleContent({
-                        type: "blog_post",
-                        title: currentPost.title,
-                        caption: summary,
-                        media_urls: currentPost.cover_image ? [currentPost.cover_image] : [],
-                        hashtags: [],
-                        originalData: currentPost
-                      });
-                      setShowScheduleDialog(true);
-                    }}
-                    className="h-8 px-2 sm:px-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white"
-                  >
-                    <Clock className="w-4 h-4 sm:mr-1.5"/><span className="hidden sm:inline">排程上架</span>
-                  </Button>
-                  
-                  {/* WordPress 發布按鈕 */}
-                  <Button
-                    size="sm"
-                    onClick={handleOpenWordPressDialog}
-                    className="h-8 px-2 sm:px-3 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white"
-                  >
-                    <Globe className="w-4 h-4 sm:mr-1.5"/><span className="hidden sm:inline">WordPress</span>
-                  </Button>
-                </div>
+          <CardHeader className="border-b border-slate-700 py-3 bg-slate-800 shrink-0 space-y-2">
+            {/* 標題列 */}
+            <CardTitle className="text-base flex items-start gap-2 text-white min-w-0">
+              <FileText className="w-4 h-4 shrink-0 text-indigo-400 mt-0.5"/>
+              <span className="break-words whitespace-normal line-clamp-2">{currentPost ? currentPost.title : "文章預覽"}</span>
+              {currentPost?.cover_image && (
+                <Badge className="shrink-0 text-xs bg-green-500/20 text-green-400 border-0">
+                  <CheckCircle2 className="w-3 h-3 mr-1"/>
+                  已完成
+                </Badge>
               )}
-            </div>
+            </CardTitle>
+            {/* 工具按鈕列 */}
             {currentPost && (
-              <div className="flex items-center gap-4 mt-2 text-xs text-slate-500">
-                <span className="flex items-center gap-1">
-                  <Eye className="w-3.5 h-3.5"/>
-                  {getWordCount(currentPost.content)} 字
-                </span>
-                <span className="flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5"/>
-                  約 {getReadTime(currentPost.content)} 分鐘閱讀
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCopy}
+                  className="h-8 px-2 sm:px-3 text-slate-400 hover:text-white hover:bg-slate-700"
+                  title="複製純文字"
+                >
+                  {copied ? (
+                    <><Check className="w-4 h-4 sm:mr-1.5 text-green-400"/><span className="hidden sm:inline">已複製</span></>
+                  ) : (
+                    <><Copy className="w-4 h-4 sm:mr-1.5"/><span className="hidden sm:inline">複製</span></>
+                  )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCopyHtml}
+                  className="h-8 px-2 sm:px-3 text-slate-400 hover:text-white hover:bg-slate-700"
+                  title="複製 HTML 原始碼"
+                >
+                  <Code className="w-4 h-4 sm:mr-1.5"/><span className="hidden sm:inline">原始碼</span>
+                </Button>
+                {/* 排程上架按鈕 */}
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    // 從 HTML 中提取純文字摘要
+                    const tempDiv = document.createElement("div");
+                    tempDiv.innerHTML = currentPost.content;
+                    const textContent = tempDiv.textContent || tempDiv.innerText || "";
+                    const summary = textContent.slice(0, 200);
+                    
+                    setScheduleContent({
+                      type: "blog_post",
+                      title: currentPost.title,
+                      caption: summary,
+                      media_urls: currentPost.cover_image ? [currentPost.cover_image] : [],
+                      hashtags: [],
+                      originalData: currentPost
+                    });
+                    setShowScheduleDialog(true);
+                  }}
+                  className="h-8 px-2 sm:px-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white"
+                >
+                  <Clock className="w-4 h-4 sm:mr-1.5"/><span className="hidden sm:inline">排程上架</span>
+                </Button>
+                
+                {/* WordPress 發布按鈕 */}
+                <Button
+                  size="sm"
+                  onClick={handleOpenWordPressDialog}
+                  className="h-8 px-2 sm:px-3 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white"
+                >
+                  <Globe className="w-4 h-4 sm:mr-1.5"/><span className="hidden sm:inline">WordPress</span>
+                </Button>
+                {/* 字數 & 閱讀時間 */}
+                <span className="ml-auto flex items-center gap-4 text-xs text-slate-500">
+                  <span className="flex items-center gap-1">
+                    <Eye className="w-3.5 h-3.5"/>
+                    {getWordCount(currentPost.content)} 字
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5"/>
+                    約 {getReadTime(currentPost.content)} 分鐘閱讀
+                  </span>
                 </span>
               </div>
             )}
