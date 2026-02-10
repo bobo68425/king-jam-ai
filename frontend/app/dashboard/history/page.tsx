@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -8,6 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -35,10 +43,20 @@ import {
   LayoutGrid,
   List,
   Play,
-  Eye
+  Eye,
+  Send,
+  Share2,
+  Facebook,
+  Instagram,
+  Globe,
+  Hash,
+  Copy,
+  Check,
+  X
 } from "lucide-react";
 import { format } from "date-fns";
 import { zhTW } from "date-fns/locale";
+import { ScheduleDialog, ScheduleContent } from "@/components/schedule-dialog";
 
 interface GenerationHistoryItem {
   id: number;
@@ -66,6 +84,14 @@ interface HistoryResponse {
   has_more: boolean;
 }
 
+interface SocialAccount {
+  id: number;
+  platform: string;
+  platform_username: string;
+  platform_display_name?: string;
+  is_active: boolean;
+}
+
 type ViewMode = "grid" | "list";
 
 export default function HistoryPage() {
@@ -80,6 +106,24 @@ export default function HistoryPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [isMounted, setIsMounted] = useState(false);  // 追蹤客戶端掛載狀態
+
+  // 詳情彈窗狀態
+  const [selectedItem, setSelectedItem] = useState<GenerationHistoryItem | null>(null);
+  const [detailData, setDetailData] = useState<any>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+
+  // 社群帳號
+  const [socialAccounts, setSocialAccounts] = useState<SocialAccount[]>([]);
+  const [selectedAccounts, setSelectedAccounts] = useState<number[]>([]);
+
+  // 發布狀態
+  const [publishing, setPublishing] = useState(false);
+  const [captionCopied, setCaptionCopied] = useState(false);
+
+  // 排程對話框
+  const [showScheduleDialog, setShowScheduleDialog] = useState(false);
+  const [scheduleContent, setScheduleContent] = useState<ScheduleContent | null>(null);
 
   // 客戶端掛載後設定標記（避免 hydration 錯誤）
   useEffect(() => {
@@ -146,6 +190,165 @@ export default function HistoryPage() {
   const loadMore = () => {
     if (!loadingMore && hasMore) {
       fetchHistory(page + 1, false);
+    }
+  };
+
+  // 載入社群帳號
+  const fetchSocialAccounts = useCallback(async () => {
+    try {
+      const res = await api.get("/scheduler/accounts");
+      setSocialAccounts(res.data.filter((a: SocialAccount) => a.is_active));
+    } catch (e) {
+      console.error("載入社群帳號失敗:", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSocialAccounts();
+  }, [fetchSocialAccounts]);
+
+  // 載入詳情
+  const fetchDetail = async (item: GenerationHistoryItem) => {
+    setDetailLoading(true);
+    try {
+      const res = await api.get(`/history/${item.id}`);
+      setDetailData(res.data);
+    } catch (e) {
+      console.error("載入詳情失敗:", e);
+      toast.error("載入詳情失敗");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  // 開啟詳情彈窗
+  const handleOpenDetail = (item: GenerationHistoryItem) => {
+    setSelectedItem(item);
+    setDetailData(null);
+    setDetailOpen(true);
+    setCaptionCopied(false);
+    // 預設選取所有帳號
+    setSelectedAccounts(socialAccounts.map(a => a.id));
+    fetchDetail(item);
+  };
+
+  // 複製文案
+  const handleCopyCaption = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCaptionCopied(true);
+    toast.success("文案已複製");
+    setTimeout(() => setCaptionCopied(false), 2000);
+  };
+
+  // 一鍵發布
+  const handlePublishNow = async (accountId?: number) => {
+    if (!selectedItem || !detailData) return;
+
+    const output = detailData.output_data || {};
+    const caption = output.caption || output.title || "";
+    const hashtags = output.hashtags || [];
+    const mediaUrl = getMediaUrl(selectedItem) || detailData.thumbnail_url || detailData.media_cloud_url;
+
+    if (!mediaUrl && !caption) {
+      toast.error("沒有可發布的內容");
+      return;
+    }
+
+    const targetAccounts = accountId
+      ? [accountId]
+      : selectedAccounts;
+
+    if (targetAccounts.length === 0) {
+      toast.error("請至少選擇一個社群帳號");
+      return;
+    }
+
+    setPublishing(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const accId of targetAccounts) {
+      try {
+        // 1. 建立排程
+        const contentType = selectedItem.generation_type === "short_video" ? "short_video" : "social_image";
+        const schedRes = await api.post("/scheduler/posts", {
+          content_type: contentType,
+          title: selectedItem.input_params?.topic || selectedItem.input_params?.title || "",
+          caption: caption + (hashtags.length > 0 ? "\n\n" + hashtags.map((t: string) => `#${t}`).join(" ") : ""),
+          media_urls: mediaUrl ? [mediaUrl] : [],
+          hashtags: hashtags,
+          scheduled_at: new Date(Date.now() + 60000).toISOString(), // 1 分鐘後
+          timezone: "Asia/Taipei",
+          social_account_id: accId,
+        });
+
+        // 2. 立即發布
+        const postId = schedRes.data.id;
+        const pubRes = await api.post(`/scheduler/posts/${postId}/publish-now`);
+
+        if (pubRes.data.platform_post_url) {
+          successCount++;
+        } else {
+          successCount++; // 即使沒有 URL，也算成功
+        }
+      } catch (e: any) {
+        failCount++;
+        console.error(`發布到帳號 ${accId} 失敗:`, e);
+      }
+    }
+
+    setPublishing(false);
+
+    if (successCount > 0 && failCount === 0) {
+      toast.success(`成功發布到 ${successCount} 個平台！`);
+    } else if (successCount > 0) {
+      toast.warning(`${successCount} 個成功，${failCount} 個失敗`);
+    } else {
+      toast.error("發布失敗，請檢查社群帳號連結");
+    }
+  };
+
+  // 開啟排程對話框
+  const handleOpenSchedule = () => {
+    if (!selectedItem || !detailData) return;
+
+    const output = detailData.output_data || {};
+    const caption = output.caption || output.title || "";
+    const hashtags = output.hashtags || [];
+    const mediaUrl = getMediaUrl(selectedItem) || detailData.thumbnail_url || detailData.media_cloud_url;
+    const contentType = selectedItem.generation_type === "short_video"
+      ? "short_video"
+      : selectedItem.generation_type === "blog_post"
+        ? "blog_post"
+        : "social_image";
+
+    setScheduleContent({
+      type: contentType as ScheduleContent["type"],
+      title: selectedItem.input_params?.topic || selectedItem.input_params?.title || "",
+      caption: caption + (hashtags.length > 0 ? "\n\n" + hashtags.map((t: string) => `#${t}`).join(" ") : ""),
+      media_urls: mediaUrl ? [mediaUrl] : [],
+      hashtags: hashtags,
+    });
+    setShowScheduleDialog(true);
+  };
+
+  // 平台圖示
+  const getPlatformIcon = (platform: string) => {
+    switch (platform) {
+      case "facebook": return <Facebook className="w-4 h-4" />;
+      case "instagram": return <Instagram className="w-4 h-4" />;
+      case "threads": return <Globe className="w-4 h-4" />;
+      default: return <Globe className="w-4 h-4" />;
+    }
+  };
+
+  const getPlatformName = (platform: string) => {
+    switch (platform) {
+      case "facebook": return "Facebook";
+      case "instagram": return "Instagram";
+      case "threads": return "Threads";
+      case "wordpress": return "WordPress";
+      default: return platform;
     }
   };
 
@@ -664,7 +867,8 @@ export default function HistoryPage() {
               {filteredHistory.map((item) => (
                 <Card
                   key={item.id}
-                  className="bg-slate-800/50 border-slate-700 overflow-hidden group hover:border-slate-600 transition-all"
+                  className="bg-slate-800/50 border-slate-700 overflow-hidden group hover:border-slate-600 transition-all cursor-pointer"
+                  onClick={() => handleOpenDetail(item)}
                 >
                   {/* 縮圖/預覽 */}
                   <div className="relative h-40 bg-slate-700/50">
@@ -731,21 +935,12 @@ export default function HistoryPage() {
                           size="icon" 
                           variant="secondary" 
                           className="h-8 w-8"
-                          onClick={() => handleDownload(item)}
+                          onClick={(e) => { e.stopPropagation(); handleDownload(item); }}
                           title="下載"
                         >
                           <Download className="h-4 w-4" />
                         </Button>
                       )}
-                      <Button 
-                        size="icon" 
-                        variant="secondary" 
-                        className="h-8 w-8"
-                        onClick={() => handlePreview(item)}
-                        title="預覽"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
                     </div>
                   </div>
 
@@ -825,7 +1020,8 @@ export default function HistoryPage() {
                 {filteredHistory.map((item) => (
                   <div
                     key={item.id}
-                    className="group hover:bg-slate-700/30 transition-colors"
+                    className="group hover:bg-slate-700/30 transition-colors cursor-pointer"
+                    onClick={() => handleOpenDetail(item)}
                   >
                     {/* 桌面版 */}
                     <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-3 items-center">
@@ -950,7 +1146,7 @@ export default function HistoryPage() {
                             size="icon" 
                             variant="ghost" 
                             className="h-8 w-8 text-slate-400 hover:text-white"
-                            onClick={() => handleDownload(item)}
+                            onClick={(e) => { e.stopPropagation(); handleDownload(item); }}
                             title="下載"
                           >
                             <Download className="h-4 w-4" />
@@ -960,8 +1156,8 @@ export default function HistoryPage() {
                           size="icon" 
                           variant="ghost" 
                           className="h-8 w-8 text-slate-400 hover:text-white"
-                          onClick={() => handlePreview(item)}
-                          title="預覽"
+                          onClick={(e) => { e.stopPropagation(); handleOpenDetail(item); }}
+                          title="查看詳情"
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
@@ -974,7 +1170,6 @@ export default function HistoryPage() {
                         {/* 縮圖 */}
                         <div 
                           className="relative w-16 h-16 rounded-lg overflow-hidden bg-slate-700/50 flex-shrink-0 cursor-pointer"
-                          onClick={() => handlePreview(item)}
                         >
                           {(() => {
                             const mediaUrl = getMediaUrl(item);
@@ -1070,6 +1265,309 @@ export default function HistoryPage() {
           )}
         </>
       )}
+
+      {/* ==================== 詳情彈窗 ==================== */}
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-900 border-slate-700 p-0">
+          {selectedItem && (
+            <>
+              {/* 標題列 */}
+              <DialogHeader className="px-6 pt-6 pb-4 border-b border-slate-700">
+                <div className="flex items-center gap-3">
+                  <Badge className={`${getTypeColor(selectedItem.generation_type)} border-0`}>
+                    {getTypeName(selectedItem.generation_type)}
+                  </Badge>
+                  {getStatusBadge(selectedItem.status)}
+                </div>
+                <DialogTitle className="text-white text-lg mt-2">
+                  {selectedItem.input_params?.topic || selectedItem.input_params?.title || getTypeName(selectedItem.generation_type)}
+                </DialogTitle>
+                <DialogDescription className="text-slate-400 flex items-center gap-4 text-xs">
+                  <span className="flex items-center gap-1">
+                    <Calendar className="h-3 w-3" />
+                    {format(new Date(selectedItem.created_at), "yyyy/MM/dd HH:mm", { locale: zhTW })}
+                  </span>
+                  {selectedItem.generation_duration_ms && (
+                    <span>耗時 {formatDuration(selectedItem.generation_duration_ms)}</span>
+                  )}
+                  <span className="flex items-center gap-1">
+                    <Coins className="h-3 w-3" />
+                    {selectedItem.credits_used} 點
+                  </span>
+                </DialogDescription>
+              </DialogHeader>
+
+              {/* 內容區 */}
+              <div className="px-6 py-5">
+                {detailLoading ? (
+                  <div className="flex items-center justify-center py-16">
+                    <Loader2 className="h-8 w-8 animate-spin text-indigo-400" />
+                    <span className="ml-3 text-slate-400">載入中...</span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col lg:flex-row gap-6">
+                    {/* 左側：圖片/影片預覽 */}
+                    <div className="lg:w-1/2 flex-shrink-0">
+                      {(() => {
+                        const mediaUrl = getMediaUrl(selectedItem);
+                        const isVideo = selectedItem.generation_type === "short_video";
+
+                        if (!mediaUrl) {
+                          return (
+                            <div className="w-full aspect-square rounded-xl bg-slate-800 flex flex-col items-center justify-center text-slate-500">
+                              {isVideo ? <Play className="h-12 w-12 mb-2" /> : <ImageIcon className="h-12 w-12 mb-2" />}
+                              <span className="text-sm">媒體檔案不可用</span>
+                            </div>
+                          );
+                        }
+
+                        if (isVideo) {
+                          return (
+                            <video
+                              src={mediaUrl}
+                              controls
+                              className="w-full rounded-xl border border-slate-700"
+                            />
+                          );
+                        }
+
+                        return (
+                          <img
+                            src={mediaUrl}
+                            alt="預覽"
+                            className="w-full rounded-xl border border-slate-700 object-contain max-h-[500px] bg-slate-800"
+                          />
+                        );
+                      })()}
+
+                      {/* 下載按鈕 */}
+                      {hasMedia(selectedItem) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-3 w-full border-slate-600 text-slate-300 hover:text-white"
+                          onClick={() => handleDownload(selectedItem)}
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          下載檔案
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* 右側：文字內容與發布 */}
+                    <div className="lg:w-1/2 flex flex-col gap-4">
+                      {/* 文案 */}
+                      {(() => {
+                        const output = detailData?.output_data || {};
+                        const caption = output.caption || output.content || "";
+                        const hashtags: string[] = output.hashtags || [];
+
+                        return (
+                          <>
+                            {caption && (
+                              <div className="relative">
+                                <label className="text-xs text-slate-400 mb-1.5 block font-medium">文案內容</label>
+                                <div className="bg-slate-800 rounded-lg p-4 border border-slate-700 max-h-[200px] overflow-y-auto">
+                                  <p className="text-slate-200 text-sm whitespace-pre-wrap leading-relaxed">
+                                    {selectedItem.generation_type === "blog_post"
+                                      ? caption.replace(/<[^>]*>/g, '').slice(0, 500) + (caption.length > 500 ? "..." : "")
+                                      : caption
+                                    }
+                                  </p>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="absolute top-0 right-0 text-slate-400 hover:text-white h-6 px-2"
+                                  onClick={() => handleCopyCaption(caption.replace(/<[^>]*>/g, ''))}
+                                >
+                                  {captionCopied ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />}
+                                </Button>
+                              </div>
+                            )}
+
+                            {/* Hashtags */}
+                            {hashtags.length > 0 && (
+                              <div>
+                                <label className="text-xs text-slate-400 mb-1.5 block font-medium flex items-center gap-1">
+                                  <Hash className="h-3 w-3" />
+                                  標籤
+                                </label>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {hashtags.map((tag: string, i: number) => (
+                                    <Badge key={i} className="bg-indigo-500/20 text-indigo-300 border-0 text-xs">
+                                      #{tag}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
+
+                      {/* 生成資訊 */}
+                      <div>
+                        <label className="text-xs text-slate-400 mb-1.5 block font-medium">生成資訊</label>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          {selectedItem.input_params?.platform && (
+                            <div className="bg-slate-800 rounded-lg p-2.5 border border-slate-700">
+                              <span className="text-slate-500">平台</span>
+                              <p className="text-white mt-0.5">{selectedItem.input_params.platform}</p>
+                            </div>
+                          )}
+                          {selectedItem.input_params?.style && (
+                            <div className="bg-slate-800 rounded-lg p-2.5 border border-slate-700">
+                              <span className="text-slate-500">風格</span>
+                              <p className="text-white mt-0.5">{selectedItem.input_params.style}</p>
+                            </div>
+                          )}
+                          {selectedItem.file_size_bytes && (
+                            <div className="bg-slate-800 rounded-lg p-2.5 border border-slate-700">
+                              <span className="text-slate-500">檔案大小</span>
+                              <p className="text-white mt-0.5">{formatFileSize(selectedItem.file_size_bytes)}</p>
+                            </div>
+                          )}
+                          {selectedItem.generation_duration_ms && (
+                            <div className="bg-slate-800 rounded-lg p-2.5 border border-slate-700">
+                              <span className="text-slate-500">生成耗時</span>
+                              <p className="text-white mt-0.5">{formatDuration(selectedItem.generation_duration_ms)}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 分隔線 */}
+                      <div className="border-t border-slate-700" />
+
+                      {/* 發布區塊 */}
+                      {selectedItem.status === "completed" && selectedItem.generation_type !== "blog_post" && (
+                        <div className="space-y-3">
+                          <label className="text-xs text-slate-400 font-medium flex items-center gap-1.5">
+                            <Share2 className="h-3.5 w-3.5" />
+                            發布到社群平台
+                          </label>
+
+                          {/* 平台選擇 */}
+                          {socialAccounts.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                              {socialAccounts.map((acc) => {
+                                const isSelected = selectedAccounts.includes(acc.id);
+                                return (
+                                  <button
+                                    key={acc.id}
+                                    onClick={() => {
+                                      setSelectedAccounts(prev =>
+                                        isSelected
+                                          ? prev.filter(id => id !== acc.id)
+                                          : [...prev, acc.id]
+                                      );
+                                    }}
+                                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all border ${
+                                      isSelected
+                                        ? "bg-indigo-500/20 border-indigo-500/50 text-indigo-300"
+                                        : "bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600"
+                                    }`}
+                                  >
+                                    {getPlatformIcon(acc.platform)}
+                                    <span>{acc.platform_display_name || acc.platform_username}</span>
+                                    {isSelected && <CheckCircle2 className="h-3.5 w-3.5 text-indigo-400" />}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-500 bg-slate-800 rounded-lg p-3 border border-slate-700">
+                              尚未連結社群帳號。請到「排程上架」頁面連結 Facebook 或 Instagram。
+                            </p>
+                          )}
+
+                          {/* 發布按鈕 */}
+                          {socialAccounts.length > 0 && (
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                onClick={() => handlePublishNow()}
+                                disabled={publishing || selectedAccounts.length === 0}
+                                className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white"
+                              >
+                                {publishing ? (
+                                  <>
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    發布中...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Send className="h-4 w-4 mr-2" />
+                                    立即發布 ({selectedAccounts.length})
+                                  </>
+                                )}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={handleOpenSchedule}
+                                className="border-indigo-500/50 text-indigo-300 hover:bg-indigo-500/10"
+                              >
+                                <Clock className="h-4 w-4 mr-2" />
+                                排程
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* 部落格文章特殊處理 */}
+                      {selectedItem.generation_type === "blog_post" && (
+                        <div className="flex gap-2">
+                          {detailData?.output_data?.post_id && (
+                            <Button
+                              size="sm"
+                              className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500"
+                              onClick={() => window.open(`/dashboard/blog?post=${detailData.output_data.post_id}`, "_blank")}
+                            >
+                              <FileText className="h-4 w-4 mr-2" />
+                              前往編輯
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleOpenSchedule}
+                            className="border-indigo-500/50 text-indigo-300 hover:bg-indigo-500/10"
+                          >
+                            <Clock className="h-4 w-4 mr-2" />
+                            排程上架
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* 錯誤訊息 */}
+                      {selectedItem.status === "failed" && selectedItem.error_message && (
+                        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                          <p className="text-xs text-red-400 font-medium mb-1">錯誤訊息</p>
+                          <p className="text-xs text-red-300">{selectedItem.error_message}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 排程對話框 */}
+      <ScheduleDialog
+        open={showScheduleDialog}
+        onClose={() => setShowScheduleDialog(false)}
+        content={scheduleContent}
+        onSuccess={() => {
+          setShowScheduleDialog(false);
+          toast.success("排程已建立！");
+        }}
+      />
     </div>
   );
 }
