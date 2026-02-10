@@ -74,6 +74,16 @@ interface GenerationHistoryItem {
   error_message: string | null;
   created_at: string;
   updated_at?: string | null;
+  group_key?: string | null;  // 分組鍵：同一次生成的紀錄共享
+}
+
+// 分組後的顯示項目
+interface GroupedHistoryItem {
+  group_key: string;
+  primary: GenerationHistoryItem;   // 主要顯示的紀錄
+  children: GenerationHistoryItem[]; // 同組所有紀錄（含 primary）
+  total_credits: number;
+  types: string[];  // 包含的類型列表
 }
 
 interface HistoryResponse {
@@ -109,7 +119,9 @@ export default function HistoryPage() {
 
   // 詳情彈窗狀態
   const [selectedItem, setSelectedItem] = useState<GenerationHistoryItem | null>(null);
+  const [selectedGroup, setSelectedGroup] = useState<GroupedHistoryItem | null>(null);
   const [detailData, setDetailData] = useState<any>(null);
+  const [groupDetailData, setGroupDetailData] = useState<Record<number, any>>({}); // id → detail
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
 
@@ -225,11 +237,30 @@ export default function HistoryPage() {
   const handleOpenDetail = (item: GenerationHistoryItem) => {
     setSelectedItem(item);
     setDetailData(null);
+    setGroupDetailData({});
     setDetailOpen(true);
     setCaptionCopied(false);
-    // 預設選取所有帳號
     setSelectedAccounts(socialAccounts.map(a => a.id));
+
+    // 找到該項目所屬的分組
+    const group = groupedHistory.find(g =>
+      g.children.some(c => c.id === item.id)
+    ) || null;
+    setSelectedGroup(group);
+
+    // 載入主要項目的詳情
     fetchDetail(item);
+
+    // 載入同組其他項目的詳情
+    if (group && group.children.length > 1) {
+      for (const child of group.children) {
+        if (child.id !== item.id) {
+          api.get(`/history/${child.id}`).then(res => {
+            setGroupDetailData(prev => ({ ...prev, [child.id]: res.data }));
+          }).catch(() => {});
+        }
+      }
+    }
   };
 
   // 複製文案
@@ -728,6 +759,51 @@ export default function HistoryPage() {
     return topic.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
+  // 將紀錄按 group_key 分組
+  const groupedHistory: GroupedHistoryItem[] = (() => {
+    const groupMap = new Map<string, GenerationHistoryItem[]>();
+    const order: string[] = [];
+
+    for (const item of filteredHistory) {
+      const key = item.group_key || `single_${item.id}`;
+      if (!groupMap.has(key)) {
+        groupMap.set(key, []);
+        order.push(key);
+      }
+      groupMap.get(key)!.push(item);
+    }
+
+    return order.map(key => {
+      const items = groupMap.get(key)!;
+      // 決定主要紀錄的優先順序：blog_post > blog_image, short_video > video_script, 其餘取第一筆
+      const priorityOrder: Record<string, number> = {
+        blog_post: 1, short_video: 1, social_image: 1,
+        blog_image: 2, video_script: 2,
+      };
+      const sorted = [...items].sort(
+        (a, b) => (priorityOrder[a.generation_type] || 3) - (priorityOrder[b.generation_type] || 3)
+      );
+      const primary = sorted[0];
+      const types = [...new Set(items.map(i => i.generation_type))];
+      const totalCredits = items.reduce((sum, i) => sum + i.credits_used, 0);
+
+      return {
+        group_key: key,
+        primary,
+        children: items,
+        total_credits: totalCredits,
+        types,
+      };
+    });
+  })();
+
+  // 用於取得分組的顯示名稱（合併類型）
+  const getGroupTypeLabel = (group: GroupedHistoryItem) => {
+    if (group.children.length === 1) return getTypeName(group.primary.generation_type);
+    const labels = group.types.map(t => getTypeName(t));
+    return labels.join(" + ");
+  };
+
   return (
     <div className="flex flex-col gap-6">
       {/* 頁面標題 */}
@@ -857,7 +933,7 @@ export default function HistoryPage() {
             </CardContent>
           </Card>
         )
-      ) : filteredHistory.length === 0 ? (
+      ) : groupedHistory.length === 0 ? (
         <Card className="bg-slate-800/50 border-slate-700">
           <CardContent className="py-16 text-center">
             <Sparkles className="h-16 w-16 mx-auto text-slate-600 mb-4" />
@@ -874,140 +950,126 @@ export default function HistoryPage() {
           {/* 格狀檢視 */}
           {viewMode === "grid" && (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {filteredHistory.map((item) => (
-                <Card
-                  key={item.id}
-                  className="bg-slate-800/50 border-slate-700 overflow-hidden group hover:border-slate-600 transition-all cursor-pointer"
-                  onClick={() => handleOpenDetail(item)}
-                >
-                  {/* 縮圖/預覽 */}
-                  <div className="relative h-40 bg-slate-700/50">
-                    {(() => {
-                      const mediaUrl = getMediaUrl(item);
-                      const isMediaType = item.generation_type === "short_video" || item.generation_type === "social_image";
-                      const isExpired = isMediaType && !mediaUrl;
-                      
-                      if (isExpired) {
-                        return (
-                          <div className="w-full h-full flex flex-col items-center justify-center bg-red-500/10">
-                            {item.generation_type === "short_video" ? (
-                              <Play className="h-8 w-8 text-red-400/50 mb-2" />
-                            ) : (
-                              <ImageIcon className="h-8 w-8 text-red-400/50 mb-2" />
-                            )}
-                            <span className="text-xs text-red-400">檔案已過期</span>
-                          </div>
-                        );
-                      }
-                      
-                      if (mediaUrl) {
-                        if (item.generation_type === "short_video") {
+              {groupedHistory.map((group) => {
+                const item = group.primary;
+                // 找出有媒體的子項目（用於縮圖）
+                const mediaItem = group.children.find(c => getMediaUrl(c)) || item;
+
+                return (
+                  <Card
+                    key={group.group_key}
+                    className="bg-slate-800/50 border-slate-700 overflow-hidden group hover:border-slate-600 transition-all cursor-pointer"
+                    onClick={() => handleOpenDetail(item)}
+                  >
+                    {/* 縮圖/預覽 */}
+                    <div className="relative h-40 bg-slate-700/50">
+                      {(() => {
+                        const mediaUrl = getMediaUrl(mediaItem);
+                        const isMediaType = mediaItem.generation_type === "short_video" || mediaItem.generation_type === "social_image";
+                        const isExpired = isMediaType && !mediaUrl;
+                        
+                        if (isExpired) {
                           return (
-                            <div className="w-full h-full flex items-center justify-center bg-purple-500/10">
-                              <Play className="h-10 w-10 text-purple-400" />
+                            <div className="w-full h-full flex flex-col items-center justify-center bg-red-500/10">
+                              <ImageIcon className="h-8 w-8 text-red-400/50 mb-2" />
+                              <span className="text-xs text-red-400">檔案已過期</span>
                             </div>
                           );
                         }
+                        
+                        if (mediaUrl) {
+                          if (mediaItem.generation_type === "short_video") {
+                            return (
+                              <div className="w-full h-full flex items-center justify-center bg-purple-500/10">
+                                <Play className="h-10 w-10 text-purple-400" />
+                              </div>
+                            );
+                          }
+                          return (
+                            <img
+                              src={mediaUrl}
+                              alt="縮圖"
+                              className="w-full h-full object-cover"
+                              onError={(e) => { e.currentTarget.style.display = "none"; }}
+                            />
+                          );
+                        }
                         return (
-                          <img
-                            src={mediaUrl}
-                            alt="縮圖"
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              e.currentTarget.style.display = "none";
-                            }}
-                          />
+                          <div className="w-full h-full flex items-center justify-center">
+                            {getTypeIcon(item.generation_type)}
+                          </div>
                         );
-                      }
-                      return (
-                        <div className="w-full h-full flex items-center justify-center">
-                          {getTypeIcon(item.generation_type)}
+                      })()}
+                      
+                      {/* 類型標籤 */}
+                      <div className="absolute top-2 left-2 flex flex-wrap gap-1">
+                        {group.types.map(t => (
+                          <Badge key={t} className={`${getTypeColor(t)} border-0 text-[10px]`}>
+                            {getTypeName(t)}
+                          </Badge>
+                        ))}
+                      </div>
+
+                      {/* 分組數量指示 */}
+                      {group.children.length > 1 && (
+                        <div className="absolute bottom-2 right-2">
+                          <Badge className="bg-white/20 backdrop-blur-sm text-white border-0 text-[10px]">
+                            {group.children.length} 個項目
+                          </Badge>
                         </div>
-                      );
-                    })()}
-                    
-                    {/* 類型標籤 */}
-                    <div className="absolute top-2 left-2 flex gap-1">
-                      <Badge className={`${getTypeColor(item.generation_type)} border-0`}>
-                        {getTypeName(item.generation_type)}
-                      </Badge>
-                      {(item.generation_type === "short_video" || item.generation_type === "social_image") && !getMediaUrl(item) && (
-                        <Badge className="bg-red-500/80 text-white border-0">
-                          已過期
-                        </Badge>
                       )}
-                    </div>
 
-                    {/* 操作按鈕 */}
-                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                      {hasMedia(item) && (
-                        <Button 
-                          size="icon" 
-                          variant="secondary" 
-                          className="h-8 w-8"
-                          onClick={(e) => { e.stopPropagation(); handleDownload(item); }}
-                          title="下載"
-                        >
-                          <Download className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-
-                  <CardContent className="p-4">
-                    {/* 標題 */}
-                    <h3 className="font-medium text-white truncate mb-2">
-                      {item.input_params?.topic || item.input_params?.title || getTypeName(item.generation_type)}
-                    </h3>
-
-                    {/* 狀態和元數據 */}
-                    <div className="flex items-center justify-between mb-3">
-                      {getStatusBadge(item.status)}
-                      <div className="flex items-center gap-2 text-xs text-slate-400">
-                        <Coins className="h-3 w-3" />
-                        {item.credits_used} 點
-                      </div>
-                    </div>
-
-                    {/* 時間和詳情 */}
-                    <div className="flex items-center justify-between text-xs text-slate-500">
-                      <div className="flex items-center gap-1">
-                        <Calendar className="h-3 w-3" />
-                        {format(new Date(item.created_at), "MM/dd HH:mm", { locale: zhTW })}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {item.generation_duration_ms && (
-                          <span>耗時 {formatDuration(item.generation_duration_ms)}</span>
-                        )}
-                        {item.file_size_bytes && (
-                          <span>{formatFileSize(item.file_size_bytes)}</span>
+                      {/* 操作按鈕 */}
+                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                        {hasMedia(mediaItem) && (
+                          <Button 
+                            size="icon" 
+                            variant="secondary" 
+                            className="h-8 w-8"
+                            onClick={(e) => { e.stopPropagation(); handleDownload(mediaItem); }}
+                            title="下載"
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
                         )}
                       </div>
                     </div>
 
-                    {/* 保存期限提示 */}
-                    {(item.generation_type === "short_video" || item.generation_type === "social_image") && hasMedia(item) && (
-                      <div className={`mt-2 text-xs flex items-center gap-1 ${
-                        getExpirationInfo(item).daysRemaining !== null && getExpirationInfo(item).daysRemaining! <= 3
-                          ? "text-amber-400"
-                          : "text-slate-500"
-                      }`}>
-                        <Clock className="h-3 w-3" />
-                        {getExpirationInfo(item).text}
-                      </div>
-                    )}
+                    <CardContent className="p-4">
+                      {/* 標題 */}
+                      <h3 className="font-medium text-white truncate mb-2">
+                        {item.input_params?.topic || item.input_params?.title || getTypeName(item.generation_type)}
+                      </h3>
 
-                    {/* 錯誤訊息 */}
-                    {item.status === "failed" && item.error_message && (
-                      <div className="mt-3 p-2 rounded bg-red-500/10 border border-red-500/20">
-                        <p className="text-xs text-red-400 truncate">
-                          {item.error_message}
-                        </p>
+                      {/* 狀態和元數據 */}
+                      <div className="flex items-center justify-between mb-3">
+                        {getStatusBadge(item.status)}
+                        <div className="flex items-center gap-2 text-xs text-slate-400">
+                          <Coins className="h-3 w-3" />
+                          {group.total_credits} 點
+                        </div>
                       </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
+
+                      {/* 時間 */}
+                      <div className="flex items-center justify-between text-xs text-slate-500">
+                        <div className="flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          {format(new Date(item.created_at), "MM/dd HH:mm", { locale: zhTW })}
+                        </div>
+                      </div>
+
+                      {/* 錯誤訊息 */}
+                      {item.status === "failed" && item.error_message && (
+                        <div className="mt-3 p-2 rounded bg-red-500/10 border border-red-500/20">
+                          <p className="text-xs text-red-400 truncate">
+                            {item.error_message}
+                          </p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           )}
 
@@ -1027,228 +1089,137 @@ export default function HistoryPage() {
               
               {/* 列表項目 */}
               <div className="divide-y divide-slate-700">
-                {filteredHistory.map((item) => (
-                  <div
-                    key={item.id}
-                    className="group hover:bg-slate-700/30 transition-colors cursor-pointer"
-                    onClick={() => handleOpenDetail(item)}
-                  >
-                    {/* 桌面版 */}
-                    <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-3 items-center">
-                      {/* 預覽縮圖 */}
-                      <div className="col-span-1">
-                        <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-slate-700/50 flex-shrink-0">
-                          {(() => {
-                            const mediaUrl = getMediaUrl(item);
-                            const isMediaType = item.generation_type === "short_video" || item.generation_type === "social_image";
-                            const isExpired = isMediaType && !mediaUrl;
-                            
-                            if (isExpired) {
-                              return (
-                                <div className="w-full h-full flex items-center justify-center bg-red-500/20">
-                                  {item.generation_type === "short_video" ? (
-                                    <Play className="h-4 w-4 text-red-400/50" />
-                                  ) : (
-                                    <ImageIcon className="h-4 w-4 text-red-400/50" />
-                                  )}
-                                </div>
-                              );
-                            }
-                            
-                            if (mediaUrl) {
-                              if (item.generation_type === "short_video") {
-                                return (
-                                  <div className="w-full h-full flex items-center justify-center bg-purple-500/20">
-                                    <Play className="h-4 w-4 text-purple-400" />
-                                  </div>
-                                );
+                {groupedHistory.map((group) => {
+                  const item = group.primary;
+                  const mediaItem = group.children.find(c => getMediaUrl(c)) || item;
+
+                  return (
+                    <div
+                      key={group.group_key}
+                      className="group hover:bg-slate-700/30 transition-colors cursor-pointer"
+                      onClick={() => handleOpenDetail(item)}
+                    >
+                      {/* 桌面版 */}
+                      <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-3 items-center">
+                        {/* 預覽縮圖 */}
+                        <div className="col-span-1">
+                          <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-slate-700/50 flex-shrink-0">
+                            {(() => {
+                              const mediaUrl = getMediaUrl(mediaItem);
+                              if (mediaUrl && mediaItem.generation_type !== "short_video") {
+                                return <img src={mediaUrl} alt="縮圖" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />;
                               }
-                              return (
-                                <img
-                                  src={mediaUrl}
-                                  alt="縮圖"
-                                  className="w-full h-full object-cover"
-                                  onError={(e) => {
-                                    e.currentTarget.style.display = "none";
-                                  }}
-                                />
-                              );
-                            }
-                            return (
-                              <div className="w-full h-full flex items-center justify-center">
-                                {getTypeIcon(item.generation_type)}
+                              if (mediaUrl && mediaItem.generation_type === "short_video") {
+                                return <div className="w-full h-full flex items-center justify-center bg-purple-500/20"><Play className="h-4 w-4 text-purple-400" /></div>;
+                              }
+                              return <div className="w-full h-full flex items-center justify-center">{getTypeIcon(item.generation_type)}</div>;
+                            })()}
+                            {group.children.length > 1 && (
+                              <div className="absolute -bottom-0.5 -right-0.5 bg-indigo-500 text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
+                                {group.children.length}
                               </div>
-                            );
-                          })()}
-                        </div>
-                      </div>
-
-                      {/* 標題 */}
-                      <div className="col-span-3">
-                        <h3 className="font-medium text-white truncate">
-                          {item.input_params?.topic || item.input_params?.title || getTypeName(item.generation_type)}
-                        </h3>
-                        {item.input_params?.platform && (
-                          <p className="text-xs text-slate-500 mt-0.5">
-                            {item.input_params.platform}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* 類型 */}
-                      <div className="col-span-2 flex gap-1">
-                        <Badge className={`${getTypeColor(item.generation_type)} border-0`}>
-                          {getTypeName(item.generation_type)}
-                        </Badge>
-                        {(item.generation_type === "short_video" || item.generation_type === "social_image") && !getMediaUrl(item) && (
-                          <Badge className="bg-red-500/80 text-white border-0 text-[10px]">
-                            已過期
-                          </Badge>
-                        )}
-                      </div>
-
-                      {/* 狀態 */}
-                      <div className="col-span-2">
-                        {getStatusBadge(item.status)}
-                      </div>
-
-                      {/* 時間 */}
-                      <div className="col-span-2 text-sm text-slate-400">
-                        <div className="flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
-                          {format(new Date(item.created_at), "yyyy/MM/dd HH:mm", { locale: zhTW })}
-                        </div>
-                        {item.generation_duration_ms && (
-                          <div className="text-xs text-slate-500 mt-0.5">
-                            耗時 {formatDuration(item.generation_duration_ms)}
+                            )}
                           </div>
-                        )}
-                        {/* 保存期限 */}
-                        {(item.generation_type === "short_video" || item.generation_type === "social_image") && hasMedia(item) && (
-                          <div className={`text-xs mt-0.5 flex items-center gap-1 ${
-                            getExpirationInfo(item).daysRemaining !== null && getExpirationInfo(item).daysRemaining! <= 3
-                              ? "text-amber-400"
-                              : "text-slate-500"
-                          }`}>
-                            <Clock className="h-3 w-3" />
-                            {getExpirationInfo(item).text}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* 點數 */}
-                      <div className="col-span-1 text-right">
-                        <div className="flex items-center justify-end gap-1 text-sm text-amber-400">
-                          <Coins className="h-3 w-3" />
-                          {item.credits_used}
                         </div>
-                        {item.file_size_bytes && (
-                          <div className="text-xs text-slate-500 mt-0.5">
-                            {formatFileSize(item.file_size_bytes)}
-                          </div>
-                        )}
-                      </div>
 
-                      {/* 操作 */}
-                      <div className="col-span-1 flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {hasMedia(item) && (
+                        {/* 標題 */}
+                        <div className="col-span-3">
+                          <h3 className="font-medium text-white truncate">
+                            {item.input_params?.topic || item.input_params?.title || getTypeName(item.generation_type)}
+                          </h3>
+                          {item.input_params?.platform && (
+                            <p className="text-xs text-slate-500 mt-0.5">{item.input_params.platform}</p>
+                          )}
+                        </div>
+
+                        {/* 類型 */}
+                        <div className="col-span-2 flex flex-wrap gap-1">
+                          {group.types.map(t => (
+                            <Badge key={t} className={`${getTypeColor(t)} border-0 text-[10px]`}>
+                              {getTypeName(t)}
+                            </Badge>
+                          ))}
+                        </div>
+
+                        {/* 狀態 */}
+                        <div className="col-span-2">
+                          {getStatusBadge(item.status)}
+                        </div>
+
+                        {/* 時間 */}
+                        <div className="col-span-2 text-sm text-slate-400">
+                          <div className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            {format(new Date(item.created_at), "yyyy/MM/dd HH:mm", { locale: zhTW })}
+                          </div>
+                        </div>
+
+                        {/* 點數 */}
+                        <div className="col-span-1 text-right">
+                          <div className="flex items-center justify-end gap-1 text-sm text-amber-400">
+                            <Coins className="h-3 w-3" />
+                            {group.total_credits}
+                          </div>
+                        </div>
+
+                        {/* 操作 */}
+                        <div className="col-span-1 flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <Button 
                             size="icon" 
                             variant="ghost" 
                             className="h-8 w-8 text-slate-400 hover:text-white"
-                            onClick={(e) => { e.stopPropagation(); handleDownload(item); }}
-                            title="下載"
+                            onClick={(e) => { e.stopPropagation(); handleOpenDetail(item); }}
+                            title="查看詳情"
                           >
-                            <Download className="h-4 w-4" />
+                            <Eye className="h-4 w-4" />
                           </Button>
-                        )}
-                        <Button 
-                          size="icon" 
-                          variant="ghost" 
-                          className="h-8 w-8 text-slate-400 hover:text-white"
-                          onClick={(e) => { e.stopPropagation(); handleOpenDetail(item); }}
-                          title="查看詳情"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* 手機版 */}
-                    <div className="md:hidden p-4">
-                      <div className="flex items-start gap-3">
-                        {/* 縮圖 */}
-                        <div 
-                          className="relative w-16 h-16 rounded-lg overflow-hidden bg-slate-700/50 flex-shrink-0 cursor-pointer"
-                        >
-                          {(() => {
-                            const mediaUrl = getMediaUrl(item);
-                            if (mediaUrl) {
-                              if (item.generation_type === "short_video") {
-                                return (
-                                  <div className="w-full h-full flex items-center justify-center bg-purple-500/20">
-                                    <Play className="h-5 w-5 text-purple-400" />
-                                  </div>
-                                );
-                              }
-                              return (
-                                <img
-                                  src={mediaUrl}
-                                  alt="縮圖"
-                                  className="w-full h-full object-cover"
-                                  onError={(e) => {
-                                    e.currentTarget.style.display = "none";
-                                  }}
-                                />
-                              );
-                            }
-                            return (
-                              <div className="w-full h-full flex items-center justify-center">
-                                {getTypeIcon(item.generation_type)}
-                              </div>
-                            );
-                          })()}
                         </div>
+                      </div>
 
-                        {/* 內容 */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-2">
-                            <h3 className="font-medium text-white truncate">
-                              {item.input_params?.topic || item.input_params?.title || getTypeName(item.generation_type)}
-                            </h3>
-                            <div className="flex items-center gap-1 text-xs text-amber-400 flex-shrink-0">
-                              <Coins className="h-3 w-3" />
-                              {item.credits_used}
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                            <Badge className={`${getTypeColor(item.generation_type)} border-0 text-xs`}>
-                              {getTypeName(item.generation_type)}
-                            </Badge>
-                            {getStatusBadge(item.status)}
-                          </div>
-
-                          <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">
-                            <span>{format(new Date(item.created_at), "MM/dd HH:mm", { locale: zhTW })}</span>
-                            {item.generation_duration_ms && (
-                              <span>耗時 {formatDuration(item.generation_duration_ms)}</span>
+                      {/* 手機版 */}
+                      <div className="md:hidden p-4">
+                        <div className="flex items-start gap-3">
+                          <div className="relative w-16 h-16 rounded-lg overflow-hidden bg-slate-700/50 flex-shrink-0">
+                            {(() => {
+                              const mediaUrl = getMediaUrl(mediaItem);
+                              if (mediaUrl && mediaItem.generation_type !== "short_video") {
+                                return <img src={mediaUrl} alt="縮圖" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />;
+                              }
+                              return <div className="w-full h-full flex items-center justify-center">{getTypeIcon(item.generation_type)}</div>;
+                            })()}
+                            {group.children.length > 1 && (
+                              <div className="absolute -bottom-0.5 -right-0.5 bg-indigo-500 text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
+                                {group.children.length}
+                              </div>
                             )}
                           </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-2">
+                              <h3 className="font-medium text-white truncate">
+                                {item.input_params?.topic || item.input_params?.title || getTypeName(item.generation_type)}
+                              </h3>
+                              <div className="flex items-center gap-1 text-xs text-amber-400 flex-shrink-0">
+                                <Coins className="h-3 w-3" />
+                                {group.total_credits}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                              {group.types.map(t => (
+                                <Badge key={t} className={`${getTypeColor(t)} border-0 text-xs`}>
+                                  {getTypeName(t)}
+                                </Badge>
+                              ))}
+                              {getStatusBadge(item.status)}
+                            </div>
+                            <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">
+                              <span>{format(new Date(item.created_at), "MM/dd HH:mm", { locale: zhTW })}</span>
+                            </div>
+                          </div>
                         </div>
                       </div>
-
-                      {/* 錯誤訊息 */}
-                      {item.status === "failed" && item.error_message && (
-                        <div className="mt-3 p-2 rounded bg-red-500/10 border border-red-500/20">
-                          <p className="text-xs text-red-400 truncate">
-                            {item.error_message}
-                          </p>
-                        </div>
-                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </Card>
           )}
@@ -1283,11 +1254,24 @@ export default function HistoryPage() {
             <>
               {/* 標題列 */}
               <DialogHeader className="px-6 pt-6 pb-4 border-b border-slate-700">
-                <div className="flex items-center gap-3">
-                  <Badge className={`${getTypeColor(selectedItem.generation_type)} border-0`}>
-                    {getTypeName(selectedItem.generation_type)}
-                  </Badge>
+                <div className="flex items-center gap-3 flex-wrap">
+                  {selectedGroup && selectedGroup.children.length > 1 ? (
+                    selectedGroup.types.map(t => (
+                      <Badge key={t} className={`${getTypeColor(t)} border-0`}>
+                        {getTypeName(t)}
+                      </Badge>
+                    ))
+                  ) : (
+                    <Badge className={`${getTypeColor(selectedItem.generation_type)} border-0`}>
+                      {getTypeName(selectedItem.generation_type)}
+                    </Badge>
+                  )}
                   {getStatusBadge(selectedItem.status)}
+                  {selectedGroup && selectedGroup.children.length > 1 && (
+                    <Badge className="bg-white/10 text-slate-300 border-0 text-xs">
+                      {selectedGroup.children.length} 個項目
+                    </Badge>
+                  )}
                 </div>
                 <DialogTitle className="text-white text-lg mt-2">
                   {selectedItem.input_params?.topic || selectedItem.input_params?.title || getTypeName(selectedItem.generation_type)}
@@ -1297,12 +1281,9 @@ export default function HistoryPage() {
                     <Calendar className="h-3 w-3" />
                     {format(new Date(selectedItem.created_at), "yyyy/MM/dd HH:mm", { locale: zhTW })}
                   </span>
-                  {selectedItem.generation_duration_ms && (
-                    <span>耗時 {formatDuration(selectedItem.generation_duration_ms)}</span>
-                  )}
                   <span className="flex items-center gap-1">
                     <Coins className="h-3 w-3" />
-                    {selectedItem.credits_used} 點
+                    {selectedGroup ? selectedGroup.total_credits : selectedItem.credits_used} 點
                   </span>
                 </DialogDescription>
               </DialogHeader>
@@ -1316,46 +1297,57 @@ export default function HistoryPage() {
                   </div>
                 ) : (
                   <div className="flex flex-col lg:flex-row gap-6">
-                    {/* 左側：圖片/影片預覽 */}
-                    <div className="lg:w-1/2 flex-shrink-0">
+                    {/* 左側：所有媒體預覽 */}
+                    <div className="lg:w-1/2 flex-shrink-0 space-y-3">
                       {(() => {
-                        // 優先使用 detailData（完整資料），fallback 到列表資料
-                        const detailOutput = detailData?.output_data || {};
-                        const detailMediaUrl =
-                          getFullUrl(detailData?.media_cloud_url) ||
-                          getFullUrl(detailData?.thumbnail_url) ||
-                          getFullUrl(detailOutput.image_url) ||
-                          getFullUrl(detailOutput.image) ||
-                          getFullUrl(detailOutput.video_url);
-                        const mediaUrl = detailMediaUrl || getMediaUrl(selectedItem);
-                        const isVideo = selectedItem.generation_type === "short_video";
+                        // 收集所有需要顯示的媒體項目
+                        const allItems = selectedGroup && selectedGroup.children.length > 1
+                          ? selectedGroup.children
+                          : [selectedItem];
 
-                        if (!mediaUrl) {
+                        return allItems.map((child) => {
+                          const childDetail = child.id === selectedItem.id
+                            ? detailData
+                            : groupDetailData[child.id];
+                          const childOutput = childDetail?.output_data || {};
+                          const childMediaUrl =
+                            getFullUrl(childDetail?.media_cloud_url) ||
+                            getFullUrl(childDetail?.thumbnail_url) ||
+                            getFullUrl(childOutput.image_url) ||
+                            getFullUrl(childOutput.image) ||
+                            getFullUrl(childOutput.video_url) ||
+                            getMediaUrl(child);
+                          const isVideo = child.generation_type === "short_video";
+                          const isText = child.generation_type === "blog_post" || child.generation_type === "video_script";
+
+                          // 純文字類型不顯示媒體區塊（文案在右側顯示）
+                          if (isText && !childMediaUrl) return null;
+
                           return (
-                            <div className="w-full aspect-square rounded-xl bg-slate-800 flex flex-col items-center justify-center text-slate-500">
-                              {isVideo ? <Play className="h-12 w-12 mb-2" /> : <ImageIcon className="h-12 w-12 mb-2" />}
-                              <span className="text-sm">媒體檔案不可用</span>
+                            <div key={child.id} className="relative">
+                              {/* 類型小標籤 */}
+                              {allItems.length > 1 && (
+                                <div className="absolute top-2 left-2 z-10">
+                                  <Badge className={`${getTypeColor(child.generation_type)} border-0 text-[10px]`}>
+                                    {getTypeName(child.generation_type)}
+                                  </Badge>
+                                </div>
+                              )}
+                              {childMediaUrl ? (
+                                isVideo ? (
+                                  <video src={childMediaUrl} controls className="w-full rounded-xl border border-slate-700" />
+                                ) : (
+                                  <img src={childMediaUrl} alt="預覽" className="w-full rounded-xl border border-slate-700 object-contain max-h-[400px] bg-slate-800" />
+                                )
+                              ) : (
+                                <div className="w-full aspect-video rounded-xl bg-slate-800 flex flex-col items-center justify-center text-slate-500">
+                                  {isVideo ? <Play className="h-10 w-10 mb-2" /> : <ImageIcon className="h-10 w-10 mb-2" />}
+                                  <span className="text-xs">媒體檔案不可用</span>
+                                </div>
+                              )}
                             </div>
                           );
-                        }
-
-                        if (isVideo) {
-                          return (
-                            <video
-                              src={mediaUrl}
-                              controls
-                              className="w-full rounded-xl border border-slate-700"
-                            />
-                          );
-                        }
-
-                        return (
-                          <img
-                            src={mediaUrl}
-                            alt="預覽"
-                            className="w-full rounded-xl border border-slate-700 object-contain max-h-[500px] bg-slate-800"
-                          />
-                        );
+                        }).filter(Boolean);
                       })()}
 
                       {/* 下載按鈕 */}
@@ -1363,7 +1355,7 @@ export default function HistoryPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          className="mt-3 w-full border-slate-600 text-slate-300 hover:text-white"
+                          className="w-full border-slate-600 text-slate-300 hover:text-white"
                           onClick={() => handleDownload(selectedItem)}
                         >
                           <Download className="h-4 w-4 mr-2" />
@@ -1374,30 +1366,49 @@ export default function HistoryPage() {
 
                     {/* 右側：文字內容與發布 */}
                     <div className="lg:w-1/2 flex flex-col gap-4">
-                      {/* 文案 */}
+                      {/* 文案（合併所有子項目） */}
                       {(() => {
-                        const output = detailData?.output_data || {};
-                        const caption = output.caption || output.content || "";
-                        const hashtags: string[] = output.hashtags || [];
+                        // 收集所有子項目的文字內容
+                        const allItems = selectedGroup && selectedGroup.children.length > 1
+                          ? selectedGroup.children
+                          : [selectedItem];
+
+                        let mainCaption = "";
+                        let allHashtags: string[] = [];
+
+                        for (const child of allItems) {
+                          const cd = child.id === selectedItem.id
+                            ? detailData
+                            : groupDetailData[child.id];
+                          const output = cd?.output_data || {};
+                          const cap = output.caption || output.content || "";
+                          const tags: string[] = output.hashtags || [];
+
+                          if (cap && !mainCaption) {
+                            mainCaption = child.generation_type === "blog_post"
+                              ? cap.replace(/<[^>]*>/g, '').slice(0, 500) + (cap.length > 500 ? "..." : "")
+                              : cap;
+                          }
+                          if (tags.length > 0 && allHashtags.length === 0) {
+                            allHashtags = tags;
+                          }
+                        }
 
                         return (
                           <>
-                            {caption && (
+                            {mainCaption && (
                               <div className="relative">
                                 <label className="text-xs text-slate-400 mb-1.5 block font-medium">文案內容</label>
                                 <div className="bg-slate-800 rounded-lg p-4 border border-slate-700 max-h-[200px] overflow-y-auto">
                                   <p className="text-slate-200 text-sm whitespace-pre-wrap leading-relaxed">
-                                    {selectedItem.generation_type === "blog_post"
-                                      ? caption.replace(/<[^>]*>/g, '').slice(0, 500) + (caption.length > 500 ? "..." : "")
-                                      : caption
-                                    }
+                                    {mainCaption}
                                   </p>
                                 </div>
                                 <Button
                                   variant="ghost"
                                   size="sm"
                                   className="absolute top-0 right-0 text-slate-400 hover:text-white h-6 px-2"
-                                  onClick={() => handleCopyCaption(caption.replace(/<[^>]*>/g, ''))}
+                                  onClick={() => handleCopyCaption(mainCaption)}
                                 >
                                   {captionCopied ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />}
                                 </Button>
@@ -1405,14 +1416,14 @@ export default function HistoryPage() {
                             )}
 
                             {/* Hashtags */}
-                            {hashtags.length > 0 && (
+                            {allHashtags.length > 0 && (
                               <div>
                                 <label className="text-xs text-slate-400 mb-1.5 block font-medium flex items-center gap-1">
                                   <Hash className="h-3 w-3" />
                                   標籤
                                 </label>
                                 <div className="flex flex-wrap gap-1.5">
-                                  {hashtags.map((tag: string, i: number) => (
+                                  {allHashtags.map((tag: string, i: number) => (
                                     <Badge key={i} className="bg-indigo-500/20 text-indigo-300 border-0 text-xs">
                                       #{tag}
                                     </Badge>

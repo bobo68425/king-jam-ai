@@ -89,6 +89,8 @@ class HistoryListItem(BaseModel):
     generation_duration_ms: Optional[int]
     file_size_bytes: Optional[int]
     created_at: datetime
+    # 分組鍵：同一組的紀錄共享相同 group_key（例如 blog_post + blog_image）
+    group_key: Optional[str] = None
 
 
 class HistoryListResponse(BaseModel):
@@ -184,6 +186,7 @@ async def list_history(
     for item in items:
         # 提取 caption（從 output_data 中提取文字，不含圖片）
         output = item.output_data or {}
+        input_p = item.input_params or {}
         caption = output.get("caption", "")
         
         # 清理 media_cloud_url：如果是 base64 data URL 則替換為空
@@ -191,12 +194,24 @@ async def list_history(
         if cloud_url and cloud_url.startswith("data:"):
             cloud_url = None  # base64 不是有效的雲端 URL
         
+        # 計算 group_key：讓同一次生成的圖、影、文能被前端分組
+        group_key = None
+        if item.generation_type in ("blog_post", "blog_image"):
+            post_id = output.get("post_id") or input_p.get("post_id")
+            if post_id:
+                group_key = f"blog_{post_id}"
+        elif item.generation_type in ("video_script", "short_video"):
+            project_id = output.get("project_id") or input_p.get("project_id")
+            if project_id:
+                group_key = f"video_{project_id}"
+        # 沒有 group_key 的紀錄各自獨立
+        
         light_items.append(HistoryListItem(
             id=item.id,
             user_id=item.user_id,
             generation_type=item.generation_type,
             status=item.status,
-            input_params=item.input_params or {},
+            input_params=input_p,
             output_caption=caption,
             media_local_path=item.media_local_path,
             media_cloud_url=cloud_url,
@@ -207,6 +222,7 @@ async def list_history(
             generation_duration_ms=item.generation_duration_ms,
             file_size_bytes=item.file_size_bytes,
             created_at=item.created_at,
+            group_key=group_key,
         ))
     
     return HistoryListResponse(
