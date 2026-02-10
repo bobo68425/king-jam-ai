@@ -4,10 +4,11 @@ import React, { useState, useEffect, useCallback } from "react";
 import { 
   BarChart3, TrendingUp, TrendingDown, Eye, Users, MousePointerClick,
   Share2, Heart, MessageCircle, Bookmark, ExternalLink, Calendar,
-  ChevronDown, RefreshCw, Download, Filter, ArrowUpRight, ArrowDownRight,
+  ChevronDown, ChevronRight, RefreshCw, Download, Filter, ArrowUpRight, ArrowDownRight,
   Globe, Instagram, Facebook, Linkedin, Twitter, Youtube, Clock,
   Sparkles, Target, Zap, Activity, PieChart, LineChart as LineChartIcon,
-  AlertCircle, CheckCircle2, Loader2, Link2, Settings
+  AlertCircle, CheckCircle2, Loader2, Link2, Settings, HelpCircle, Copy, X,
+  MonitorSmartphone, Search, MousePointer, ArrowRight, BookOpen, Info
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
 import { toast } from "sonner";
@@ -611,6 +620,13 @@ export default function InsightsPage() {
   const [activeTab, setActiveTab] = useState("overview");
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [ga4Status, setGa4Status] = useState<GA4Status>({ connected: false });
+  
+  // GA4 連接相關
+  const [showGA4Tutorial, setShowGA4Tutorial] = useState(false);
+  const [showGA4Setup, setShowGA4Setup] = useState(false);
+  const [ga4PropertyId, setGa4PropertyId] = useState("");
+  const [ga4Saving, setGa4Saving] = useState(false);
+  const [ga4Expanded, setGa4Expanded] = useState(false);
   const [trafficData, setTrafficData] = useState<{
     totals?: Record<string, number>;
     daily?: Array<Record<string, number | string>>;
@@ -734,6 +750,49 @@ export default function InsightsPage() {
     } catch (err) {
       console.error("Failed to get GA4 auth URL:", err);
       toast.error("無法取得 GA4 授權連結，請稍後再試");
+    }
+  };
+
+  // Save GA4 Property ID
+  const handleSavePropertyId = async () => {
+    const pid = ga4PropertyId.trim();
+    if (!pid) {
+      toast.error("請輸入 GA4 Property ID");
+      return;
+    }
+    if (!/^\d+$/.test(pid)) {
+      toast.error("GA4 Property ID 只能包含數字");
+      return;
+    }
+    setGa4Saving(true);
+    try {
+      await api.post("/insights/ga4/connect", { property_id: pid });
+      toast.success("GA4 Property ID 已儲存，數據將開始同步");
+      setShowGA4Setup(false);
+      await fetchGA4Status();
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || "儲存失敗，請先完成 Google 帳號授權");
+    } finally {
+      setGa4Saving(false);
+    }
+  };
+
+  // Disconnect GA4
+  const handleDisconnectGA4 = async () => {
+    if (!confirm("確定要解除 GA4 連結嗎？解除後將無法查看流量數據。")) return;
+    try {
+      // Find and deactivate GA4 account
+      const res = await api.get("/scheduler/accounts");
+      const ga4Account = res.data.find((a: any) => a.platform === "ga4");
+      if (ga4Account) {
+        await api.delete(`/scheduler/accounts/${ga4Account.id}`);
+      }
+      setGa4Status({ connected: false });
+      setTrafficData(null);
+      setTrafficSources([]);
+      toast.success("已解除 GA4 連結");
+    } catch (err) {
+      toast.error("解除連結失敗");
     }
   };
 
@@ -945,40 +1004,349 @@ export default function InsightsPage() {
         </Card>
       )}
 
-      {/* GA4 Connection Banner */}
-      {!ga4Status.connected ? (
-        <Card className="bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-pink-500/10 border-indigo-500/20">
-          <CardContent className="p-3 sm:p-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
-              <div className="p-2 rounded-lg bg-indigo-500/20 shrink-0">
-                <Sparkles className="w-5 h-5 text-indigo-400" />
+      {/* GA4 Connection Section */}
+      <Card className={cn(
+        "border overflow-hidden transition-all duration-300",
+        ga4Status.connected && ga4Status.property_id
+          ? "bg-gradient-to-r from-emerald-500/5 to-teal-500/5 border-emerald-500/20"
+          : ga4Status.connected
+            ? "bg-gradient-to-r from-amber-500/5 to-orange-500/5 border-amber-500/20"
+            : "bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-pink-500/5 border-indigo-500/20"
+      )}>
+        <CardContent className="p-0">
+          {/* 主列 */}
+          <div className="p-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              {/* 圖標 */}
+              <div className={cn(
+                "p-2.5 rounded-xl shrink-0",
+                ga4Status.connected && ga4Status.property_id
+                  ? "bg-emerald-500/20"
+                  : ga4Status.connected
+                    ? "bg-amber-500/20"
+                    : "bg-indigo-500/20"
+              )}>
+                {ga4Status.connected && ga4Status.property_id ? (
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                ) : ga4Status.connected ? (
+                  <AlertCircle className="w-5 h-5 text-amber-400" />
+                ) : (
+                  <BarChart3 className="w-5 h-5 text-indigo-400" />
+                )}
               </div>
+
+              {/* 狀態文字 */}
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white">連結 Google Analytics 以獲得更完整的數據分析</p>
-                <p className="text-xs text-slate-400 mt-0.5">整合 GA4 可追蹤網站流量來源、用戶行為等更多指標</p>
+                {ga4Status.connected && ga4Status.property_id ? (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-white">Google Analytics 4 已連結</p>
+                      <Badge className="bg-emerald-500/20 text-emerald-400 border-0 text-[10px]">啟用中</Badge>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-0.5">Property ID: {ga4Status.property_id} · 數據自動同步中</p>
+                  </>
+                ) : ga4Status.connected ? (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-white">Google 帳號已授權</p>
+                      <Badge className="bg-amber-500/20 text-amber-400 border-0 text-[10px]">需設定 Property ID</Badge>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-0.5">請設定 GA4 Property ID 以開始接收數據</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-medium text-white">串接 Google Analytics 4 以獲得更完整的數據分析</p>
+                    <p className="text-xs text-slate-400 mt-0.5">追蹤網站流量、用戶行為、轉換漏斗等更多洞察指標</p>
+                  </>
+                )}
               </div>
-              <Button size="sm" className="bg-indigo-600 hover:bg-indigo-500 shrink-0" onClick={handleConnectGA4}>
-                <Zap className="w-4 h-4 mr-1.5" />
-                立即連結
+
+              {/* 操作按鈕 */}
+              <div className="flex items-center gap-2 shrink-0">
+                {!ga4Status.connected ? (
+                  <>
+                    <Button size="sm" variant="outline" className="border-slate-600 text-slate-300 hover:text-white h-8 text-xs" onClick={() => setShowGA4Tutorial(true)}>
+                      <BookOpen className="w-3.5 h-3.5 mr-1.5" />
+                      什麼是 GA4？
+                    </Button>
+                    <Button size="sm" className="bg-indigo-600 hover:bg-indigo-500 h-8 text-xs" onClick={handleConnectGA4}>
+                      <Zap className="w-3.5 h-3.5 mr-1.5" />
+                      立即串接
+                    </Button>
+                  </>
+                ) : !ga4Status.property_id ? (
+                  <>
+                    <Button size="sm" variant="outline" className="border-slate-600 text-slate-300 hover:text-white h-8 text-xs" onClick={() => setShowGA4Tutorial(true)}>
+                      <HelpCircle className="w-3.5 h-3.5 mr-1.5" />
+                      教學
+                    </Button>
+                    <Button size="sm" className="bg-amber-600 hover:bg-amber-500 h-8 text-xs" onClick={() => { setGa4PropertyId(""); setShowGA4Setup(true); }}>
+                      <Settings className="w-3.5 h-3.5 mr-1.5" />
+                      設定 Property ID
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button size="sm" variant="ghost" className="text-slate-400 hover:text-white h-8 text-xs" onClick={() => setGa4Expanded(!ga4Expanded)}>
+                      <Settings className="w-3.5 h-3.5 mr-1" />
+                      管理
+                      <ChevronDown className={cn("w-3.5 h-3.5 ml-1 transition-transform", ga4Expanded && "rotate-180")} />
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* 已連接展開管理面板 */}
+            {ga4Status.connected && ga4Status.property_id && ga4Expanded && (
+              <div className="mt-4 pt-3 border-t border-slate-700/30">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 rounded-lg text-xs">
+                    <span className="text-slate-400">Property ID:</span>
+                    <span className="text-white font-mono">{ga4Status.property_id}</span>
+                    <button 
+                      onClick={() => { navigator.clipboard.writeText(ga4Status.property_id || ""); toast.success("已複製"); }}
+                      className="text-slate-500 hover:text-white transition-colors"
+                    >
+                      <Copy className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <Button size="sm" variant="outline" className="border-slate-600 h-7 text-[11px]" onClick={() => { setGa4PropertyId(ga4Status.property_id || ""); setShowGA4Setup(true); }}>
+                    更換 Property ID
+                  </Button>
+                  <Button size="sm" variant="outline" className="border-red-500/30 text-red-400 hover:bg-red-500/10 h-7 text-[11px]" onClick={handleDisconnectGA4}>
+                    解除連結
+                  </Button>
+                  <Button size="sm" variant="ghost" className="text-slate-400 h-7 text-[11px]" onClick={() => setShowGA4Tutorial(true)}>
+                    <BookOpen className="w-3 h-3 mr-1" />
+                    GA4 使用教學
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 未連接時：快速介紹區塊 */}
+          {!ga4Status.connected && (
+            <div className="border-t border-slate-700/20 bg-slate-800/20 px-4 py-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {[
+                  { icon: Eye, label: "流量追蹤", desc: "即時掌握網站訪客數與瀏覽量", color: "text-blue-400" },
+                  { icon: Search, label: "來源分析", desc: "了解用戶從哪裡找到您", color: "text-purple-400" },
+                  { icon: MousePointer, label: "行為洞察", desc: "分析用戶在網站上的互動", color: "text-emerald-400" },
+                ].map((item, idx) => {
+                  const Icon = item.icon;
+                  return (
+                    <div key={idx} className="flex items-start gap-2.5">
+                      <Icon className={cn("w-4 h-4 mt-0.5 shrink-0", item.color)} />
+                      <div>
+                        <p className="text-xs font-medium text-white">{item.label}</p>
+                        <p className="text-[11px] text-slate-500">{item.desc}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* GA4 教學彈窗 */}
+      <Dialog open={showGA4Tutorial} onOpenChange={setShowGA4Tutorial}>
+        <DialogContent className="sm:max-w-[600px] bg-slate-900 border-slate-700 max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-indigo-400" />
+              什麼是 Google Analytics 4？
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
+              了解 GA4 如何幫助您洞察網站與社群平台的成效
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-5 mt-2">
+            {/* 簡介 */}
+            <div className="p-4 bg-indigo-500/10 rounded-xl border border-indigo-500/20">
+              <p className="text-sm text-slate-300 leading-relaxed">
+                <span className="font-semibold text-white">Google Analytics 4 (GA4)</span> 是 Google 提供的免費網站分析工具。
+                它能幫助您追蹤網站訪客行為、流量來源、用戶互動等重要數據，讓您做出更好的內容策略決策。
+              </p>
+            </div>
+
+            {/* GA4 能做什麼 */}
+            <div>
+              <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-amber-400" />
+                GA4 能幫您做什麼？
+              </h3>
+              <div className="grid gap-3">
+                {[
+                  {
+                    icon: Eye, color: "text-blue-400", bg: "bg-blue-500/10",
+                    title: "網站流量監控",
+                    desc: "即時查看網站訪客數、瀏覽量、工作階段數，了解您的網站有多少人在瀏覽。"
+                  },
+                  {
+                    icon: Search, color: "text-purple-400", bg: "bg-purple-500/10",
+                    title: "流量來源分析",
+                    desc: "了解訪客從哪裡來：社群媒體（Facebook、Instagram）、搜尋引擎（Google）、直接訪問、或其他推薦連結。"
+                  },
+                  {
+                    icon: MousePointer, color: "text-emerald-400", bg: "bg-emerald-500/10",
+                    title: "用戶行為追蹤",
+                    desc: "分析訪客在網站上的行為：最熱門的頁面、停留時間、跳出率等，找到最受歡迎的內容。"
+                  },
+                  {
+                    icon: MonitorSmartphone, color: "text-cyan-400", bg: "bg-cyan-500/10",
+                    title: "裝置與地區分布",
+                    desc: "了解訪客使用什麼裝置（手機/電腦/平板）、來自哪個地區，優化您的內容策略。"
+                  },
+                  {
+                    icon: Share2, color: "text-pink-400", bg: "bg-pink-500/10",
+                    title: "社群平台成效回饋",
+                    desc: "追蹤從社群平台導入的流量，評估每次發文帶來多少網站訪客，衡量社群經營的實際效果。"
+                  },
+                  {
+                    icon: Target, color: "text-amber-400", bg: "bg-amber-500/10",
+                    title: "轉換追蹤",
+                    desc: "設定目標追蹤（如：填寫表單、完成購買），了解哪些內容真正帶來轉換。"
+                  },
+                ].map((item, idx) => {
+                  const Icon = item.icon;
+                  return (
+                    <div key={idx} className="flex gap-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700/30">
+                      <div className={cn("p-2 rounded-lg shrink-0 h-fit", item.bg)}>
+                        <Icon className={cn("w-4 h-4", item.color)} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-white">{item.title}</p>
+                        <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">{item.desc}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 串接步驟 */}
+            <div>
+              <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                <Settings className="w-4 h-4 text-indigo-400" />
+                如何串接 GA4？
+              </h3>
+              <div className="space-y-2.5">
+                {[
+                  { step: "1", title: "建立 GA4 資源", desc: "前往 Google Analytics 管理後台 → 建立帳戶 → 建立資源（選擇「網站」）" },
+                  { step: "2", title: "安裝追蹤碼", desc: "將 GA4 提供的追蹤碼（gtag.js）安裝到您的網站 <head> 中，或使用 Google Tag Manager" },
+                  { step: "3", title: "取得 Property ID", desc: "在 GA4 管理後台 → 資源設定 → 複製「資源 ID」（僅數字部分，例如：123456789）" },
+                  { step: "4", title: "在此串接", desc: "點擊「立即串接」授權 Google 帳號，然後輸入 Property ID 即可開始接收數據" },
+                ].map((item) => (
+                  <div key={item.step} className="flex gap-3 items-start">
+                    <div className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center shrink-0 mt-0.5">
+                      <span className="text-xs font-bold text-white">{item.step}</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-white">{item.title}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">{item.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 快速連結 */}
+            <div className="flex flex-col sm:flex-row gap-2 pt-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="border-slate-600 text-slate-300 flex-1"
+                onClick={() => window.open("https://analytics.google.com/", "_blank")}
+              >
+                <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                前往 Google Analytics
               </Button>
+              {!ga4Status.connected ? (
+                <Button size="sm" className="bg-indigo-600 hover:bg-indigo-500 flex-1" onClick={() => { setShowGA4Tutorial(false); handleConnectGA4(); }}>
+                  <Zap className="w-3.5 h-3.5 mr-1.5" />
+                  立即串接 GA4
+                </Button>
+              ) : !ga4Status.property_id ? (
+                <Button size="sm" className="bg-amber-600 hover:bg-amber-500 flex-1" onClick={() => { setShowGA4Tutorial(false); setGa4PropertyId(""); setShowGA4Setup(true); }}>
+                  <Settings className="w-3.5 h-3.5 mr-1.5" />
+                  設定 Property ID
+                </Button>
+              ) : (
+                <Button size="sm" variant="outline" className="border-emerald-500/30 text-emerald-400 flex-1" onClick={() => setShowGA4Tutorial(false)}>
+                  <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
+                  已完成串接
+                </Button>
+              )}
             </div>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card className="bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border-emerald-500/20">
-          <CardContent className="p-3 sm:p-4">
-            <div className="flex items-center gap-3 sm:gap-4">
-              <div className="p-2 rounded-lg bg-emerald-500/20 shrink-0">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white">Google Analytics 已連結</p>
-                <p className="text-xs text-slate-400 mt-0.5">Property ID: {ga4Status.property_id}</p>
-              </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* GA4 Property ID 設定彈窗 */}
+      <Dialog open={showGA4Setup} onOpenChange={setShowGA4Setup}>
+        <DialogContent className="sm:max-w-[480px] bg-slate-900 border-slate-700">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <Settings className="w-5 h-5 text-indigo-400" />
+              設定 GA4 Property ID
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
+              輸入您的 GA4 資源 ID 以開始接收網站分析數據
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 mt-2">
+            {/* 如何取得 */}
+            <div className="p-3 bg-slate-800/50 rounded-lg border border-slate-700/30">
+              <p className="text-xs font-medium text-slate-300 mb-2 flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5 text-indigo-400" />
+                如何取得 Property ID？
+              </p>
+              <ol className="text-xs text-slate-400 space-y-1.5 ml-5 list-decimal">
+                <li>前往 <a href="https://analytics.google.com/" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:underline">Google Analytics</a> 管理後台</li>
+                <li>點擊左下角「管理」齒輪圖標</li>
+                <li>在「資源」欄位 → 「資源設定」</li>
+                <li>複製「資源 ID」（僅數字部分，例如：<span className="font-mono text-white">123456789</span>）</li>
+              </ol>
             </div>
-          </CardContent>
-        </Card>
-      )}
+
+            {/* 輸入 Property ID */}
+            <div>
+              <label className="text-sm text-slate-300 mb-1.5 block">Property ID</label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="例如：123456789"
+                  value={ga4PropertyId}
+                  onChange={(e) => setGa4PropertyId(e.target.value.replace(/\D/g, ""))}
+                  className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 font-mono"
+                  onKeyDown={(e) => e.key === "Enter" && handleSavePropertyId()}
+                />
+                <Button 
+                  onClick={handleSavePropertyId}
+                  disabled={ga4Saving || !ga4PropertyId.trim()}
+                  className="bg-indigo-600 hover:bg-indigo-500 shrink-0"
+                >
+                  {ga4Saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "儲存"}
+                </Button>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1.5">Property ID 只包含數字，通常為 9-10 位數</p>
+            </div>
+
+            {/* 說明 */}
+            <div className="p-3 bg-amber-500/5 rounded-lg border border-amber-500/15">
+              <p className="text-xs text-amber-400/80 flex items-start gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                <span>請確保此 GA4 資源已在您的網站上安裝追蹤碼（gtag.js），否則將無法收到數據。</span>
+              </p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Metrics Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1069,13 +1437,18 @@ export default function InsightsPage() {
                   <SimpleLineIndicator data={chartData as Array<{ date: string; sessions?: number; users?: number }>} />
                 ) : (
                   <EmptyState 
-                    message={ga4Status.connected ? "載入 GA4 數據中..." : "連結 GA4 以查看流量數據"}
-                    action={!ga4Status.connected && (
+                    message={ga4Status.connected && ga4Status.property_id ? "載入 GA4 數據中..." : ga4Status.connected ? "請設定 Property ID 以查看數據" : "串接 GA4 以查看流量數據"}
+                    action={!ga4Status.connected ? (
                       <Button size="sm" variant="outline" className="border-slate-600" onClick={handleConnectGA4}>
                         <Zap className="w-3.5 h-3.5 mr-1.5" />
-                        連結 GA4
+                        串接 GA4
                       </Button>
-                    )}
+                    ) : !ga4Status.property_id ? (
+                      <Button size="sm" className="bg-amber-600 hover:bg-amber-500" onClick={() => { setGa4PropertyId(""); setShowGA4Setup(true); }}>
+                        <Settings className="w-3.5 h-3.5 mr-1.5" />
+                        設定 Property ID
+                      </Button>
+                    ) : null}
                   />
                 )}
               </CardContent>
@@ -1236,14 +1609,19 @@ export default function InsightsPage() {
                   ))
                 ) : (
                   <EmptyState 
-                    message={ga4Status.connected ? "載入流量來源數據中..." : "連結 GA4 以查看流量來源"}
+                    message={ga4Status.connected && ga4Status.property_id ? "載入流量來源數據中..." : ga4Status.connected ? "請設定 Property ID 以查看數據" : "串接 GA4 以查看流量來源"}
                     icon={PieChart}
-                    action={!ga4Status.connected && (
+                    action={!ga4Status.connected ? (
                       <Button size="sm" variant="outline" className="border-slate-600" onClick={handleConnectGA4}>
                         <Zap className="w-3.5 h-3.5 mr-1.5" />
-                        連結 GA4
+                        串接 GA4
                       </Button>
-                    )}
+                    ) : !ga4Status.property_id ? (
+                      <Button size="sm" className="bg-amber-600 hover:bg-amber-500" onClick={() => { setGa4PropertyId(""); setShowGA4Setup(true); }}>
+                        <Settings className="w-3.5 h-3.5 mr-1.5" />
+                        設定 Property ID
+                      </Button>
+                    ) : null}
                   />
                 )}
               </CardContent>
@@ -1282,7 +1660,7 @@ export default function InsightsPage() {
                     ))}
                   </div>
                   {!ga4Status.connected && (
-                    <p className="text-[10px] text-slate-500 text-center mt-3">連結 GA4 以查看裝置數據</p>
+                    <p className="text-[10px] text-slate-500 text-center mt-3">串接 GA4 以查看裝置數據</p>
                   )}
                 </CardContent>
               </Card>
@@ -1312,7 +1690,7 @@ export default function InsightsPage() {
                     ))}
                   </div>
                   {!ga4Status.connected && (
-                    <p className="text-[10px] text-slate-500 text-center mt-3">連結 GA4 以查看地區數據</p>
+                    <p className="text-[10px] text-slate-500 text-center mt-3">串接 GA4 以查看地區數據</p>
                   )}
                 </CardContent>
               </Card>
