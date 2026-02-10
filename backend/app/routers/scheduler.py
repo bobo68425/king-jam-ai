@@ -636,7 +636,7 @@ async def publish_now(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """立即發布排程（將狀態設為 queued 立即執行）"""
+    """立即發布排程 — 直接執行發布流程"""
     post = db.query(ScheduledPost).filter(
         and_(
             ScheduledPost.id == post_id,
@@ -647,12 +647,8 @@ async def publish_now(
     if not post:
         raise HTTPException(status_code=404, detail="排程不存在")
     
-    if post.status not in ["pending", "failed"]:
+    if post.status not in ["pending", "failed", "queued"]:
         raise HTTPException(status_code=400, detail=f"無法立即發布狀態為 {post.status} 的排程")
-    
-    # 更新狀態為 queued 並設定排程時間為現在
-    post.status = "queued"
-    post.scheduled_at = datetime.utcnow()
     
     # 記錄日誌
     log = PublishLog(
@@ -661,9 +657,132 @@ async def publish_now(
         message="手動觸發立即發布"
     )
     db.add(log)
+    
+    # 檢查是否有綁定社群帳號
+    if not post.social_account_id:
+        post.status = "published"
+        post.published_at = datetime.utcnow()
+        log2 = PublishLog(
+            scheduled_post_id=post.id,
+            action="published",
+            message="排程已執行（無綁定社群帳號，僅記錄）"
+        )
+        db.add(log2)
+        db.commit()
+        return {"message": "已記錄（無綁定社群帳號）", "status": "published"}
+    
+    # 取得社群帳號
+    social_account = db.query(SocialAccount).filter(
+        SocialAccount.id == post.social_account_id
+    ).first()
+    
+    if not social_account:
+        raise HTTPException(status_code=400, detail="綁定的社群帳號不存在")
+    
+    if not social_account.is_active:
+        raise HTTPException(status_code=400, detail="綁定的社群帳號已停用")
+    
+    # 更新狀態為 publishing
+    post.status = "publishing"
     db.commit()
     
-    return {"message": "已加入發布佇列，將立即發布"}
+    try:
+        import pytz
+        
+        # === WordPress 特殊處理 ===
+        if social_account.platform == "wordpress":
+            from app.tasks.scheduler_tasks import publish_to_wordpress
+            result = publish_to_wordpress(post, social_account)
+            
+            if result.get("success"):
+                post.status = "published"
+                post.published_at = datetime.utcnow()
+                post.platform_post_id = str(result.get("post_id"))
+                post.platform_post_url = result.get("post_url")
+                log3 = PublishLog(
+                    scheduled_post_id=post.id, action="published",
+                    message="WordPress 發布成功",
+                    details={"platform_post_url": result.get("post_url")}
+                )
+                db.add(log3)
+                db.commit()
+                return {"message": "發布成功", "status": "published", "url": result.get("post_url")}
+            else:
+                raise Exception(f"WordPress 發布失敗: {result.get('error')}")
+        
+        # === 其他社群平台 ===
+        # 檢查 Token 是否過期
+        if social_account.token_expires_at:
+            if social_account.token_expires_at < datetime.now(pytz.UTC):
+                from app.tasks.token_tasks import refresh_token_sync
+                refresh_result = refresh_token_sync(social_account.id)
+                if not refresh_result.get("success"):
+                    raise Exception(f"Token 已過期且刷新失敗")
+                db.refresh(social_account)
+        
+        # 取得平台發布器
+        from app.tasks.scheduler_tasks import get_platform_publisher
+        from app.services.social_platforms import PublishContent, ContentType
+        
+        platform_publisher = get_platform_publisher(social_account.platform)
+        
+        if not platform_publisher:
+            post.status = "published"
+            post.published_at = datetime.utcnow()
+            log4 = PublishLog(
+                scheduled_post_id=post.id, action="published",
+                message=f"已記錄（{social_account.platform} 自動發布尚未實作）"
+            )
+            db.add(log4)
+            db.commit()
+            return {"message": f"已記錄（{social_account.platform} 待實作）", "status": "published"}
+        
+        # 準備發布內容
+        content = PublishContent(
+            content_type=ContentType.IMAGE if post.content_type == "social_image" else ContentType.VIDEO,
+            caption=post.caption or "",
+            media_urls=post.media_urls or [],
+            hashtags=post.hashtags or [],
+        )
+        
+        # 執行發布
+        result = await platform_publisher.publish(
+            access_token=social_account.access_token,
+            content=content
+        )
+        
+        if result.success:
+            post.status = "published"
+            post.published_at = datetime.utcnow()
+            post.platform_post_id = result.platform_post_id
+            post.platform_post_url = result.platform_post_url
+            log5 = PublishLog(
+                scheduled_post_id=post.id, action="published",
+                message="發布成功",
+                details={"platform_post_id": result.platform_post_id, "platform_post_url": result.platform_post_url}
+            )
+            db.add(log5)
+            db.commit()
+            return {
+                "message": "發布成功",
+                "status": "published",
+                "platform_post_id": result.platform_post_id,
+                "url": result.platform_post_url
+            }
+        else:
+            raise Exception(f"發布失敗: {result.error_message}")
+    
+    except Exception as e:
+        post.status = "failed"
+        post.error_message = str(e)
+        log_err = PublishLog(
+            scheduled_post_id=post.id, action="error",
+            message=f"發布失敗: {str(e)[:200]}",
+            details={"error": str(e)}
+        )
+        db.add(log_err)
+        db.commit()
+        raise HTTPException(status_code=500, detail=f"發布失敗: {str(e)}")
 
 
 # ============================================================
