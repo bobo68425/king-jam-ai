@@ -5,7 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 import os
 
-from app.routers import auth, social_auth, blog, social, video, scheduler, upload, oauth, history, tasks, credits, referral, verification, users, notifications, wordpress, admin, insights, analytics, queue_monitor, brand_kit, prompts, design_studio, payment, account, campaigns, admin_notifications, assistant, phone_verification
+from app.routers import auth, social_auth, blog, social, video, scheduler, upload, oauth, history, tasks, credits, referral, verification, users, notifications, wordpress, admin, insights, analytics, queue_monitor, brand_kit, prompts, design_studio, payment, account, campaigns, admin_notifications, assistant, phone_verification, line_webhook
 
 app = FastAPI(title="King Jam AI API", version="1.0.1")  # 2026-02-03 更新
 
@@ -73,6 +73,7 @@ app.include_router(campaigns.router)
 app.include_router(admin_notifications.router)
 app.include_router(assistant.router)
 app.include_router(phone_verification.router)
+app.include_router(line_webhook.router)
 
 # 確保上傳目錄存在 - 支援 Docker 和本地開發
 if os.path.exists("/app/static"):

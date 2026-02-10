@@ -245,8 +245,17 @@ export function AIAssistant() {
             </button>
           </div>
           <a
-            href="#"
-            onClick={(e) => { e.preventDefault(); /* LINE 串接端口後續補上 */ }}
+            href={`https://line.me/ti/p/@${process.env.NEXT_PUBLIC_LINE_BOT_ID || ""}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => {
+              // 如果尚未設定 BOT ID，改用 Channel ID 開啟 LINE App
+              if (!process.env.NEXT_PUBLIC_LINE_BOT_ID) {
+                e.preventDefault();
+                const channelId = process.env.NEXT_PUBLIC_LINE_CHANNEL_ID || "2009092074";
+                window.open(`https://manager.line.biz/account/${channelId}/chats`, "_blank");
+              }
+            }}
             style={{
               width: 56, height: 56, borderRadius: "50%",
               background: "#06C755",
