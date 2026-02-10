@@ -274,7 +274,9 @@ export default function SchedulerPage() {
         api.get("/scheduler/stats"),
       ]);
       setPosts(postsRes.data);
-      setAccounts(accountsRes.data);
+      // 排除非社群發布平台（如 GA4）
+      const NON_PUBLISHABLE = ["ga4"];
+      setAccounts((accountsRes.data || []).filter((a: SocialAccount) => !NON_PUBLISHABLE.includes(a.platform)));
       setStats(statsRes.data);
     } catch (error) {
       console.error("載入資料失敗:", error);

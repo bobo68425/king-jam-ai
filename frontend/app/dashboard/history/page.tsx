@@ -205,11 +205,14 @@ export default function HistoryPage() {
     }
   };
 
-  // 載入社群帳號
+  // 載入社群帳號（排除非發布平台：ga4 僅為分析工具）
+  const NON_PUBLISHABLE = ["ga4"];
   const fetchSocialAccounts = useCallback(async () => {
     try {
       const res = await api.get("/scheduler/accounts");
-      setSocialAccounts(res.data.filter((a: SocialAccount) => a.is_active));
+      setSocialAccounts(
+        res.data.filter((a: SocialAccount) => a.is_active && !NON_PUBLISHABLE.includes(a.platform))
+      );
     } catch (e) {
       console.error("載入社群帳號失敗:", e);
     }

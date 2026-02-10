@@ -733,8 +733,9 @@ export default function InsightsPage() {
     },
   ] : [];
 
-  // Convert platform data
-  const platformsData: PlatformData[] = dashboardData?.platforms?.map((p: any) => ({
+  // Convert platform data（排除 GA4 等非社群平台）
+  const NON_SOCIAL_PLATFORMS = ["ga4"];
+  const platformsData: PlatformData[] = dashboardData?.platforms?.filter((p: any) => !NON_SOCIAL_PLATFORMS.includes(p.platform?.toLowerCase())).map((p: any) => ({
     platform: p.platform,
     icon: getPlatformIcon(p.platform),
     color: getPlatformColor(p.platform),

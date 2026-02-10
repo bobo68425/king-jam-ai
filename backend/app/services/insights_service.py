@@ -41,10 +41,12 @@ class InsightsService:
         # 獲取發布統計
         publish_stats = await self.get_publish_stats(db, user_id, days)
         
-        # 獲取社群帳號列表
+        # 獲取社群帳號列表（排除 GA4 等非社群平台）
+        NON_SOCIAL_PLATFORMS = ["ga4"]
         social_accounts = db.query(SocialAccount).filter(
             SocialAccount.user_id == user_id,
-            SocialAccount.is_active == True
+            SocialAccount.is_active == True,
+            ~SocialAccount.platform.in_(NON_SOCIAL_PLATFORMS)
         ).all()
         
         # 整合各平台數據
