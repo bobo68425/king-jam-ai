@@ -4,12 +4,22 @@
 __pycache__/
 *.py[cod]
 *.pyc
+*.egg-info/
+.venv/
+
+# Environment variables (含敏感金鑰，絕不可提交)
+.env
+.env.*
+!.env.example
 
 # Backup files
 backup_*.sql
 
 # IDE
 .cursor/
+.vscode/
+.idea/
 
 # OS
 .DS_Store
+Thumbs.db
