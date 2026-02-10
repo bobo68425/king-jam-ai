@@ -647,7 +647,7 @@ async def publish_now(
     if not post:
         raise HTTPException(status_code=404, detail="排程不存在")
     
-    if post.status not in ["pending", "failed", "queued", "published"]:
+    if post.status not in ["pending", "failed", "queued", "published", "publishing"]:
         raise HTTPException(status_code=400, detail=f"無法立即發布狀態為 {post.status} 的排程")
     
     # 如果已發布但沒有 platform_post_url，表示上次只是記錄未實際發布，允許重新發布
