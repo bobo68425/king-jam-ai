@@ -18,6 +18,18 @@ from app.services.ga4_service import ga4_service
 router = APIRouter(prefix="/insights", tags=["Insights"])
 
 
+# ==================== 方案權限 ====================
+
+# 可完整使用成效洞察引擎的方案（專業版以上）
+FULL_INSIGHTS_TIERS = ["pro", "enterprise", "admin"]
+
+def _user_has_full_insights(user: User) -> bool:
+    """檢查用戶是否有完整洞察權限（專業版以上）"""
+    return (user.tier in FULL_INSIGHTS_TIERS or 
+            user.subscription_plan in FULL_INSIGHTS_TIERS or
+            user.email == "admin@kingjam.ai")
+
+
 # ==================== Schemas ====================
 
 class GA4ConnectionRequest(BaseModel):
@@ -28,6 +40,30 @@ class GA4ConnectionResponse(BaseModel):
     connected: bool
     property_id: Optional[str] = None
     last_sync: Optional[str] = None
+
+
+# ==================== 方案檢查 ====================
+
+@router.get("/plan-access")
+async def get_insights_plan_access(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    檢查用戶的洞察引擎使用權限
+    
+    - 專業版/企業版：完整使用所有功能
+    - 免費版/入門版：僅能串接 WordPress 網站（基本發布統計）
+    """
+    has_full = _user_has_full_insights(current_user)
+    tier = current_user.subscription_plan or current_user.tier or "free"
+    
+    return {
+        "has_full_access": has_full,
+        "current_tier": tier,
+        "allowed_platforms": None if has_full else ["wordpress"],
+        "upgrade_required": not has_full,
+        "message": None if has_full else "升級至專業版即可解鎖完整成效洞察引擎，包含所有社群平台數據分析、GA4 整合、流量分析等功能。"
+    }
 
 
 # ==================== 儀表板總覽 ====================
@@ -45,6 +81,8 @@ async def get_dashboard_overview(
     - 發布統計 (成功/失敗數)
     - 各平台成效數據
     - 綜合指標摘要
+    
+    非專業版用戶：僅回傳 WordPress 平台數據
     """
     try:
         overview = await insights_service.get_dashboard_overview(
@@ -52,6 +90,17 @@ async def get_dashboard_overview(
             user_id=current_user.id,
             days=days
         )
+        
+        # 非專業版：過濾僅保留 WordPress 平台數據
+        if not _user_has_full_insights(current_user):
+            if overview.get("platforms"):
+                overview["platforms"] = [
+                    p for p in overview["platforms"]
+                    if p.get("platform", "").lower() == "wordpress"
+                ]
+            # 重新計算 summary（僅包含 WordPress 數據）
+            overview["plan_limited"] = True
+        
         return overview
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -87,12 +136,22 @@ async def get_platforms_insights(
 ):
     """
     獲取所有已連結平台的成效數據
+    
+    非專業版用戶：僅回傳 WordPress 平台數據
     """
     try:
-        accounts = db.query(SocialAccount).filter(
+        has_full = _user_has_full_insights(current_user)
+        
+        query = db.query(SocialAccount).filter(
             SocialAccount.user_id == current_user.id,
             SocialAccount.is_active == True
-        ).all()
+        )
+        
+        # 非專業版：僅查詢 WordPress
+        if not has_full:
+            query = query.filter(SocialAccount.platform == "wordpress")
+        
+        accounts = query.all()
         
         insights = []
         for account in accounts:
@@ -108,7 +167,8 @@ async def get_platforms_insights(
         
         return {
             "platforms": insights,
-            "total_connected": len(accounts)
+            "total_connected": len(accounts),
+            "plan_limited": not has_full
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -123,7 +183,16 @@ async def get_platform_insights(
 ):
     """
     獲取特定平台的成效數據
+    
+    非專業版用戶：僅允許查詢 WordPress
     """
+    # 非專業版：僅允許 WordPress
+    if not _user_has_full_insights(current_user) and platform.lower() != "wordpress":
+        raise HTTPException(
+            status_code=403,
+            detail="升級至專業版即可查看所有社群平台的成效數據"
+        )
+    
     account = db.query(SocialAccount).filter(
         SocialAccount.user_id == current_user.id,
         SocialAccount.platform == platform,
@@ -178,8 +247,14 @@ async def get_ga4_auth_url(
     current_user: User = Depends(get_current_user)
 ):
     """
-    獲取 GA4 OAuth 授權 URL
+    獲取 GA4 OAuth 授權 URL（專業版以上）
     """
+    if not _user_has_full_insights(current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="GA4 整合為專業版功能，請升級方案以使用"
+        )
+    
     import secrets
     state = f"{current_user.id}_{secrets.token_urlsafe(16)}"
     auth_url = ga4_service.get_auth_url(state)
@@ -198,8 +273,13 @@ async def ga4_oauth_callback(
     current_user: User = Depends(get_current_user)
 ):
     """
-    處理 GA4 OAuth 回調
+    處理 GA4 OAuth 回調（專業版以上）
     """
+    if not _user_has_full_insights(current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="GA4 整合為專業版功能，請升級方案以使用"
+        )
     try:
         tokens = await ga4_service.exchange_code_for_token(code)
         
@@ -241,8 +321,13 @@ async def connect_ga4_property(
     current_user: User = Depends(get_current_user)
 ):
     """
-    連結 GA4 Property
+    連結 GA4 Property（專業版以上）
     """
+    if not _user_has_full_insights(current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="GA4 整合為專業版功能，請升級方案以使用"
+        )
     ga4_account = db.query(SocialAccount).filter(
         SocialAccount.user_id == current_user.id,
         SocialAccount.platform == "ga4"
@@ -303,8 +388,13 @@ async def get_ga4_traffic(
     current_user: User = Depends(get_current_user)
 ):
     """
-    獲取 GA4 流量數據
+    獲取 GA4 流量數據（專業版以上）
     """
+    if not _user_has_full_insights(current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="GA4 流量分析為專業版功能，請升級方案以使用"
+        )
     ga4_account = db.query(SocialAccount).filter(
         SocialAccount.user_id == current_user.id,
         SocialAccount.platform == "ga4",
@@ -345,8 +435,13 @@ async def get_ga4_top_pages(
     current_user: User = Depends(get_current_user)
 ):
     """
-    獲取 GA4 熱門頁面
+    獲取 GA4 熱門頁面（專業版以上）
     """
+    if not _user_has_full_insights(current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="GA4 流量分析為專業版功能，請升級方案以使用"
+        )
     ga4_account = db.query(SocialAccount).filter(
         SocialAccount.user_id == current_user.id,
         SocialAccount.platform == "ga4",
@@ -378,8 +473,13 @@ async def get_ga4_traffic_sources(
     current_user: User = Depends(get_current_user)
 ):
     """
-    獲取 GA4 流量來源
+    獲取 GA4 流量來源（專業版以上）
     """
+    if not _user_has_full_insights(current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="GA4 流量分析為專業版功能，請升級方案以使用"
+        )
     ga4_account = db.query(SocialAccount).filter(
         SocialAccount.user_id == current_user.id,
         SocialAccount.platform == "ga4",
@@ -408,8 +508,13 @@ async def get_ga4_realtime(
     current_user: User = Depends(get_current_user)
 ):
     """
-    獲取 GA4 即時用戶數據
+    獲取 GA4 即時用戶數據（專業版以上）
     """
+    if not _user_has_full_insights(current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="GA4 即時數據為專業版功能，請升級方案以使用"
+        )
     ga4_account = db.query(SocialAccount).filter(
         SocialAccount.user_id == current_user.id,
         SocialAccount.platform == "ga4",
