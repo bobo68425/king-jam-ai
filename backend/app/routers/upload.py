@@ -4,7 +4,6 @@
 import os
 import uuid
 import shutil
-import base64
 from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form
@@ -52,14 +51,6 @@ async def upload_media(
             detail=f"不支援的文件類型: {content_type}。支援的格式: JPG, PNG, GIF, WebP, MP4, WebM"
         )
     
-    # 讀取文件內容並檢查大小
-    contents = await file.read()
-    if len(contents) > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=400,
-            detail=f"文件大小超過限制 (最大 {MAX_FILE_SIZE // 1024 // 1024}MB)"
-        )
-    
     # 生成唯一文件名
     ext = os.path.splitext(file.filename or "file")[1].lower() or (
         ".jpg" if content_type in ALLOWED_IMAGE_TYPES else ".mp4"
@@ -69,11 +60,31 @@ async def upload_media(
     filename = f"{current_user.id}_{timestamp}_{unique_id}{ext}"
     file_path = os.path.join(UPLOAD_DIR, filename)
     
-    # 保存文件
+    # 使用串流寫入，避免將整個檔案讀入記憶體
+    total_size = 0
+    chunk_size = 64 * 1024  # 64KB
+    
     try:
         with open(file_path, "wb") as f:
-            f.write(contents)
+            while True:
+                chunk = await file.read(chunk_size)
+                if not chunk:
+                    break
+                total_size += len(chunk)
+                if total_size > MAX_FILE_SIZE:
+                    # 超過限制，刪除已寫入的檔案
+                    f.close()
+                    os.remove(file_path)
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"文件大小超過限制 (最大 {MAX_FILE_SIZE // 1024 // 1024}MB)"
+                    )
+                f.write(chunk)
+    except HTTPException:
+        raise
     except Exception as e:
+        if os.path.exists(file_path):
+            os.remove(file_path)
         raise HTTPException(status_code=500, detail=f"保存文件失敗: {str(e)}")
     
     # 構建 URL
@@ -87,7 +98,7 @@ async def upload_media(
         "url": url,
         "filename": filename,
         "media_type": media_type,
-        "size": len(contents),
+        "size": total_size,
         "content_type": content_type
     }
 
@@ -191,9 +202,8 @@ async def upload_scene_image(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"保存圖片失敗: {str(e)}")
     
-    # 構建 URL 和 Base64
+    # 構建 URL
     url = f"/upload/scene-image/{filename}"
-    base64_data = f"data:{content_type};base64,{base64.b64encode(contents).decode()}"
     
     return {
         "success": True,
@@ -201,7 +211,6 @@ async def upload_scene_image(
         "project_id": proj_id,
         "url": url,
         "filename": filename,
-        "base64": base64_data,
         "size": len(contents),
         "content_type": content_type
     }
@@ -264,14 +273,12 @@ async def upload_scene_images(
                 f.write(contents)
             
             url = f"/upload/scene-image/{filename}"
-            base64_data = f"data:{content_type};base64,{base64.b64encode(contents).decode()}"
             
             results.append({
                 "success": True,
                 "scene_index": i,
                 "url": url,
                 "filename": filename,
-                "base64": base64_data,
                 "size": len(contents)
             })
         except Exception as e:

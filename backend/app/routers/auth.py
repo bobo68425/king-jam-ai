@@ -7,6 +7,8 @@ from typing import Optional, Dict, Any
 import random
 import string
 import logging
+import os
+import re
 
 from app.database import get_db
 from app.models import User
@@ -19,6 +21,124 @@ from app.core.security import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================
+# 安全工具函式
+# ============================================================
+
+def mask_email(email: str) -> str:
+    """遮罩 email，僅保留前 2 字元和域名
+    例如: james@gmail.com -> ja***@gmail.com
+    """
+    try:
+        name, domain = email.split("@")
+        if len(name) <= 2:
+            masked = name[0] + "***"
+        else:
+            masked = name[:2] + "***"
+        return f"{masked}@{domain}"
+    except (ValueError, IndexError):
+        return "***@***"
+
+
+def validate_password_strength(password: str) -> Optional[str]:
+    """驗證密碼強度，回傳錯誤訊息或 None
+    規則：最短 8 字元，需含至少一個字母和一個數字
+    """
+    if len(password) < 8:
+        return "密碼長度至少需要 8 個字元"
+    if not re.search(r'[a-zA-Z]', password):
+        return "密碼需包含至少一個英文字母"
+    if not re.search(r'[0-9]', password):
+        return "密碼需包含至少一個數字"
+    return None
+
+
+# ============================================================
+# 登入速率限制器（Redis 實現）
+# ============================================================
+
+class LoginRateLimiter:
+    """登入速率限制
+    - IP 限制：每 IP 每分鐘最多 10 次請求
+    - 帳號鎖定：連續 10 次密碼錯誤後鎖定 15 分鐘
+    """
+    MAX_ATTEMPTS_PER_IP = 10       # 每 IP 每分鐘最大嘗試次數
+    IP_WINDOW_SECONDS = 60          # IP 限制窗口（秒）
+    MAX_FAILED_PER_ACCOUNT = 10     # 帳號最大連續失敗次數
+    ACCOUNT_LOCK_SECONDS = 900      # 帳號鎖定時間（15 分鐘）
+    KEY_PREFIX = "login_rate:"
+
+    def __init__(self):
+        self._redis = None
+
+    @property
+    def redis_client(self):
+        if self._redis is None:
+            try:
+                import redis
+                redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+                self._redis = redis.from_url(redis_url, decode_responses=True)
+                self._redis.ping()
+            except Exception as e:
+                logger.warning(f"[RateLimiter] Redis 不可用，速率限制降級: {e}")
+                self._redis = None
+        return self._redis
+
+    def check_ip_rate(self, ip: str) -> bool:
+        """檢查 IP 速率，回傳 True 表示允許"""
+        if not self.redis_client:
+            return True
+        try:
+            key = f"{self.KEY_PREFIX}ip:{ip}"
+            count = self.redis_client.incr(key)
+            if count == 1:
+                self.redis_client.expire(key, self.IP_WINDOW_SECONDS)
+            return count <= self.MAX_ATTEMPTS_PER_IP
+        except Exception:
+            return True  # Redis 故障時允許通過
+
+    def check_account_locked(self, email: str) -> bool:
+        """檢查帳號是否被鎖定，回傳 True 表示已鎖定"""
+        if not self.redis_client:
+            return False
+        try:
+            lock_key = f"{self.KEY_PREFIX}lock:{email}"
+            return self.redis_client.exists(lock_key) > 0
+        except Exception:
+            return False
+
+    def record_failed_login(self, email: str):
+        """記錄一次登入失敗"""
+        if not self.redis_client:
+            return
+        try:
+            fail_key = f"{self.KEY_PREFIX}fail:{email}"
+            count = self.redis_client.incr(fail_key)
+            if count == 1:
+                self.redis_client.expire(fail_key, self.ACCOUNT_LOCK_SECONDS)
+            if count >= self.MAX_FAILED_PER_ACCOUNT:
+                lock_key = f"{self.KEY_PREFIX}lock:{email}"
+                self.redis_client.setex(lock_key, self.ACCOUNT_LOCK_SECONDS, "1")
+                logger.warning(f"[RateLimiter] 帳號已鎖定: {mask_email(email)}")
+        except Exception as e:
+            logger.error(f"[RateLimiter] 記錄失敗登入錯誤: {e}")
+
+    def clear_failed_login(self, email: str):
+        """登入成功後清除失敗記錄"""
+        if not self.redis_client:
+            return
+        try:
+            self.redis_client.delete(
+                f"{self.KEY_PREFIX}fail:{email}",
+                f"{self.KEY_PREFIX}lock:{email}",
+            )
+        except Exception:
+            pass
+
+
+login_rate_limiter = LoginRateLimiter()
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -55,6 +175,14 @@ def generate_referral_code() -> str:
 # --- 1. 註冊 API ---
 @router.post("/register", response_model=UserResponse)
 def register(user: UserCreate, db: Session = Depends(get_db)):
+    # 驗證密碼強度
+    password_error = validate_password_strength(user.password)
+    if password_error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=password_error
+        )
+    
     # 檢查 Email 是否已被註冊
     db_user = db.query(User).filter(User.email == user.email).first()
     if db_user:
@@ -121,12 +249,32 @@ def get_client_ip(request: Request) -> str:
 
 # --- 2. 登入 API (回傳 JWT) ---
 @router.post("/login", response_model=Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(
+    request: Request,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db),
+):
+    # 速率限制：IP 級
+    client_ip = get_client_ip(request)
+    if not login_rate_limiter.check_ip_rate(client_ip):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="登入嘗試次數過多，請稍後再試",
+        )
+    
+    # 速率限制：帳號鎖定檢查
+    if login_rate_limiter.check_account_locked(form_data.username):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="此帳號因多次登入失敗已暫時鎖定，請 15 分鐘後再試",
+        )
+    
     # 這裡 form_data.username 對應到 email
     user = db.query(User).filter(User.email == form_data.username).first()
     
     # 檢查用戶是否存在
     if not user:
+        login_rate_limiter.record_failed_login(form_data.username)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -152,11 +300,15 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     
     # 驗證密碼
     if not verify_password(form_data.password, user.hashed_password):
+        login_rate_limiter.record_failed_login(form_data.username)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    
+    # 登入成功，清除失敗記錄
+    login_rate_limiter.clear_failed_login(form_data.username)
     
     # 產生 Token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -182,10 +334,26 @@ def login_with_fingerprint(
     - 偵測可疑行為（同 IP/裝置的多帳號）
     - 如果偵測到風險，返回警告（但不阻止登入）
     """
+    # 速率限制：IP 級
+    client_ip = get_client_ip(request)
+    if not login_rate_limiter.check_ip_rate(client_ip):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="登入嘗試次數過多，請稍後再試",
+        )
+    
+    # 速率限制：帳號鎖定檢查
+    if login_rate_limiter.check_account_locked(request_data.email):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="此帳號因多次登入失敗已暫時鎖定，請 15 分鐘後再試",
+        )
+    
     # 驗證帳號
     user = db.query(User).filter(User.email == request_data.email).first()
     
     if not user:
+        login_rate_limiter.record_failed_login(request_data.email)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -211,6 +379,7 @@ def login_with_fingerprint(
     
     # 驗證密碼
     if not verify_password(request_data.password, user.hashed_password):
+        login_rate_limiter.record_failed_login(request_data.email)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -247,6 +416,9 @@ def login_with_fingerprint(
     except Exception as e:
         logger.error(f"[Auth] 詐騙偵測錯誤: {e}")
         # 詐騙偵測失敗不影響登入
+    
+    # 登入成功，清除失敗記錄
+    login_rate_limiter.clear_failed_login(request_data.email)
     
     # 產生 Token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -447,11 +619,12 @@ def reset_password(
             detail="找不到此帳號"
         )
     
-    # 驗證密碼長度
-    if len(request_data.new_password) < 6:
+    # 驗證密碼強度
+    password_error = validate_password_strength(request_data.new_password)
+    if password_error:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="密碼長度至少需要 6 個字元"
+            detail=password_error
         )
     
     # 更新密碼
@@ -497,14 +670,10 @@ def find_account(
             detail="找不到符合的帳號"
         )
     
-    # 回傳完整 email（前端會自行遮罩）
-    accounts = [user.email for user in users]
+    # 回傳遮罩後的 email（後端遮罩，安全第一）
+    accounts = [mask_email(user.email) for user in users]
     
     return FindAccountResponse(
         accounts=accounts,
         message=f"找到 {len(accounts)} 個帳號"
     )
-
-
-# 需要引入 os 模組
-import os

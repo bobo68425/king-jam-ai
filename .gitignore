@@ -12,7 +12,15 @@ __pycache__/
 .env.*
 !.env.example
 
+# GCP Service Account Keys (含敏感金鑰)
+king-jam-ai-*.json
+credentials/
+
+# Secrets
+secrets/
+
 # Backup files
+backup.sql
 backup_*.sql
 
 # IDE
@@ -23,3 +31,4 @@ backup_*.sql
 # OS
 .DS_Store
 Thumbs.db
+
