@@ -254,44 +254,92 @@ function FeaturesSection() {
     {
       icon: PenTool,
       title: "AI 文章生成",
-      description: "輸入關鍵字，AI 自動生成 SEO 優化的專業文章，支援多種風格與長度",
+      description: "輸入關鍵字或主題，AI 自動生成 SEO 優化的專業長文，從部落格到產品介紹一應俱全。",
+      highlights: [
+        "支援多種文章類型：部落格、新聞稿、產品介紹、SEO 文章",
+        "自動生成封面圖片，搭配品牌風格",
+        "一鍵發布至 WordPress 或排程上架",
+        "智能 SEO 優化，提升搜尋排名",
+      ],
+      stats: { label: "每篇僅需", value: "5-20", unit: "點" },
       color: "from-blue-500 to-cyan-500",
       badge: "熱門",
+      href: "/dashboard/blog",
     },
     {
       icon: ImageIcon,
       title: "社群圖文設計",
-      description: "一鍵生成吸睛的社群貼文配圖，支援 IG、FB 等多種尺寸",
+      description: "輸入主題描述，AI 自動生成吸睛的社群貼文配圖與文案，支援所有主流平台尺寸。",
+      highlights: [
+        "支援 IG 貼文/限動、FB 貼文/封面、LINE 圖文",
+        "AI 智能排版，自動搭配色彩與字型",
+        "圖片編輯室 PRO：去背、濾鏡、AI 生圖",
+        "批量生成多張圖文，一次搞定整週素材",
+      ],
+      stats: { label: "每張僅需", value: "10-50", unit: "點" },
       color: "from-pink-500 to-rose-500",
       badge: null,
+      href: "/dashboard/social",
     },
     {
       icon: Video,
       title: "AI 短影片",
-      description: "使用 Google Veo 3 & Kling AI 打造專業級短影片，無需剪輯技能",
+      description: "使用 Google Veo 3 & Kling AI 打造專業級短影片，自動配音、字幕、背景音樂。",
+      highlights: [
+        "支援 15 秒 / 30 秒 / 60 秒多種時長",
+        "AI 自動生成腳本、畫面、配音與字幕",
+        "多種語音風格可選，支援中英文配音",
+        "自動配樂與轉場特效，無需剪輯技能",
+      ],
+      stats: { label: "每支僅需", value: "100-300", unit: "點" },
       color: "from-purple-500 to-indigo-500",
       badge: "強大",
+      href: "/dashboard/video",
     },
     {
       icon: Calendar,
       title: "智能排程",
-      description: "設定自動發布時間，AI 分析最佳發文時段，最大化觸及率",
+      description: "設定自動發布時間，AI 分析歷史數據，推薦最佳發文時段，最大化觸及與互動率。",
+      highlights: [
+        "視覺化行事曆，拖拉排定發布時程",
+        "AI 推薦最佳發文時段，提高互動率",
+        "支援批量排程，一次安排整月內容",
+        "發布失敗自動重試，確保內容準時上線",
+      ],
+      stats: { label: "自動化", value: "24/7", unit: "運作" },
       color: "from-emerald-500 to-green-500",
       badge: null,
+      href: "/dashboard/scheduler",
     },
     {
       icon: Share2,
       title: "多平台發布",
-      description: "一鍵同步發布至 IG、FB、YouTube、WordPress 等主流平台",
+      description: "一鍵同步發布至 Instagram、Facebook、YouTube、WordPress 等主流平台，自動適配格式。",
+      highlights: [
+        "支援 Facebook 粉專、Instagram、YouTube",
+        "WordPress 文章直接發布與排程",
+        "自動適配各平台尺寸與格式要求",
+        "OAuth 安全授權，一次綁定持續使用",
+      ],
+      stats: { label: "支援平台", value: "5+", unit: "個" },
       color: "from-amber-500 to-orange-500",
       badge: null,
+      href: "/dashboard/scheduler",
     },
     {
       icon: BarChart3,
       title: "數據洞察",
-      description: "整合 GA4 分析，追蹤內容表現，AI 提供優化建議",
+      description: "整合 GA4 分析，追蹤每篇內容的觸及、互動、轉換表現，AI 提供優化建議。",
+      highlights: [
+        "即時追蹤文章觸及率、互動率、轉換率",
+        "AI 自動分析高表現內容特徵",
+        "競品內容趨勢分析與建議",
+        "每週自動生成績效報告，數據一目了然",
+      ],
+      stats: { label: "數據更新", value: "即時", unit: "同步" },
       color: "from-violet-500 to-purple-500",
       badge: "進階",
+      href: "/dashboard/insights",
     },
   ];
 
@@ -319,7 +367,7 @@ function FeaturesSection() {
           {features.map((feature, i) => (
             <div 
               key={i}
-              className="group relative p-6 bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl border border-slate-700/50 hover:border-slate-600 transition-all hover:shadow-2xl hover:shadow-purple-500/10 hover:-translate-y-1"
+              className="group relative p-6 bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl border border-slate-700/50 hover:border-slate-600 transition-all hover:shadow-2xl hover:shadow-purple-500/10 hover:-translate-y-1 flex flex-col"
             >
               {feature.badge && (
                 <div className="absolute top-4 right-4 px-2 py-1 text-xs font-semibold bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-full">
@@ -331,12 +379,35 @@ function FeaturesSection() {
                 <feature.icon className="w-7 h-7 text-white" />
               </div>
               
-              <h3 className="text-xl font-semibold text-white mb-3">{feature.title}</h3>
-              <p className="text-slate-400 leading-relaxed">{feature.description}</p>
-              
-              <div className="mt-5 flex items-center text-sm text-indigo-400 group-hover:text-indigo-300 transition-colors cursor-pointer">
-                了解更多
-                <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+              <h3 className="text-xl font-semibold text-white mb-2">{feature.title}</h3>
+              <p className="text-slate-400 text-sm leading-relaxed mb-4">{feature.description}</p>
+
+              {/* 功能亮點列表 */}
+              <ul className="space-y-2 mb-5 flex-1">
+                {feature.highlights.map((h, j) => (
+                  <li key={j} className="flex items-start gap-2 text-sm">
+                    <Check className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
+                    <span className="text-slate-300">{h}</span>
+                  </li>
+                ))}
+              </ul>
+
+              {/* 底部：數據指標 + 連結 */}
+              <div className="flex items-center justify-between pt-4 border-t border-slate-700/50">
+                <div className="flex items-baseline gap-1">
+                  <span className="text-[11px] text-slate-500">{feature.stats.label}</span>
+                  <span className={`text-lg font-bold bg-gradient-to-r ${feature.color} bg-clip-text text-transparent`}>
+                    {feature.stats.value}
+                  </span>
+                  <span className="text-[11px] text-slate-500">{feature.stats.unit}</span>
+                </div>
+                <Link 
+                  href={feature.href}
+                  className="flex items-center text-sm text-indigo-400 group-hover:text-indigo-300 transition-colors"
+                >
+                  立即體驗
+                  <ChevronRight className="w-4 h-4 ml-0.5 group-hover:translate-x-1 transition-transform" />
+                </Link>
               </div>
             </div>
           ))}
