@@ -786,16 +786,35 @@ async def publish_now(
             post.platform_post_url = result.platform_post_url
             log5 = PublishLog(
                 scheduled_post_id=post.id, action="published",
-                message="發布成功",
-                details={"platform_post_id": result.platform_post_id, "platform_post_url": result.platform_post_url}
+                message=f"發布成功 → {social_account.platform}",
+                details={
+                    "platform": social_account.platform,
+                    "platform_post_id": result.platform_post_id, 
+                    "platform_post_url": result.platform_post_url,
+                    "account_username": social_account.platform_username
+                }
             )
             db.add(log5)
             db.commit()
+            
+            print(f"[PublishNow] ✅ 發布成功: platform={social_account.platform}, post_id={result.platform_post_id}, url={result.platform_post_url}")
+            
+            # 自動初始化成效追蹤（非同步，不影響回應速度）
+            try:
+                from app.services.metrics_service import MetricsService
+                metrics_service = MetricsService(db)
+                metrics_service.sync_post_metrics(post)
+                print(f"[PublishNow] ✅ 成效追蹤已初始化")
+            except Exception as me:
+                print(f"[PublishNow] ⚠️ 成效追蹤初始化失敗（不影響發布）: {me}")
+            
             return {
                 "message": "發布成功",
                 "status": "published",
+                "platform": social_account.platform,
                 "platform_post_id": result.platform_post_id,
-                "url": result.platform_post_url
+                "platform_post_url": result.platform_post_url,
+                "account_username": social_account.platform_username,
             }
         else:
             raise Exception(f"發布失敗: {result.error_message}")

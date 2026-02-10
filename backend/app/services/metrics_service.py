@@ -253,21 +253,95 @@ class MetricsService:
         - instagram_basic
         - instagram_manage_insights
         """
-        # TODO: 實際 API 整合
-        # 以下為模擬數據
+        import requests as req
         
-        # 檢查是否有必要的認證資訊
-        if account and account.access_token:
-            # 這裡應該呼叫實際的 Instagram API
-            # media_id = post.platform_post_id
-            # response = requests.get(
-            #     f"https://graph.instagram.com/{media_id}/insights",
-            #     params={
-            #         "metric": "impressions,reach,engagement,saved",
-            #         "access_token": account.access_token
-            #     }
-            # )
-            pass
+        if not account or not account.access_token:
+            logger.info(f"Post {post.id}: 無 Instagram 帳號或 token")
+            return self._generate_mock_metrics(post, "instagram")
+        
+        if not post.platform_post_id:
+            logger.info(f"Post {post.id}: 無 platform_post_id，無法獲取成效")
+            return self._generate_mock_metrics(post, "instagram")
+        
+        media_id = post.platform_post_id
+        GRAPH_API = "https://graph.facebook.com/v18.0"
+        
+        try:
+            # 取得 IG media insights
+            resp = req.get(
+                f"{GRAPH_API}/{media_id}/insights",
+                params={
+                    "metric": "impressions,reach,saved,shares",
+                    "access_token": account.access_token
+                },
+                timeout=10
+            )
+            insights = resp.json()
+            
+            impressions = 0
+            reach = 0
+            saves = 0
+            shares = 0
+            
+            if "data" in insights:
+                for metric in insights["data"]:
+                    name = metric.get("name")
+                    value = metric.get("values", [{}])[0].get("value", 0) if metric.get("values") else 0
+                    if name == "impressions":
+                        impressions = value
+                    elif name == "reach":
+                        reach = value
+                    elif name == "saved":
+                        saves = value
+                    elif name == "shares":
+                        shares = value
+            
+            # 取得基本互動數據（likes, comments）
+            resp2 = req.get(
+                f"{GRAPH_API}/{media_id}",
+                params={
+                    "fields": "like_count,comments_count,permalink",
+                    "access_token": account.access_token
+                },
+                timeout=10
+            )
+            media_data = resp2.json()
+            likes = media_data.get("like_count", 0)
+            comments = media_data.get("comments_count", 0)
+            
+            # 更新 permalink
+            permalink = media_data.get("permalink")
+            if permalink and not post.platform_post_url:
+                post.platform_post_url = permalink
+                self.db.commit()
+            
+            engagement_rate = 0
+            if reach > 0:
+                engagement_rate = (likes + comments + saves + shares) / reach
+            
+            return {
+                "impressions": impressions,
+                "reach": reach,
+                "views": impressions,
+                "likes": likes,
+                "comments": comments,
+                "shares": shares,
+                "saves": saves,
+                "clicks": 0,
+                "engagement_rate": engagement_rate,
+                "followers_gained": 0,
+                "followers_lost": 0,
+                "net_followers": 0,
+                "watch_time_seconds": 0,
+                "avg_watch_time_seconds": 0,
+                "video_completion_rate": 0,
+                "data_source": "instagram_api",
+                "ga4_connected": True,
+                "note": None
+            }
+            
+        except Exception as e:
+            logger.error(f"Instagram metrics fetch error for post {post.id}: {e}")
         
         return self._generate_mock_metrics(post, "instagram")
     
@@ -279,9 +353,146 @@ class MetricsService:
         """
         從 Facebook Graph API 獲取成效數據
         
+        使用 Page Access Token 呼叫：
+        - /{post_id}?fields=shares,comments.summary(true),reactions.summary(true)
+        - /{post_id}/insights?metric=post_impressions,post_engaged_users,post_clicks
+        
         API 文件：https://developers.facebook.com/docs/graph-api/reference/post/insights/
         """
-        # TODO: 實際 API 整合
+        import requests as req
+        
+        if not account or not account.access_token:
+            logger.info(f"Post {post.id}: 無 Facebook 帳號或 token")
+            return self._generate_mock_metrics(post, "facebook")
+        
+        if not post.platform_post_id:
+            logger.info(f"Post {post.id}: 無 platform_post_id，無法獲取成效")
+            return self._generate_mock_metrics(post, "facebook")
+        
+        post_id = post.platform_post_id
+        GRAPH_API = "https://graph.facebook.com/v18.0"
+        
+        try:
+            # 優先使用 OAuth 時儲存的 Page Access Token
+            page_token = None
+            extra = account.extra_settings or {}
+            if extra.get("page_access_token"):
+                page_token = extra["page_access_token"]
+                logger.info(f"Post {post.id}: 使用已儲存的 page_access_token")
+            
+            # 如果沒有已儲存的 page token，從 /me/accounts 動態取得
+            if not page_token:
+                resp = req.get(
+                    f"{GRAPH_API}/me/accounts",
+                    params={"fields": "id,access_token", "access_token": account.access_token},
+                    timeout=10
+                )
+                pages = resp.json().get("data", [])
+                if pages:
+                    # 用 post_id 的前半段匹配 page_id（格式: pageId_postId）
+                    for page in pages:
+                        if post_id.startswith(page["id"]):
+                            page_token = page["access_token"]
+                            break
+                    if not page_token:
+                        page_token = pages[0].get("access_token")
+            
+            if not page_token:
+                logger.warning(f"Post {post.id}: 無法取得 Page Access Token")
+                return self._generate_mock_metrics(post, "facebook")
+            
+            # 1. 獲取貼文基本互動數據
+            resp = req.get(
+                f"{GRAPH_API}/{post_id}",
+                params={
+                    "fields": "shares,comments.summary(true),reactions.summary(true),created_time,permalink_url",
+                    "access_token": page_token
+                },
+                timeout=10
+            )
+            post_data = resp.json()
+            
+            if "error" in post_data:
+                logger.warning(f"Facebook post data error: {post_data['error']}")
+                return self._generate_mock_metrics(post, "facebook")
+            
+            reactions_count = post_data.get("reactions", {}).get("summary", {}).get("total_count", 0)
+            comments_count = post_data.get("comments", {}).get("summary", {}).get("total_count", 0)
+            shares_count = post_data.get("shares", {}).get("count", 0)
+            
+            # 如果 API 回傳了 permalink_url，更新貼文連結
+            permalink = post_data.get("permalink_url")
+            if permalink and (not post.platform_post_url or "permalink.php" in (post.platform_post_url or "")):
+                post.platform_post_url = permalink
+                self.db.commit()
+                logger.info(f"Post {post.id}: 更新 platform_post_url = {permalink}")
+            
+            # 2. 獲取貼文 Insights（曝光、觸及、點擊等）
+            impressions = 0
+            reach = 0
+            clicks = 0
+            engaged_users = 0
+            
+            try:
+                resp = req.get(
+                    f"{GRAPH_API}/{post_id}/insights",
+                    params={
+                        "metric": "post_impressions,post_impressions_unique,post_clicks,post_engaged_users",
+                        "access_token": page_token
+                    },
+                    timeout=10
+                )
+                insights_data = resp.json()
+                
+                if "data" in insights_data:
+                    for metric in insights_data["data"]:
+                        name = metric.get("name")
+                        values = metric.get("values", [{}])
+                        value = values[0].get("value", 0) if values else 0
+                        
+                        if name == "post_impressions":
+                            impressions = value
+                        elif name == "post_impressions_unique":
+                            reach = value
+                        elif name == "post_clicks":
+                            clicks = value
+                        elif name == "post_engaged_users":
+                            engaged_users = value
+                else:
+                    logger.info(f"Post {post.id}: insights API 無數據（可能貼文太新）")
+            except Exception as ie:
+                logger.warning(f"Post {post.id}: insights API 失敗: {ie}")
+            
+            # 計算互動率
+            engagement_rate = 0
+            if reach > 0:
+                total_engagement = reactions_count + comments_count + shares_count
+                engagement_rate = total_engagement / reach
+            
+            return {
+                "impressions": impressions,
+                "reach": reach,
+                "views": impressions,
+                "likes": reactions_count,
+                "comments": comments_count,
+                "shares": shares_count,
+                "saves": 0,
+                "clicks": clicks,
+                "engagement_rate": engagement_rate,
+                "followers_gained": 0,
+                "followers_lost": 0,
+                "net_followers": 0,
+                "watch_time_seconds": 0,
+                "avg_watch_time_seconds": 0,
+                "video_completion_rate": 0,
+                "data_source": "facebook_api",
+                "ga4_connected": True,
+                "note": None
+            }
+                
+        except Exception as e:
+            logger.error(f"Facebook metrics fetch error for post {post.id}: {e}")
+        
         return self._generate_mock_metrics(post, "facebook")
     
     def _fetch_youtube_metrics(

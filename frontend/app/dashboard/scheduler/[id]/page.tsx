@@ -235,8 +235,17 @@ export default function ScheduleDetailPage() {
   const handlePublishNow = async () => {
     if (!post || !confirm("確定要立即發布嗎？")) return;
     try {
-      await api.post(`/scheduler/posts/${post.id}/publish-now`);
-      toast.success("已開始發布");
+      const res = await api.post(`/scheduler/posts/${post.id}/publish-now`);
+      const data = res.data;
+      if (data.platform_post_url) {
+        toast.success(
+          `發布成功！已發布至 ${data.platform || "社群平台"}`,
+          { duration: 6000 }
+        );
+      } else {
+        toast.success("發布成功");
+      }
+      // 重新載入貼文資料（包含 platform_post_url 和更新後的狀態）
       fetchPost();
     } catch (error: any) {
       toast.error(error.response?.data?.detail || "發布失敗");

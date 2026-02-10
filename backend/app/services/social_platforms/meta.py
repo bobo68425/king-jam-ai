@@ -465,12 +465,23 @@ class MetaPlatform(BasePlatform):
                             error_code=str(data["error"].get("code"))
                         )
                     
-                    post_id = data.get("id") or data.get("post_id")
-                    print(f"[Meta] Facebook 發布成功: post_id={post_id}")
+                    # photos API 回傳 {"id": photoId, "post_id": pageId_postId}
+                    # feed API 回傳 {"id": pageId_postId}
+                    post_id = data.get("post_id") or data.get("id")
+                    
+                    # 建構可靠的 Facebook 貼文 URL
+                    # post_id 格式為 pageId_postId，例如 "123456_789012"
+                    if post_id and "_" in str(post_id):
+                        parts = str(post_id).split("_", 1)
+                        fb_url = f"https://www.facebook.com/permalink.php?story_fbid={parts[1]}&id={parts[0]}"
+                    else:
+                        fb_url = f"https://www.facebook.com/{post_id}"
+                    
+                    print(f"[Meta] Facebook 發布成功: post_id={post_id}, url={fb_url}, raw_data={data}")
                     return PublishResult(
                         success=True,
-                        platform_post_id=post_id,
-                        platform_post_url=f"https://facebook.com/{post_id}"
+                        platform_post_id=str(post_id),
+                        platform_post_url=fb_url
                     )
                     
         except Exception as e:
