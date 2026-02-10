@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Noto_Sans_TC, Noto_Serif_TC } from "next/font/google";
+import { Geist, Geist_Mono, Noto_Sans_TC } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AIAssistant } from "@/components/ai-assistant";
 import "./globals.css";
@@ -14,18 +14,11 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// 繁體中文字型（Google Fonts - 免費商用）
+// 繁體中文字型（Google Fonts - 免費商用）— 僅保留 400/700 減少載入量
 const notoSansTC = Noto_Sans_TC({
   variable: "--font-noto-sans-tc",
   subsets: ["latin"],
-  weight: ["300", "400", "500", "700"],
-  display: "swap",
-});
-
-const notoSerifTC = Noto_Serif_TC({
-  variable: "--font-noto-serif-tc",
-  subsets: ["latin"],
-  weight: ["400", "600", "700"],
+  weight: ["400", "700"],
   display: "swap",
 });
 
@@ -62,7 +55,7 @@ export default function RootLayout({
   return (
     <html lang="zh-TW" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${notoSansTC.variable} ${notoSerifTC.variable} antialiased bg-background text-foreground font-sans`}
+        className={`${geistSans.variable} ${geistMono.variable} ${notoSansTC.variable} antialiased bg-background text-foreground font-sans`}
         suppressHydrationWarning
       >
         <ThemeProvider

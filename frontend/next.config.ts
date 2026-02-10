@@ -12,7 +12,7 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   
-  // 圖片優化設定
+  // 圖片優化設定（已開啟自動壓縮 / WebP 轉換 / 尺寸調整）
   images: {
     remotePatterns: [
       {
@@ -28,8 +28,6 @@ const nextConfig: NextConfig = {
         hostname: "*.googleusercontent.com",
       },
     ],
-    // Cloud Run 建議使用 unoptimized 或設置 loader
-    unoptimized: process.env.NODE_ENV === "production",
   },
   
   // 環境變數
@@ -38,6 +36,62 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL || "https://kingjam.app",
   },
   
+  // 靜態資源快取 Headers
+  async headers() {
+    return [
+      {
+        // JS / CSS 等 hashed 靜態檔 — 長期快取 1 年
+        source: "/_next/static/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
+        // 字型檔 — 長期快取 1 年
+        source: "/fonts/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
+        // 圖片 — 30 天快取
+        source: "/images/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=2592000, stale-while-revalidate=86400",
+          },
+        ],
+      },
+      {
+        // Next.js 圖片優化端點 — 30 天快取
+        source: "/_next/image",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=2592000, stale-while-revalidate=86400",
+          },
+        ],
+      },
+      {
+        // API 路由 — 不快取
+        source: "/api/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "no-store, no-cache, must-revalidate",
+          },
+        ],
+      },
+    ];
+  },
+
   // 實驗性功能
   experimental: {
     // 優化套件打包
