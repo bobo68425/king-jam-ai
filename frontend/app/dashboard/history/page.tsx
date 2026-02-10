@@ -303,17 +303,20 @@ export default function HistoryPage() {
     let successCount = 0;
     let failCount = 0;
 
+    let lastError = "";
     for (const accId of targetAccounts) {
       try {
         // 1. 建立排程
         const contentType = selectedItem.generation_type === "short_video" ? "short_video" : "social_image";
+        const fullCaption = caption + (hashtags.length > 0 ? "\n\n" + hashtags.map((t: string) => `#${t}`).join(" ") : "");
+        
         const schedRes = await api.post("/scheduler/posts", {
           content_type: contentType,
           title: selectedItem.input_params?.topic || selectedItem.input_params?.title || "",
-          caption: caption + (hashtags.length > 0 ? "\n\n" + hashtags.map((t: string) => `#${t}`).join(" ") : ""),
+          caption: fullCaption,
           media_urls: mediaUrl ? [mediaUrl] : [],
           hashtags: hashtags,
-          scheduled_at: new Date(Date.now() + 60000).toISOString(), // 1 分鐘後
+          scheduled_at: new Date(Date.now() + 60000).toISOString(),
           timezone: "Asia/Taipei",
           social_account_id: accId,
         });
@@ -321,15 +324,12 @@ export default function HistoryPage() {
         // 2. 立即發布
         const postId = schedRes.data.id;
         const pubRes = await api.post(`/scheduler/posts/${postId}/publish-now`);
-
-        if (pubRes.data.platform_post_url) {
-          successCount++;
-        } else {
-          successCount++; // 即使沒有 URL，也算成功
-        }
+        successCount++;
       } catch (e: any) {
         failCount++;
-        console.error(`發布到帳號 ${accId} 失敗:`, e);
+        const errMsg = e.response?.data?.detail || e.message || "未知錯誤";
+        lastError = errMsg;
+        console.error(`發布到帳號 ${accId} 失敗:`, errMsg);
       }
     }
 
@@ -340,7 +340,7 @@ export default function HistoryPage() {
     } else if (successCount > 0) {
       toast.warning(`${successCount} 個成功，${failCount} 個失敗`);
     } else {
-      toast.error("發布失敗，請檢查社群帳號連結");
+      toast.error(`發布失敗：${lastError}`);
     }
   };
 
