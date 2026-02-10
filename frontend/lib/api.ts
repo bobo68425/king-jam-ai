@@ -3,16 +3,25 @@ import axios from 'axios';
 // API 基礎網址（支援環境變數配置）
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-// 建立 axios 實例（登入等請求若後端無回應，避免一直轉圈）
+// AI 生成類的端點需要更長的超時時間（圖片/影片生成可能需要 60-120 秒）
+const AI_GENERATE_PATHS = [
+  '/social/generate',
+  '/api/design-studio/generate-image',
+  '/api/design-studio/remove-background',
+  '/video/generate',
+  '/blog/generate',
+];
+
+// 建立 axios 實例
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 20000,
+  timeout: 30000,  // 一般請求 30 秒
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// 請求攔截器：自動帶上 Token
+// 請求攔截器：自動帶上 Token + AI 端點加長超時
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem('token'); // 從瀏覽器儲存區拿 Token
@@ -24,6 +33,12 @@ api.interceptors.request.use((config) => {
   // 如果是 FormData，移除 Content-Type 讓瀏覽器自動設置（包含 boundary）
   if (config.data instanceof FormData) {
     delete config.headers['Content-Type'];
+  }
+  
+  // AI 生成端點使用更長的超時時間（120 秒）
+  const url = config.url || '';
+  if (AI_GENERATE_PATHS.some(path => url.includes(path))) {
+    config.timeout = 120000;
   }
   
   return config;
