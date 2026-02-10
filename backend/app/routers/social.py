@@ -578,6 +578,7 @@ async def generate_social_post(
         },
         output_data={
             "image_url": image_url,
+            "caption": caption or "",
             "caption_length": len(caption) if caption else 0,
         },
         media_cloud_url=image_url,
