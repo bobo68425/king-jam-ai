@@ -647,8 +647,12 @@ async def publish_now(
     if not post:
         raise HTTPException(status_code=404, detail="排程不存在")
     
-    if post.status not in ["pending", "failed", "queued"]:
+    if post.status not in ["pending", "failed", "queued", "published"]:
         raise HTTPException(status_code=400, detail=f"無法立即發布狀態為 {post.status} 的排程")
+    
+    # 如果已發布但沒有 platform_post_url，表示上次只是記錄未實際發布，允許重新發布
+    if post.status == "published" and post.platform_post_url:
+        raise HTTPException(status_code=400, detail="此排程已成功發布到社群平台")
     
     # 記錄日誌
     log = PublishLog(
@@ -658,26 +662,39 @@ async def publish_now(
     )
     db.add(log)
     
-    # 檢查是否有綁定社群帳號
-    if not post.social_account_id:
-        post.status = "published"
-        post.published_at = datetime.utcnow()
-        log2 = PublishLog(
-            scheduled_post_id=post.id,
-            action="published",
-            message="排程已執行（無綁定社群帳號，僅記錄）"
-        )
-        db.add(log2)
-        db.commit()
-        return {"message": "已記錄（無綁定社群帳號）", "status": "published"}
+    # 檢查是否有綁定社群帳號；若無，自動偵測已連結的帳號
+    social_account = None
     
-    # 取得社群帳號
-    social_account = db.query(SocialAccount).filter(
-        SocialAccount.id == post.social_account_id
-    ).first()
+    if post.social_account_id:
+        social_account = db.query(SocialAccount).filter(
+            SocialAccount.id == post.social_account_id
+        ).first()
     
     if not social_account:
-        raise HTTPException(status_code=400, detail="綁定的社群帳號不存在")
+        # 自動偵測：找使用者已連結且支援此內容類型的社群帳號
+        # 社群圖文 → facebook, instagram；短影片 → facebook, instagram, tiktok
+        preferred_platforms = ["facebook", "instagram"]
+        if post.content_type == "blog_post":
+            preferred_platforms = ["wordpress", "facebook"]
+        
+        for platform in preferred_platforms:
+            auto_account = db.query(SocialAccount).filter(
+                SocialAccount.user_id == current_user.id,
+                SocialAccount.platform == platform,
+                SocialAccount.is_active == True
+            ).first()
+            if auto_account:
+                social_account = auto_account
+                # 自動綁定到排程上
+                post.social_account_id = auto_account.id
+                print(f"[PublishNow] 自動偵測社群帳號: {platform} (id={auto_account.id}, username={auto_account.platform_username})")
+                break
+    
+    if not social_account:
+        raise HTTPException(
+            status_code=400,
+            detail="找不到可用的社群帳號。請先到「社群帳號」頁面連結 Facebook 或 Instagram 帳號。"
+        )
     
     if not social_account.is_active:
         raise HTTPException(status_code=400, detail="綁定的社群帳號已停用")
