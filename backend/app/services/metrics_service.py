@@ -501,11 +501,90 @@ class MetricsService:
         account: Optional[SocialAccount]
     ) -> Dict[str, Any]:
         """
-        從 YouTube Analytics API 獲取成效數據
+        從 YouTube Data API v3 獲取影片成效數據
         
-        API 文件：https://developers.google.com/youtube/analytics
+        API 文件：https://developers.google.com/youtube/v3/docs/videos
+        需要權限：youtube.readonly
         """
-        # TODO: 實際 API 整合
+        import requests as req
+        
+        if not account or not account.access_token:
+            logger.info(f"Post {post.id}: 無 YouTube 帳號或 token")
+            return self._generate_mock_metrics(post, "youtube", is_video=True)
+        
+        if not post.platform_post_id:
+            logger.info(f"Post {post.id}: 無 platform_post_id，無法獲取成效")
+            return self._generate_mock_metrics(post, "youtube", is_video=True)
+        
+        video_id = post.platform_post_id
+        YT_API = "https://www.googleapis.com/youtube/v3"
+        
+        try:
+            # 獲取影片統計數據
+            resp = req.get(
+                f"{YT_API}/videos",
+                params={
+                    "part": "statistics,contentDetails",
+                    "id": video_id,
+                    "access_token": account.access_token
+                },
+                timeout=10
+            )
+            data = resp.json()
+            items = data.get("items", [])
+            
+            if not items:
+                logger.warning(f"Post {post.id}: YouTube 影片 {video_id} 不存在或無法存取")
+                return self._generate_mock_metrics(post, "youtube", is_video=True)
+            
+            stats = items[0].get("statistics", {})
+            content_details = items[0].get("contentDetails", {})
+            
+            views = int(stats.get("viewCount", 0))
+            likes = int(stats.get("likeCount", 0))
+            comments = int(stats.get("commentCount", 0))
+            favorites = int(stats.get("favoriteCount", 0))
+            
+            # 解析影片時長（ISO 8601 格式，如 PT4M13S）
+            duration_str = content_details.get("duration", "")
+            watch_time = 0
+            if duration_str:
+                import re
+                hours = re.findall(r'(\d+)H', duration_str)
+                minutes = re.findall(r'(\d+)M', duration_str)
+                seconds = re.findall(r'(\d+)S', duration_str)
+                watch_time = (int(hours[0]) * 3600 if hours else 0) + \
+                             (int(minutes[0]) * 60 if minutes else 0) + \
+                             (int(seconds[0]) if seconds else 0)
+            
+            engagement_rate = 0
+            if views > 0:
+                engagement_rate = (likes + comments) / views
+            
+            return {
+                "impressions": views,
+                "reach": views,
+                "views": views,
+                "likes": likes,
+                "comments": comments,
+                "shares": 0,
+                "saves": favorites,
+                "clicks": 0,
+                "engagement_rate": engagement_rate,
+                "followers_gained": 0,
+                "followers_lost": 0,
+                "net_followers": 0,
+                "watch_time_seconds": watch_time * views,  # 估算總觀看時間
+                "avg_watch_time_seconds": watch_time,
+                "video_completion_rate": 0,
+                "data_source": "youtube_api",
+                "ga4_connected": True,
+                "note": None
+            }
+            
+        except Exception as e:
+            logger.error(f"YouTube metrics fetch error for post {post.id}: {e}")
+        
         return self._generate_mock_metrics(post, "youtube", is_video=True)
     
     def _fetch_tiktok_metrics(
@@ -514,11 +593,148 @@ class MetricsService:
         account: Optional[SocialAccount]
     ) -> Dict[str, Any]:
         """
-        從 TikTok Marketing API 獲取成效數據
+        從 TikTok Content Posting API v2 獲取影片成效數據
         
         API 文件：https://developers.tiktok.com/doc/tiktok-api-v2-video-query/
+        需要權限：video.list
         """
-        # TODO: 實際 API 整合
+        import requests as req
+        
+        if not account or not account.access_token:
+            logger.info(f"Post {post.id}: 無 TikTok 帳號或 token")
+            return self._generate_mock_metrics(post, "tiktok", is_video=True)
+        
+        if not post.platform_post_id:
+            logger.info(f"Post {post.id}: 無 platform_post_id，無法獲取成效")
+            return self._generate_mock_metrics(post, "tiktok", is_video=True)
+        
+        video_id = post.platform_post_id
+        TIKTOK_API = "https://open.tiktokapis.com/v2"
+        
+        try:
+            headers = {
+                "Authorization": f"Bearer {account.access_token}",
+                "Content-Type": "application/json"
+            }
+            
+            # 使用 Video Query API 查詢特定影片
+            resp = req.post(
+                f"{TIKTOK_API}/video/query/",
+                headers=headers,
+                params={
+                    "fields": "id,title,video_description,duration,cover_image_url,share_url,like_count,comment_count,share_count,view_count,create_time"
+                },
+                json={
+                    "filters": {
+                        "video_ids": [video_id]
+                    }
+                },
+                timeout=10
+            )
+            data = resp.json()
+            
+            if data.get("error", {}).get("code") != "ok":
+                # Fallback: 嘗試 Video List API 搜尋
+                logger.warning(f"Post {post.id}: TikTok Video Query 失敗: {data.get('error')}")
+                return self._fetch_tiktok_from_list(post, account, video_id)
+            
+            videos = data.get("data", {}).get("videos", [])
+            if not videos:
+                logger.warning(f"Post {post.id}: TikTok 影片 {video_id} 不存在")
+                return self._generate_mock_metrics(post, "tiktok", is_video=True)
+            
+            video = videos[0]
+            views = video.get("view_count", 0)
+            likes = video.get("like_count", 0)
+            comments = video.get("comment_count", 0)
+            shares = video.get("share_count", 0)
+            duration = video.get("duration", 0)
+            
+            engagement_rate = 0
+            if views > 0:
+                engagement_rate = (likes + comments + shares) / views
+            
+            return {
+                "impressions": views,
+                "reach": views,
+                "views": views,
+                "likes": likes,
+                "comments": comments,
+                "shares": shares,
+                "saves": 0,
+                "clicks": 0,
+                "engagement_rate": engagement_rate,
+                "followers_gained": 0,
+                "followers_lost": 0,
+                "net_followers": 0,
+                "watch_time_seconds": duration * views,  # 估算
+                "avg_watch_time_seconds": duration,
+                "video_completion_rate": 0,
+                "data_source": "tiktok_api",
+                "ga4_connected": True,
+                "note": None
+            }
+            
+        except Exception as e:
+            logger.error(f"TikTok metrics fetch error for post {post.id}: {e}")
+        
+        return self._generate_mock_metrics(post, "tiktok", is_video=True)
+    
+    def _fetch_tiktok_from_list(
+        self,
+        post: ScheduledPost,
+        account: SocialAccount,
+        target_video_id: str
+    ) -> Dict[str, Any]:
+        """
+        從 TikTok Video List API 嘗試找到特定影片（Fallback）
+        """
+        import requests as req
+        TIKTOK_API = "https://open.tiktokapis.com/v2"
+        
+        try:
+            headers = {
+                "Authorization": f"Bearer {account.access_token}",
+                "Content-Type": "application/json"
+            }
+            
+            resp = req.post(
+                f"{TIKTOK_API}/video/list/",
+                headers=headers,
+                params={
+                    "fields": "id,like_count,comment_count,share_count,view_count,duration"
+                },
+                json={"max_count": 20},
+                timeout=10
+            )
+            data = resp.json()
+            
+            if data.get("error", {}).get("code") == "ok":
+                videos = data.get("data", {}).get("videos", [])
+                for video in videos:
+                    if str(video.get("id")) == str(target_video_id):
+                        views = video.get("view_count", 0)
+                        likes = video.get("like_count", 0)
+                        comments = video.get("comment_count", 0)
+                        shares = video.get("share_count", 0)
+                        duration = video.get("duration", 0)
+                        
+                        engagement_rate = (likes + comments + shares) / views if views > 0 else 0
+                        
+                        return {
+                            "impressions": views, "reach": views, "views": views,
+                            "likes": likes, "comments": comments, "shares": shares,
+                            "saves": 0, "clicks": 0, "engagement_rate": engagement_rate,
+                            "followers_gained": 0, "followers_lost": 0, "net_followers": 0,
+                            "watch_time_seconds": duration * views,
+                            "avg_watch_time_seconds": duration,
+                            "video_completion_rate": 0,
+                            "data_source": "tiktok_api",
+                            "ga4_connected": True, "note": None
+                        }
+        except Exception as e:
+            logger.error(f"TikTok list fallback error for post {post.id}: {e}")
+        
         return self._generate_mock_metrics(post, "tiktok", is_video=True)
     
     def _fetch_linkedin_metrics(
@@ -527,11 +743,134 @@ class MetricsService:
         account: Optional[SocialAccount]
     ) -> Dict[str, Any]:
         """
-        從 LinkedIn Marketing API 獲取成效數據
+        從 LinkedIn API 獲取貼文成效數據
         
-        API 文件：https://docs.microsoft.com/en-us/linkedin/marketing/
+        API 文件：https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/share-api
+        需要權限：r_organization_social 或 w_member_social
         """
-        # TODO: 實際 API 整合
+        import requests as req
+        
+        if not account or not account.access_token:
+            logger.info(f"Post {post.id}: 無 LinkedIn 帳號或 token")
+            return self._generate_mock_metrics(post, "linkedin")
+        
+        if not post.platform_post_id:
+            logger.info(f"Post {post.id}: 無 platform_post_id，無法獲取成效")
+            return self._generate_mock_metrics(post, "linkedin")
+        
+        share_urn = post.platform_post_id
+        # 確保是完整的 URN 格式
+        if not share_urn.startswith("urn:"):
+            share_urn = f"urn:li:share:{share_urn}"
+        
+        LINKEDIN_API = "https://api.linkedin.com/v2"
+        
+        try:
+            headers = {
+                "Authorization": f"Bearer {account.access_token}",
+                "X-Restli-Protocol-Version": "2.0.0"
+            }
+            
+            likes = 0
+            comments = 0
+            
+            # 獲取貼文的社交互動（likes）
+            try:
+                resp = req.get(
+                    f"{LINKEDIN_API}/socialActions/{share_urn}/likes",
+                    headers=headers,
+                    params={"count": 0},  # 只要 summary
+                    timeout=10
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    likes = data.get("paging", {}).get("total", 0)
+                else:
+                    # Fallback: 嘗試 socialActions summary
+                    resp2 = req.get(
+                        f"{LINKEDIN_API}/socialActions/{share_urn}",
+                        headers=headers,
+                        timeout=10
+                    )
+                    if resp2.status_code == 200:
+                        actions = resp2.json()
+                        likes = actions.get("likesSummary", {}).get("totalLikes", 0)
+                        comments = actions.get("commentsSummary", {}).get("totalFirstLevelComments", 0)
+            except Exception as le:
+                logger.warning(f"Post {post.id}: LinkedIn likes fetch error: {le}")
+            
+            # 獲取貼文的評論數
+            if comments == 0:
+                try:
+                    resp = req.get(
+                        f"{LINKEDIN_API}/socialActions/{share_urn}/comments",
+                        headers=headers,
+                        params={"count": 0},
+                        timeout=10
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        comments = data.get("paging", {}).get("total", 0)
+                except Exception as ce:
+                    logger.warning(f"Post {post.id}: LinkedIn comments fetch error: {ce}")
+            
+            # LinkedIn 個人帳號沒有 impression API，用互動數估算
+            # 企業帳號可以用 organizationalEntityShareStatistics
+            impressions = 0
+            clicks = 0
+            
+            # 嘗試企業帳號的成效數據
+            org_id = (account.extra_settings or {}).get("organization_id")
+            if org_id:
+                try:
+                    stats_resp = req.get(
+                        f"{LINKEDIN_API}/organizationalEntityShareStatistics",
+                        headers=headers,
+                        params={
+                            "q": "organizationalEntity",
+                            "organizationalEntity": f"urn:li:organization:{org_id}",
+                            "shares[0]": share_urn
+                        },
+                        timeout=10
+                    )
+                    if stats_resp.status_code == 200:
+                        stats_data = stats_resp.json()
+                        elements = stats_data.get("elements", [])
+                        if elements:
+                            total_stats = elements[0].get("totalShareStatistics", {})
+                            impressions = total_stats.get("impressionCount", 0)
+                            clicks = total_stats.get("clickCount", 0)
+                except Exception as se:
+                    logger.warning(f"Post {post.id}: LinkedIn org stats error: {se}")
+            
+            engagement_rate = 0
+            if impressions > 0:
+                engagement_rate = (likes + comments) / impressions
+            
+            return {
+                "impressions": impressions,
+                "reach": impressions,
+                "views": impressions,
+                "likes": likes,
+                "comments": comments,
+                "shares": 0,
+                "saves": 0,
+                "clicks": clicks,
+                "engagement_rate": engagement_rate,
+                "followers_gained": 0,
+                "followers_lost": 0,
+                "net_followers": 0,
+                "watch_time_seconds": 0,
+                "avg_watch_time_seconds": 0,
+                "video_completion_rate": 0,
+                "data_source": "linkedin_api",
+                "ga4_connected": True,
+                "note": None if (likes > 0 or comments > 0 or impressions > 0) else "LinkedIn 個人帳號無法取得曝光數，僅顯示互動數據"
+            }
+            
+        except Exception as e:
+            logger.error(f"LinkedIn metrics fetch error for post {post.id}: {e}")
+        
         return self._generate_mock_metrics(post, "linkedin")
     
     def _fetch_wordpress_metrics(
@@ -678,9 +1017,99 @@ class MetricsService:
         """
         從 Threads API 獲取成效數據
         
-        API 文件：https://developers.facebook.com/docs/threads
+        Threads 使用 Meta Graph API，與 Instagram 共享 token
+        API 文件：https://developers.facebook.com/docs/threads/insights
+        需要權限：threads_basic, threads_manage_insights
         """
-        # TODO: 實際 API 整合
+        import requests as req
+        
+        if not account or not account.access_token:
+            logger.info(f"Post {post.id}: 無 Threads 帳號或 token")
+            return self._generate_mock_metrics(post, "threads")
+        
+        if not post.platform_post_id:
+            logger.info(f"Post {post.id}: 無 platform_post_id，無法獲取成效")
+            return self._generate_mock_metrics(post, "threads")
+        
+        media_id = post.platform_post_id
+        GRAPH_API = "https://graph.threads.net/v1.0"
+        
+        try:
+            # 獲取 Threads 貼文的 insights
+            resp = req.get(
+                f"{GRAPH_API}/{media_id}/insights",
+                params={
+                    "metric": "views,likes,replies,reposts,quotes",
+                    "access_token": account.access_token
+                },
+                timeout=10
+            )
+            
+            views = 0
+            likes = 0
+            replies = 0
+            reposts = 0
+            quotes = 0
+            
+            if resp.status_code == 200:
+                data = resp.json()
+                for metric in data.get("data", []):
+                    name = metric.get("name", "")
+                    value = metric.get("values", [{}])[0].get("value", 0) if metric.get("values") else 0
+                    if name == "views":
+                        views = value
+                    elif name == "likes":
+                        likes = value
+                    elif name == "replies":
+                        replies = value
+                    elif name == "reposts":
+                        reposts = value
+                    elif name == "quotes":
+                        quotes = value
+            else:
+                # Fallback: 嘗試用 Meta Graph API（如果 Threads API 不可用）
+                FALLBACK_API = "https://graph.facebook.com/v18.0"
+                resp2 = req.get(
+                    f"{FALLBACK_API}/{media_id}",
+                    params={
+                        "fields": "like_count,replies_count",
+                        "access_token": account.access_token
+                    },
+                    timeout=10
+                )
+                if resp2.status_code == 200:
+                    fallback_data = resp2.json()
+                    likes = fallback_data.get("like_count", 0)
+                    replies = fallback_data.get("replies_count", 0)
+            
+            engagement_rate = 0
+            if views > 0:
+                engagement_rate = (likes + replies + reposts + quotes) / views
+            
+            return {
+                "impressions": views,
+                "reach": views,
+                "views": views,
+                "likes": likes,
+                "comments": replies,
+                "shares": reposts + quotes,
+                "saves": 0,
+                "clicks": 0,
+                "engagement_rate": engagement_rate,
+                "followers_gained": 0,
+                "followers_lost": 0,
+                "net_followers": 0,
+                "watch_time_seconds": 0,
+                "avg_watch_time_seconds": 0,
+                "video_completion_rate": 0,
+                "data_source": "threads_api",
+                "ga4_connected": True,
+                "note": None
+            }
+            
+        except Exception as e:
+            logger.error(f"Threads metrics fetch error for post {post.id}: {e}")
+        
         return self._generate_mock_metrics(post, "threads")
     
     # ============================================================
