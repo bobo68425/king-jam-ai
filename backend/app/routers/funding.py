@@ -67,6 +67,10 @@ class GenerateSalesCodesResponse(BaseModel):
 # ============================================================
 
 
+# 方案階級（用於募資兌換禁止降級檢查）
+PLAN_TIER_ORDER = {"free": 0, "basic": 1, "pro": 2, "enterprise": 3}
+
+
 def generate_sales_code(prefix: str = "KJ") -> str:
     """產生可讀的銷售碼，格式：KJ-XXX-XXXX"""
     chars = string.ascii_uppercase + string.digits
@@ -177,6 +181,22 @@ async def redeem_sales_code(
         SubscriptionPlan.plan_code == project.target_plan_code,
     ).first()
     plan_name = plan.name if plan else project.target_plan_code
+    
+    # 募資兌換不允許降級：若用戶已有較高方案且仍在有效期内，拒絕兌換較低方案
+    now = datetime.utcnow()
+    if (
+        current_user.subscription_expires_at
+        and current_user.subscription_expires_at > now
+    ):
+        current_plan = (current_user.subscription_plan or "free").lower()
+        new_plan = project.target_plan_code.lower()
+        current_tier = PLAN_TIER_ORDER.get(current_plan, 0)
+        new_tier = PLAN_TIER_ORDER.get(new_plan, 0)
+        if current_tier > new_tier:
+            return SalesCodeRedeemResponse(
+                success=False,
+                error="您目前訂閱方案較高，無法兌換此方案（募資兌換不允許降級）",
+            )
     
     # 產生訂單編號
     from app.services.payment_service import generate_order_no
