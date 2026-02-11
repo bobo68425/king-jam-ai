@@ -308,17 +308,17 @@ export default function PromptDetailPage() {
 
       {/* Main Content */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="bg-slate-800/50 border border-slate-700">
-          <TabsTrigger value="details" className="data-[state=active]:bg-violet-600">
-            <Code className="w-4 h-4 mr-2" />
+        <TabsList className="bg-slate-800/50 border border-slate-700 p-1.5 h-12 overflow-visible flex flex-nowrap">
+          <TabsTrigger value="details" className="data-[state=active]:bg-violet-600 data-[state=active]:text-white px-5 py-2.5 whitespace-nowrap gap-2 overflow-visible min-w-[8rem]">
+            <Code className="w-4 h-4 shrink-0" />
             模板內容
           </TabsTrigger>
-          <TabsTrigger value="versions" className="data-[state=active]:bg-violet-600">
-            <History className="w-4 h-4 mr-2" />
+          <TabsTrigger value="versions" className="data-[state=active]:bg-violet-600 data-[state=active]:text-white px-5 py-2.5 whitespace-nowrap gap-2 overflow-visible min-w-[8rem]">
+            <History className="w-4 h-4 shrink-0" />
             版本歷史
           </TabsTrigger>
-          <TabsTrigger value="test" className="data-[state=active]:bg-violet-600">
-            <Play className="w-4 h-4 mr-2" />
+          <TabsTrigger value="test" className="data-[state=active]:bg-violet-600 data-[state=active]:text-white px-5 py-2.5 whitespace-nowrap gap-2 overflow-visible min-w-[6rem]">
+            <Play className="w-4 h-4 shrink-0" />
             測試
           </TabsTrigger>
         </TabsList>

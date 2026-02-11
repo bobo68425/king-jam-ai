@@ -1565,32 +1565,35 @@ export default function InsightsPage() {
         }
         setActiveTab(v);
       }} className="space-y-6">
-        <TabsList className="bg-slate-800/50 border border-slate-700/50 p-1 h-11 w-full sm:w-auto">
-          <TabsTrigger value="overview" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white px-4 py-2 whitespace-nowrap gap-2">
-            <Activity className="w-4 h-4" />
+        <TabsList className="bg-slate-800/50 border border-slate-700/50 p-1.5 h-12 w-full sm:w-auto overflow-visible flex flex-nowrap">
+          <TabsTrigger 
+            value="overview" 
+            className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white px-5 py-2.5 whitespace-nowrap gap-2 overflow-visible min-w-[5.5rem]"
+          >
+            <Activity className="w-4 h-4 shrink-0" />
             <span>總覽</span>
           </TabsTrigger>
           <TabsTrigger 
             value="content" 
             className={cn(
-              "data-[state=active]:bg-indigo-600 data-[state=active]:text-white px-4 py-2 whitespace-nowrap gap-2",
+              "data-[state=active]:bg-indigo-600 data-[state=active]:text-white px-5 py-2.5 whitespace-nowrap gap-2 overflow-visible min-w-[8rem]",
               !hasFullAccess && "opacity-50"
             )}
           >
-            <PieChart className="w-4 h-4" />
+            <PieChart className="w-4 h-4 shrink-0" />
             <span>內容表現</span>
-            {!hasFullAccess && <Lock className="w-3 h-3 text-slate-500" />}
+            {!hasFullAccess && <Lock className="w-3.5 h-3.5 text-slate-500 shrink-0" />}
           </TabsTrigger>
           <TabsTrigger 
             value="traffic" 
             className={cn(
-              "data-[state=active]:bg-indigo-600 data-[state=active]:text-white px-4 py-2 whitespace-nowrap gap-2",
+              "data-[state=active]:bg-indigo-600 data-[state=active]:text-white px-5 py-2.5 whitespace-nowrap gap-2 overflow-visible min-w-[8rem]",
               !hasFullAccess && "opacity-50"
             )}
           >
-            <Globe className="w-4 h-4" />
+            <Globe className="w-4 h-4 shrink-0" />
             <span>流量分析</span>
-            {!hasFullAccess && <Lock className="w-3 h-3 text-slate-500" />}
+            {!hasFullAccess && <Lock className="w-3.5 h-3.5 text-slate-500 shrink-0" />}
           </TabsTrigger>
         </TabsList>
 

@@ -322,13 +322,13 @@ export default function PromptManagementPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-white">Prompt 管理中心</h1>
-            <p className="text-sm text-slate-400">管理與優化 AI 生成的提示詞模板</p>
+            <p className="text-sm text-slate-400 mt-0.5">管理與優化 AI 生成的提示詞模板</p>
           </div>
         </div>
 
         <Button
           onClick={() => router.push("/dashboard/admin/prompts/new")}
-          className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500"
+          className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 shrink-0"
         >
           <Plus className="w-4 h-4 mr-2" />
           新增 Prompt
@@ -336,23 +336,23 @@ export default function PromptManagementPage() {
       </div>
 
       {/* Filters */}
-      <Card className="bg-slate-900 border-slate-700">
-        <CardContent className="p-4">
+      <Card className="bg-slate-900/80 border-slate-700/80">
+        <CardContent className="p-4 sm:p-5">
           <div className="flex flex-col md:flex-row gap-4">
             {/* Search */}
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+            <div className="relative flex-1 min-w-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 shrink-0" />
               <Input
-                placeholder="搜尋 Prompt..."
+                placeholder="搜尋 Prompt 名稱、分類..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-10 bg-slate-800 border-slate-600 text-white"
+                className="pl-10 bg-slate-800 border-slate-600 text-white min-w-0"
               />
             </div>
 
             {/* Category Filter */}
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="w-full md:w-[180px] bg-slate-800 border-slate-600 text-white">
+              <SelectTrigger className="w-full md:w-[180px] bg-slate-800 border-slate-600 text-white shrink-0">
                 <SelectValue placeholder="所有分類" />
               </SelectTrigger>
               <SelectContent className="bg-slate-800 border-slate-600">
@@ -367,7 +367,7 @@ export default function PromptManagementPage() {
 
             {/* Type Filter */}
             <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="w-full md:w-[150px] bg-slate-800 border-slate-600 text-white">
+              <SelectTrigger className="w-full md:w-[150px] bg-slate-800 border-slate-600 text-white shrink-0">
                 <SelectValue placeholder="所有類型" />
               </SelectTrigger>
               <SelectContent className="bg-slate-800 border-slate-600">
@@ -389,14 +389,14 @@ export default function PromptManagementPage() {
           const count = prompts.filter(p => p.generation_type === type.id).length;
           const Icon = type.icon;
           return (
-            <Card key={type.id} className="bg-slate-800/50 border-slate-700">
+            <Card key={type.id} className="bg-slate-800/50 border-slate-700 hover:border-slate-600 transition-colors">
               <CardContent className="p-4 flex items-center gap-3">
-                <div className={cn("p-2 rounded-lg bg-slate-700/50")}>
+                <div className={cn("p-2 rounded-lg bg-slate-700/50 shrink-0")}>
                   <Icon className={cn("w-5 h-5", type.color)} />
                 </div>
-                <div>
-                  <p className="text-2xl font-bold text-white">{count}</p>
-                  <p className="text-xs text-slate-400">{type.name}</p>
+                <div className="min-w-0">
+                  <p className="text-2xl font-bold text-white tabular-nums">{count}</p>
+                  <p className="text-xs text-slate-400 truncate">{type.name}</p>
                 </div>
               </CardContent>
             </Card>
@@ -410,11 +410,13 @@ export default function PromptManagementPage() {
           <Loader2 className="w-8 h-8 animate-spin text-violet-500" />
         </div>
       ) : prompts.length === 0 ? (
-        <Card className="bg-slate-900 border-slate-700">
-          <CardContent className="py-16 text-center">
-            <Sparkles className="w-12 h-12 mx-auto mb-4 text-slate-600" />
-            <h3 className="text-lg font-medium text-slate-300 mb-2">尚無 Prompt</h3>
-            <p className="text-slate-500 mb-4">建立您的第一個 Prompt 模板</p>
+        <Card className="bg-slate-900/80 border-slate-700">
+          <CardContent className="py-16 px-4 text-center">
+            <div className="inline-flex p-4 rounded-2xl bg-violet-500/10 border border-violet-500/20 mb-4">
+              <Sparkles className="w-12 h-12 text-violet-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-white mb-2">尚無 Prompt</h3>
+            <p className="text-slate-400 mb-6 max-w-sm mx-auto">建立您的第一個提示詞模板，供文案、圖片、影片等生成使用</p>
             <Button
               onClick={() => router.push("/dashboard/admin/prompts/new")}
               className="bg-violet-600 hover:bg-violet-500"
