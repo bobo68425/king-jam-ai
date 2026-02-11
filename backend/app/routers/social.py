@@ -150,7 +150,7 @@ async def analyze_reference_image(image_base64: str, content_type: str = "image/
         return ""
 
 
-async def generate_image_with_gemini(topic: str, quality: str, tone: str, platform: str = "instagram", reference_image_base64: Optional[str] = None, image_prompt: Optional[str] = None) -> str:
+async def generate_image_with_gemini(topic: str, quality: str, tone: str, platform: str = "instagram", reference_image_base64: Optional[str] = None, image_prompt: Optional[str] = None, image_style_type: Optional[str] = None) -> str:
     """使用 Gemini/Imagen API 生成圖片"""
     from urllib.parse import quote
 
@@ -161,6 +161,7 @@ async def generate_image_with_gemini(topic: str, quality: str, tone: str, platfo
     style = TONE_STYLES.get(tone, TONE_STYLES["engaging"])
     platform_info = PLATFORM_CONFIG.get(platform, PLATFORM_CONFIG["instagram"])
     config = QUALITY_CONFIG.get(quality, QUALITY_CONFIG["standard"])
+    visual_style_type = image_style_type or "真實攝影"
 
     # 構建視覺描述 - 優化 prompt 結構
     if image_prompt and image_prompt.strip():
@@ -168,19 +169,11 @@ async def generate_image_with_gemini(topic: str, quality: str, tone: str, platfo
     else:
         visual_desc = f"Professional photograph of {topic}"
     
-    # 構建優化的 prompt - 強調真實感，禁止文字，去除 AI 感
-    prompt = f"""[ABSOLUTE CRITICAL - ZERO TEXT RULE]:
-⛔ DO NOT include ANY text, words, letters, characters anywhere in the image.
-⛔ NO Chinese text (中文/漢字/繁體/簡體) - absolutely forbidden.
-⛔ NO English, NO Japanese, NO Korean, NO text in ANY language.
-⛔ NO numbers, logos, watermarks, captions, labels, signs.
-⛔ PURE VISUAL ONLY - if any text appears, the image will be rejected.
-
+    # 依視覺風格類型決定真實感或風格化描述
+    if visual_style_type == "真實攝影":
+        auth_block = """
 [AUTHENTICITY RULE]:
 This must look like a REAL photograph, NOT AI generated, NOT CGI, NOT 3D render.
-
-═══ VISUAL SUBJECT ═══
-{visual_desc}
 
 ═══ AUTHENTICITY (CRITICAL) ═══
 - Shot by professional human photographer on high-end camera
@@ -188,6 +181,23 @@ This must look like a REAL photograph, NOT AI generated, NOT CGI, NOT 3D render.
 - Genuine lighting with natural falloff and shadows
 - Real textures, organic materials, authentic atmosphere
 - NOT artificial, NOT synthetic, NOT computer generated
+"""
+    else:
+        auth_block = f"""
+[VISUAL STYLE TYPE]: {visual_style_type}
+Apply this style consistently across the entire image (e.g. CGI, 3D render, illustration, cartoon, anime, painting style). High quality, detailed, cohesive.
+"""
+
+    # 構建優化的 prompt - 強調真實感或指定風格，禁止文字
+    prompt = f"""[ABSOLUTE CRITICAL - ZERO TEXT RULE]:
+⛔ DO NOT include ANY text, words, letters, characters anywhere in the image.
+⛔ NO Chinese text (中文/漢字/繁體/簡體) - absolutely forbidden.
+⛔ NO English, NO Japanese, NO Korean, NO text in ANY language.
+⛔ NO numbers, logos, watermarks, captions, labels, signs.
+⛔ PURE VISUAL ONLY - if any text appears, the image will be rejected.
+{auth_block}
+═══ VISUAL SUBJECT ═══
+{visual_desc}
 
 ═══ STYLE DIRECTION ═══
 Mood: {style['mood']}
@@ -211,7 +221,7 @@ Quality: {config['quality']}, shot on Hasselblad / Sony A7R V
 - AI generated look, synthetic appearance, plastic textures
 - Overly smooth, unnaturally perfect, uncanny valley
 - Hyper-saturated colors, HDR artifacts, over-processed
-- CGI look, 3D render appearance, video game graphics
+- CGI look, 3D render appearance, video game graphics (unless visual style type is explicitly CGI/3D/illustration/cartoon/anime/painting)
 """
 
     try:
@@ -483,6 +493,7 @@ async def generate_social_post(
     image_prompt: Optional[str] = Form(None),
     product_info: Optional[str] = Form(None),
     reference_image: Optional[UploadFile] = File(None),
+    image_style_type: Optional[str] = Form("真實攝影"),  # 視覺風格類型：真實攝影、CGI、3D 渲染、插圖、卡通、動漫等
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -550,7 +561,7 @@ async def generate_social_post(
     error_msg = None
     
     try:
-        image_url = await generate_image_with_gemini(topic, image_quality, tone, platform, reference_image_base64, final_image_prompt)
+        image_url = await generate_image_with_gemini(topic, image_quality, tone, platform, reference_image_base64, final_image_prompt, image_style_type=image_style_type)
         caption = await generate_caption_with_gemini(topic, platform, tone, image_quality, keywords, product_info, db=db, user=current_user)
     except Exception as e:
         print(f"Generation error: {e}")
@@ -575,6 +586,7 @@ async def generate_social_post(
             "tone": tone,
             "keywords": keywords,
             "has_reference": bool(reference_image_base64),
+            "image_style_type": image_style_type,
         },
         output_data={
             "image_url": image_url,

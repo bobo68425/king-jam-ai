@@ -159,6 +159,22 @@ const COST_TABLE = {
   premium: 50
 };
 
+// 視覺風格類型（圖片生成）
+const IMAGE_STYLE_TYPE_OPTIONS = [
+  "真實攝影",
+  "電腦生成圖像 (CGI)",
+  "3D 渲染",
+  "插圖",
+  "卡通",
+  "動漫",
+  "繪畫風格",
+  "電影感",
+  "扁平設計",
+  "水彩",
+  "油畫",
+  "素描",
+];
+
 // 歷史記錄（從 API 載入）
 interface SocialHistoryRecord {
   id: number;  // API 返回的是數字 ID
@@ -1942,6 +1958,7 @@ export default function SocialPage() {
   // 新增的自填欄位
   const [keywords, setKeywords] = useState(""); // 貼文關鍵詞
   const [imagePrompt, setImagePrompt] = useState(""); // 圖片提示詞
+  const [imageStyleType, setImageStyleType] = useState("真實攝影"); // 視覺風格類型
   const [productInfo, setProductInfo] = useState(""); // 商品資訊
   
   // 生成結果 - 支持多圖
@@ -2665,6 +2682,7 @@ export default function SocialPage() {
       if (imagePrompt.trim()) {
         formData.append('image_prompt', imagePrompt.trim());
       }
+      formData.append('image_style_type', imageStyleType);
       if (productInfo.trim()) {
         formData.append('product_info', productInfo.trim());
       }
@@ -3042,6 +3060,24 @@ export default function SocialPage() {
               <p className="text-xs text-muted-foreground">
                 輸入關鍵詞，讓 AI 在文案中重點強調這些元素
               </p>
+            </div>
+
+            {/* 視覺風格類型 */}
+            <div className="space-y-2">
+              <Label>視覺風格類型</Label>
+              <Select value={imageStyleType} onValueChange={setImageStyleType}>
+                <SelectTrigger className="w-full bg-slate-800 border-slate-600 text-white">
+                  <SelectValue placeholder="選擇風格" />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-600 max-h-[280px]">
+                  {IMAGE_STYLE_TYPE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt} value={opt} className="text-white hover:bg-slate-700 focus:bg-slate-700">
+                      {opt}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">如：真實攝影、CGI、3D 渲染、插圖、卡通、動漫、繪畫風格等</p>
             </div>
 
             {/* 圖片提示詞 */}

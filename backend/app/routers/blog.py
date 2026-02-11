@@ -470,7 +470,8 @@ async def generate_blog_cover(
     style: str, 
     quality: str, 
     custom_prompt: Optional[str] = None,
-    reference_analysis: Optional[str] = None
+    reference_analysis: Optional[str] = None,
+    image_style_type: Optional[str] = None,
 ) -> tuple[str, str]:
     """生成部落格封面圖片 - 智能適應主題風格"""
     from urllib.parse import quote
@@ -533,6 +534,7 @@ CRITICAL: The image must be visually distinctive and directly related to the spe
     composition = ai_visual.get('composition', style_config['composition']) if ai_visual else style_config['composition']
     texture = style_config.get('texture', 'smooth with subtle details')
     cinematic = style_config.get('cinematic', '')
+    image_style_type = image_style_type or "真實攝影"
     
     # 構建電影級渲染提示（如果有）
     cinematic_section = ""
@@ -579,6 +581,7 @@ INSTEAD, create:
 {SD_QUALITY_BOOSTERS}
 {faith_instructions}
 === VISUAL DESIGN ===
+VISUAL STYLE TYPE: {image_style_type} (apply consistently: e.g. 真實攝影 / 電腦生成圖像 CGI / 3D 渲染 / 插圖 / 卡通 / 動漫 / 繪畫風格 / 電影感 / 扁平設計 / 水彩 / 油畫 / 素描)
 MOOD & ATMOSPHERE: {mood}
 COLOR PALETTE: {colors}
 LIGHTING DESIGN: {lighting}
@@ -811,6 +814,7 @@ async def generate_blog_image(
     custom_prompt: Optional[str] = Form(None),
     reference_image: Optional[UploadFile] = File(None),
     post_id: Optional[int] = Form(None),  # 可選的文章 ID，用於自動更新封面
+    image_style_type: Optional[str] = Form("真實攝影"),  # 視覺風格類型：真實攝影、CGI、3D 渲染、插圖、卡通、動漫、繪畫風格等
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -862,7 +866,8 @@ async def generate_blog_image(
             style,
             quality,
             custom_prompt,
-            reference_analysis
+            reference_analysis,
+            image_style_type=image_style_type,
         )
         generation_duration = int((time.time() - start_time) * 1000)
         
@@ -877,6 +882,7 @@ async def generate_blog_image(
                 "quality": quality,
                 "custom_prompt": custom_prompt,
                 "has_reference": bool(reference_image),
+                "image_style_type": image_style_type,
             },
             output_data={
                 "image_url": image_url,

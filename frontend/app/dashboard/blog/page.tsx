@@ -86,6 +86,22 @@ const IMAGE_QUALITY_OPTIONS = [
   { value: "premium", label: "💎 高級", cost: 20 },
 ];
 
+// 視覺風格類型（封面圖 / 圖片生成）
+const IMAGE_STYLE_TYPE_OPTIONS = [
+  "真實攝影",
+  "電腦生成圖像 (CGI)",
+  "3D 渲染",
+  "插圖",
+  "卡通",
+  "動漫",
+  "繪畫風格",
+  "電影感",
+  "扁平設計",
+  "水彩",
+  "油畫",
+  "素描",
+];
+
 // 快速提示詞模板 - 分類組織
 const QUICK_PROMPT_CATEGORIES = [
   {
@@ -234,6 +250,7 @@ export default function BlogPage() {
   // 圖片生成狀態
   const [imageLoading, setImageLoading] = useState(false);
   const [imageQuality, setImageQuality] = useState("standard");
+  const [imageStyleType, setImageStyleType] = useState("真實攝影");
   const [customPrompt, setCustomPrompt] = useState("");
   const [showImageOptions, setShowImageOptions] = useState(false);
   const [imageSourceMode, setImageSourceMode] = useState<"upload" | "generate">("generate");
@@ -831,6 +848,7 @@ export default function BlogPage() {
       formData.append('topic', targetTitle);
       formData.append('style', tone);
       formData.append('quality', imageQuality);
+      formData.append('image_style_type', imageStyleType);
       if (customPrompt.trim()) {
         formData.append('custom_prompt', customPrompt.trim());
       }
@@ -913,6 +931,7 @@ export default function BlogPage() {
       formData.append('topic', res.data.title);
       formData.append('style', tone);
       formData.append('quality', imageQuality);
+      formData.append('image_style_type', imageStyleType);
       // 傳送文章 ID，讓後端自動更新封面圖片
       formData.append('post_id', String(res.data.id));
       // customPrompt 為空，不傳送，讓後端智能生成
@@ -1751,6 +1770,24 @@ export default function BlogPage() {
                                   </label>
                                 </div>
                               )}
+                            </div>
+
+                            {/* 視覺風格類型 */}
+                            <div>
+                              <label className="text-xs text-slate-400 mb-1.5 block">視覺風格類型</label>
+                              <Select value={imageStyleType} onValueChange={setImageStyleType}>
+                                <SelectTrigger className="bg-slate-800 border-slate-600 text-white h-9">
+                                  <SelectValue placeholder="選擇風格" />
+                                </SelectTrigger>
+                                <SelectContent className="bg-slate-800 border-slate-600 max-h-[280px]">
+                                  {IMAGE_STYLE_TYPE_OPTIONS.map(opt => (
+                                    <SelectItem key={opt} value={opt} className="text-white hover:bg-slate-700 focus:bg-slate-700">
+                                      {opt}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <p className="text-[10px] text-slate-500 mt-1">如：真實攝影、CGI、3D 渲染、插圖、卡通、動漫、繪畫風格等</p>
                             </div>
 
                             {/* 品質選擇與生成按鈕 */}

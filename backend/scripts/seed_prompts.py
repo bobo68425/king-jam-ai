@@ -126,6 +126,7 @@ SEED_PROMPTS = [
 {{style_instructions}}
 
 === VISUAL DESIGN ===
+VISUAL STYLE TYPE: {{image_style_type}} (e.g. 電腦生成圖像 CGI, 3D 渲染, 插圖, 卡通, 動漫, 繪畫風格 — apply consistently)
 MOOD & ATMOSPHERE: {{mood}}
 COLOR PALETTE: {{colors}}
 LIGHTING DESIGN: {{lighting}}
@@ -163,6 +164,7 @@ uncanny valley, unrealistic, CGI look, 3D render appearance""",
         "variables": [
             {"name": "topic", "label": "主題", "type": "text", "required": True},
             {"name": "visual_description", "label": "視覺描述", "type": "textarea", "required": True},
+            {"name": "image_style_type", "label": "視覺風格類型", "type": "select", "required": False, "default": "真實攝影", "options": ["真實攝影", "電腦生成圖像 (CGI)", "3D 渲染", "插圖", "卡通", "動漫", "繪畫風格", "電影感", "扁平設計", "水彩", "油畫", "素描"]},
             {"name": "mood", "label": "氛圍", "type": "text", "required": False, "default": "professional, inspiring"},
             {"name": "colors", "label": "色彩", "type": "text", "required": False, "default": "warm earth tones"},
             {"name": "lighting", "label": "燈光", "type": "text", "required": False, "default": "soft natural light"},
@@ -201,18 +203,15 @@ uncanny valley, unrealistic, CGI look, 3D render appearance""",
 ⛔ NO numbers, logos, watermarks, captions, labels, signs.
 ⛔ PURE VISUAL ONLY - if any text appears, the image will be rejected.
 
-[AUTHENTICITY RULE]:
-This must look like a REAL photograph, NOT AI generated, NOT CGI, NOT 3D render.
+[VISUAL STYLE]:
+視覺風格類型：{{image_style_type}}。若為「真實攝影」則追求真實相機質感；若為電腦生成圖像 (CGI)、3D 渲染、插圖、卡通、動漫、繪畫風格等，則整體一致呈現該風格。
 
 ═══ VISUAL SUBJECT ═══
 {{visual_description}}
 
-═══ AUTHENTICITY (CRITICAL) ═══
-- Shot by professional human photographer on high-end camera
-- Natural film grain and subtle lens imperfections
-- Genuine lighting with natural falloff and shadows
-- Real textures, organic materials, authentic atmosphere
-- NOT artificial, NOT synthetic, NOT computer generated
+═══ AUTHENTICITY / STYLE (CRITICAL) ═══
+- 當選擇「真實攝影」：Shot by professional human photographer, natural film grain, genuine lighting, real textures. NOT CGI, NOT 3D render.
+- 當選擇其他風格（CGI、3D、插圖、卡通、動漫、繪畫等）：整體視覺一致呈現該風格，高品質、細節豐富。
 
 ═══ STYLE DIRECTION ═══
 Mood: {{mood}}
@@ -247,6 +246,7 @@ oversaturated, HDR, over-processed, blurry, low quality""",
         },
         "variables": [
             {"name": "visual_description", "label": "視覺描述", "type": "textarea", "required": True, "placeholder": "描述圖片主題和內容"},
+            {"name": "image_style_type", "label": "視覺風格類型", "type": "select", "required": False, "default": "真實攝影", "options": ["真實攝影", "電腦生成圖像 (CGI)", "3D 渲染", "插圖", "卡通", "動漫", "繪畫風格", "電影感", "扁平設計", "水彩", "油畫", "素描"]},
             {"name": "mood", "label": "氛圍", "type": "text", "required": False, "default": "engaging, vibrant"},
             {"name": "colors", "label": "色彩", "type": "text", "required": False, "default": "warm, inviting"},
             {"name": "lighting", "label": "燈光", "type": "text", "required": False, "default": "soft natural daylight"},
@@ -469,6 +469,7 @@ VISUAL DIRECTION
 ═══════════════════════════════════════════════════════════════
 
 SCENE AESTHETIC:
+Visual style type: {{visual_style_type}} (e.g. 真實攝影, 電腦生成圖像 CGI, 3D 渲染, 插圖, 卡通, 動漫, 繪畫風格 — apply consistently to every frame)
 {{visual_style}}
 Overall mood: {{style}}, premium commercial production quality
 Art direction reference: {{style_reference}}
@@ -566,6 +567,7 @@ shaky camera, jitter, out of focus, poor quality, flickering""",
         "variables": [
             {"name": "camera_move", "label": "鏡頭運動", "type": "select", "required": True, "options": ["Slow dolly in", "Smooth tracking", "Crane shot", "Orbit around", "Static with subtle motion", "Handheld intimate", "Steadicam follow"]},
             {"name": "main_subject", "label": "主體描述", "type": "textarea", "required": True},
+            {"name": "visual_style_type", "label": "視覺風格類型", "type": "select", "required": False, "default": "電影感", "options": ["真實攝影", "電腦生成圖像 (CGI)", "3D 渲染", "插圖", "卡通", "動漫", "繪畫風格", "電影感", "扁平設計", "水彩", "油畫", "素描"]},
             {"name": "visual_style", "label": "視覺風格", "type": "textarea", "required": True},
             {"name": "style", "label": "整體風格", "type": "text", "required": False, "default": "cinematic, premium"},
             {"name": "style_reference", "label": "風格參考", "type": "text", "required": False, "default": "Apple commercial, high fashion editorial"},
