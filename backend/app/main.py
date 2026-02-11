@@ -143,7 +143,7 @@ def _auto_init_db():
             INSERT INTO subscription_plans (plan_code, name, tier, price_monthly, monthly_credits, features, is_popular, sort_order, is_active, description)
             VALUES
                 ('free',       '免費版', 'free',        0,    0, '["註冊贈送 100 點","基本 AI 文章生成","社群圖文設計","洞察引擎（僅 WordPress）"]',                          FALSE, 0, TRUE, '適合個人嘗試體驗'),
-                ('basic',      '入門版', 'basic',     299,  200, '["每月 200 點","基本功能無廣告","AI 文章生成","社群圖文設計","單平台發布","洞察引擎（僅 WordPress）","Email 客服支援"]',       FALSE, 1, TRUE, '適合輕度使用者'),
+                ('basic',      '入門版', 'basic',     299,  300, '["每月 300 點","基本功能無廣告","AI 文章生成","社群圖文設計","單平台發布","洞察引擎（僅 WordPress）","Email 客服支援"]',       FALSE, 1, TRUE, '適合輕度使用者'),
                 ('pro',        '專業版', 'pro',       699, 1000, '["每月 1,000 點","全部 AI 功能解鎖","完整成效洞察引擎","GA4 流量分析整合","AI 短影片生成","智能排程發布","多平台同步","優先客服支援"]', TRUE,  2, TRUE, '適合自媒體創作者'),
                 ('enterprise', '企業版', 'enterprise',3699, 5000, '["每月 5,000 點","全部專業版功能","完整成效洞察引擎","API 存取權限","團隊協作功能","專屬客戶經理","客製化需求","優先技術支援","SLA 保證"]', FALSE, 3, TRUE, '適合品牌與團隊')
             ON CONFLICT (plan_code) DO NOTHING;
@@ -157,9 +157,9 @@ def _auto_init_db():
             WHERE plan_code IN ('basic','pro','enterprise') AND (price_yearly IS NULL OR yearly_discount_percent IS NULL);
         """))
         db.commit()
-        # 入門版點數：確保 basic 為 200 點
+        # 入門版點數：確保 basic 為 300 點
         db.execute(text("""
-            UPDATE subscription_plans SET monthly_credits = 200
+            UPDATE subscription_plans SET monthly_credits = 300
             WHERE plan_code = 'basic';
         """))
         db.commit()
@@ -399,7 +399,7 @@ def init_db_endpoint():
             INSERT INTO subscription_plans (plan_code, name, tier, price_monthly, monthly_credits, features, is_popular, sort_order, is_active, description)
             VALUES
                 ('free',       '免費版', 'free',        0,    0, '["註冊贈送 100 點","基本 AI 文章生成","社群圖文設計","洞察引擎（僅 WordPress）"]',                          FALSE, 0, TRUE, '適合個人嘗試體驗'),
-                ('basic',      '入門版', 'basic',     299,  200, '["每月 200 點","基本功能無廣告","AI 文章生成","社群圖文設計","單平台發布","洞察引擎（僅 WordPress）","Email 客服支援"]',       FALSE, 1, TRUE, '適合輕度使用者'),
+                ('basic',      '入門版', 'basic',     299,  300, '["每月 300 點","基本功能無廣告","AI 文章生成","社群圖文設計","單平台發布","洞察引擎（僅 WordPress）","Email 客服支援"]',       FALSE, 1, TRUE, '適合輕度使用者'),
                 ('pro',        '專業版', 'pro',       699, 1000, '["每月 1,000 點","全部 AI 功能解鎖","完整成效洞察引擎","GA4 流量分析整合","AI 短影片生成","智能排程發布","多平台同步","優先客服支援"]', TRUE,  2, TRUE, '適合自媒體創作者'),
                 ('enterprise', '企業版', 'enterprise',3699, 5000, '["每月 5,000 點","全部專業版功能","完整成效洞察引擎","API 存取權限","團隊協作功能","專屬客戶經理","客製化需求","優先技術支援","SLA 保證"]', FALSE, 3, TRUE, '適合品牌與團隊')
             ON CONFLICT (plan_code) DO NOTHING;
@@ -412,7 +412,7 @@ def init_db_endpoint():
             SET price_yearly = ROUND(price_monthly * 12 * 0.8, 0), yearly_discount_percent = 20
             WHERE plan_code IN ('basic','pro','enterprise') AND (price_yearly IS NULL OR yearly_discount_percent IS NULL);
         """))
-        db.execute(text("UPDATE subscription_plans SET monthly_credits = 200 WHERE plan_code = 'basic';"))
+        db.execute(text("UPDATE subscription_plans SET monthly_credits = 300 WHERE plan_code = 'basic';"))
         db.commit()
         results.append("yearly prices ok")
 

@@ -78,9 +78,9 @@ const PLANS = [
     priceYearly: yearlyPrice(299),
     period: "每月",
     description: "適合輕度使用者",
-    monthlyCredits: 200,
+    monthlyCredits: 300,
     features: [
-      { text: "每月 200 點", included: true },
+      { text: "每月 300 點", included: true },
       { text: "基本功能無廣告", included: true },
       { text: "AI 文章生成", included: true },
       { text: "社群圖文設計", included: true },

@@ -524,7 +524,7 @@ function PricingSection() {
       period: "每月",
       description: "適合輕度使用者",
       features: [
-        "每月 200 點",
+        "每月 300 點",
         "基本功能無廣告",
         "AI 文章生成",
         "社群圖文設計",

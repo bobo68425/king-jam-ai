@@ -399,7 +399,7 @@ class ReferralService:
         
         # 發放訂閱月費點數
         monthly_credits = {
-            "basic": 200,
+            "basic": 300,
             "pro": 800,
             "enterprise": 5000,
         }.get(subscription_plan, 0)
