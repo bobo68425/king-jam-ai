@@ -310,6 +310,21 @@ def login(
     # 登入成功，清除失敗記錄
     login_rate_limiter.clear_failed_login(form_data.username)
     
+    # 執行詐騙偵測（記錄 IP、評估風險，主登入無 fingerprint 僅記錄 IP）
+    try:
+        from app.services.fraud_detection import get_fraud_detection_service
+        fraud_service = get_fraud_detection_service(db)
+        fraud_service.record_login(
+            user_id=user.id,
+            ip_address=client_ip,
+            fingerprint=None,
+            fingerprint_data=None,
+            user_agent=request.headers.get("user-agent") if request else None,
+        )
+    except Exception as e:
+        logger.error(f"[Auth] 詐騙偵測錯誤: {e}")
+        # 詐騙偵測失敗不影響登入
+    
     # 產生 Token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(

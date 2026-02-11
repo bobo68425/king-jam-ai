@@ -1,10 +1,21 @@
 import os
+import logging
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from datetime import timedelta
 
 from app.database import get_db
+
+logger = logging.getLogger(__name__)
+
+
+def get_client_ip(request: Request) -> str:
+    """從 Request 取得客戶端 IP"""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "0.0.0.0"
 from app.models import User
 from app.schemas import Token, SocialLoginRequest
 from app.core.security import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
@@ -97,7 +108,7 @@ def get_or_create_social_user(db: Session, email: str, full_name: str, provider:
 
 # --- 1. Google Login ---
 @router.post("/google", response_model=Token)
-async def google_login(request: SocialLoginRequest, db: Session = Depends(get_db)):
+async def google_login(request: SocialLoginRequest, req: Request, db: Session = Depends(get_db)):
     # 1. 用 Code 換 Token
     token_url = "https://oauth2.googleapis.com/token"
     data = {
@@ -135,13 +146,27 @@ async def google_login(request: SocialLoginRequest, db: Session = Depends(get_db
         avatar_url=user_info.get("picture")  # Google 頭像
     )
     
+    # 詐騙偵測（記錄 IP）
+    try:
+        from app.services.fraud_detection import get_fraud_detection_service
+        fraud_service = get_fraud_detection_service(db)
+        fraud_service.record_login(
+            user_id=user.id,
+            ip_address=get_client_ip(req),
+            fingerprint=None,
+            fingerprint_data=None,
+            user_agent=req.headers.get("user-agent"),
+        )
+    except Exception as e:
+        logger.error(f"[SocialAuth] 詐騙偵測錯誤: {e}")
+    
     # 4. 發放我們的 JWT
     access_token = create_access_token(data={"sub": user.email}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     return {"access_token": access_token, "token_type": "bearer"}
 
 # --- 2. LINE Login ---
 @router.post("/line", response_model=Token)
-async def line_login(request: SocialLoginRequest, db: Session = Depends(get_db)):
+async def line_login(request: SocialLoginRequest, req: Request, db: Session = Depends(get_db)):
     # 注意：LINE 需要在開發者後台申請「OpenID Connect」權限才有 Email
     token_url = "https://api.line.me/oauth2/v2.1/token"
     headers = {'Content-Type': 'application/x-www-form-urlencoded'}
@@ -184,12 +209,26 @@ async def line_login(request: SocialLoginRequest, db: Session = Depends(get_db))
         social_id=user_info.get("sub") # LINE 的 User ID 是 'sub'
     )
     
+    # 詐騙偵測（記錄 IP）
+    try:
+        from app.services.fraud_detection import get_fraud_detection_service
+        fraud_service = get_fraud_detection_service(db)
+        fraud_service.record_login(
+            user_id=user.id,
+            ip_address=get_client_ip(req),
+            fingerprint=None,
+            fingerprint_data=None,
+            user_agent=req.headers.get("user-agent"),
+        )
+    except Exception as e:
+        logger.error(f"[SocialAuth] 詐騙偵測錯誤: {e}")
+    
     access_token = create_access_token(data={"sub": user.email}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     return {"access_token": access_token, "token_type": "bearer"}
 
 # --- 3. Facebook Login ---
 @router.post("/facebook", response_model=Token)
-async def facebook_login(request: SocialLoginRequest, db: Session = Depends(get_db)):
+async def facebook_login(request: SocialLoginRequest, req: Request, db: Session = Depends(get_db)):
     token_url = "https://graph.facebook.com/v19.0/oauth/access_token"
     
     async with httpx.AsyncClient() as client:
@@ -233,6 +272,20 @@ async def facebook_login(request: SocialLoginRequest, db: Session = Depends(get_
         social_id=user_info.get("id"),
         avatar_url=avatar_url
     )
+
+    # 詐騙偵測（記錄 IP）
+    try:
+        from app.services.fraud_detection import get_fraud_detection_service
+        fraud_service = get_fraud_detection_service(db)
+        fraud_service.record_login(
+            user_id=user.id,
+            ip_address=get_client_ip(req),
+            fingerprint=None,
+            fingerprint_data=None,
+            user_agent=req.headers.get("user-agent"),
+        )
+    except Exception as e:
+        logger.error(f"[SocialAuth] 詐騙偵測錯誤: {e}")
 
     access_token = create_access_token(data={"sub": user.email}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     return {"access_token": access_token, "token_type": "bearer"}
