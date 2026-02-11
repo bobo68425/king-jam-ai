@@ -181,17 +181,34 @@ class SharedGalleryService {
     }
   ): Promise<SharedImage> {
     try {
-      // 檢查是否已存在相同來源的圖片（避免重複）
+      const { width, height } = await getImageDimensions(dataUrl);
+      const thumbnail = await generateThumbnail(dataUrl);
+      
+      // 若已存在相同 sourceId，更新為最新圖片（解決重新生成後點擊編輯仍顯示舊圖的問題）
       if (options.sourceId) {
         const existing = await this.getImageBySourceId(options.source, options.sourceId);
         if (existing) {
-          console.log(`[SharedGallery] 圖片已存在: ${options.sourceId}`);
-          return existing;
+          const base64Length = dataUrl.split(',')[1]?.length || 0;
+          const size = Math.round((base64Length * 3) / 4);
+          const mimeMatch = dataUrl.match(/data:([^;]+);/);
+          const mimeType = mimeMatch?.[1] || 'image/png';
+          const now = new Date();
+          await getDB().images.update(existing.id, {
+            name: options.name || existing.name,
+            dataUrl,
+            thumbnail,
+            width,
+            height,
+            mimeType,
+            size,
+            metadata: options.metadata ?? existing.metadata,
+            updatedAt: now,
+          });
+          const updated = await getDB().images.get(existing.id);
+          console.log(`[SharedGallery] 已更新圖片: ${options.sourceId}`);
+          return updated!;
         }
       }
-
-      const { width, height } = await getImageDimensions(dataUrl);
-      const thumbnail = await generateThumbnail(dataUrl);
       
       // 計算大小
       const base64Length = dataUrl.split(',')[1]?.length || 0;
