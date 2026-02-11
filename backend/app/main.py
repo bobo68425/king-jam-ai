@@ -308,6 +308,25 @@ def _auto_init_db():
         db.commit()
         print("[Startup] ✅ funding_projects / funding_tiers / sales_codes 表已初始化")
 
+        # 募資專案種子資料（若尚無專案則寫入）
+        from app.models import FundingProject, FundingTier
+        if db.query(FundingProject).count() == 0:
+            FUNDING_DATA = [
+                ("blogger", "部落客專案", "適合部落格寫作者", "basic", 6, [("super_early_bird", "超早鳥", 999, 1794), ("early_bird", "早鳥", 1299, 1794)]),
+                ("self_media", "自媒體專案", "適合社群、影音創作者", "pro", 6, [("super_early_bird", "超早鳥", 2999, 4194), ("early_bird", "早鳥", 3499, 4194)]),
+                ("super_editor", "超級小編專案", "適合一人多工小編", "pro", 6, [("super_early_bird", "超早鳥", 2999, 4194), ("early_bird", "早鳥", 3499, 4194)]),
+                ("startup_boss", "新創老闆專案", "適合新創團隊", "enterprise", 6, [("super_early_bird", "超早鳥", 14999, 22194), ("early_bird", "早鳥", 18999, 22194)]),
+            ]
+            for sort, (code, name, desc, plan, months, tiers) in enumerate(FUNDING_DATA, 1):
+                p = FundingProject(project_code=code, name=name, description=desc, target_plan_code=plan, subscription_months=months, sort_order=sort)
+                db.add(p)
+                db.flush()
+                for j, (tcode, tname, price, orig) in enumerate(tiers, 1):
+                    t = FundingTier(project_id=p.id, tier_code=tcode, tier_name=tname, fundraising_price_twd=price, original_price_twd=orig, sort_order=j)
+                    db.add(t)
+            db.commit()
+            print("[Startup] ✅ 募資專案種子資料已寫入")
+
         # ── 5. users 表: 預付訂閱欄位（募資按月發放）
         db.execute(text("""
             DO $$

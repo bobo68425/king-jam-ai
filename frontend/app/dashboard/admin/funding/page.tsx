@@ -48,6 +48,7 @@ export default function AdminFundingPage() {
   const [projects, setProjects] = useState<FundingProject[]>([]);
   const [salesCodes, setSalesCodes] = useState<SalesCodeItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [generatingTierId, setGeneratingTierId] = useState<number | null>(null);
   const [generateCount, setGenerateCount] = useState(10);
@@ -58,6 +59,8 @@ export default function AdminFundingPage() {
   const [codesFilter, setCodesFilter] = useState<{ tier_id?: number; status?: string }>({});
 
   const fetchData = async () => {
+    setFetchError(false);
+    setLoading(true);
     try {
       const [projectsRes, codesRes] = await Promise.all([
         api.get("/admin/funding/projects"),
@@ -69,7 +72,8 @@ export default function AdminFundingPage() {
       setSalesCodes(codesRes.data.codes || []);
     } catch (err) {
       console.error(err);
-      toast.error("載入失敗");
+      setFetchError(true);
+      toast.error("載入失敗，請確認管理員權限後重新載入");
     } finally {
       setLoading(false);
     }
@@ -185,12 +189,16 @@ export default function AdminFundingPage() {
 
           {/* 專案列表 */}
           <div className="space-y-4">
-            {projects.length === 0 ? (
+            {fetchError ? (
+              <div className="text-center py-8">
+                <p className="text-amber-400 mb-3">載入失敗，請確認您有管理員權限</p>
+                <Button variant="outline" onClick={fetchData} className="border-amber-500/50 text-amber-400">
+                  重新載入
+                </Button>
+              </div>
+            ) : projects.length === 0 ? (
               <p className="text-slate-500 py-8 text-center">
-                尚無募資專案，請執行後端種子腳本：<br />
-                <code className="text-amber-400 bg-slate-800 px-2 py-1 rounded mt-2">
-                  python scripts/seed_funding.py
-                </code>
+                尚無募資專案（後端啟動時會自動建立）
               </p>
             ) : (
               projects.map((project) => (
