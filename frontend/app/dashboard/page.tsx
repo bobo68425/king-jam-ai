@@ -122,8 +122,8 @@ export default function DashboardPage() {
           api.get<CreditBalance>("/credits/balance"),
           api.get<UsageStats>("/credits/usage-stats?days=30"),
           api.get<{ items: GenerationHistoryItem[] }>("/history?limit=5"),
-          api.get<{ posts: ScheduledPost[] }>("/scheduler/posts?status=pending&limit=5"),
-          api.get<{ accounts: SocialAccount[] }>("/scheduler/accounts"),
+          api.get<ScheduledPost[]>("/scheduler/posts?status=pending&limit=5"),
+          api.get<SocialAccount[]>("/scheduler/accounts"),
           api.get<ExpiringCredits>("/credits/expiring"),
         ]);
 
@@ -131,8 +131,8 @@ export default function DashboardPage() {
         if (creditsRes.status === "fulfilled") setCreditBalance(creditsRes.value.data);
         if (statsRes.status === "fulfilled") setUsageStats(statsRes.value.data);
         if (historyRes.status === "fulfilled") setRecentHistory(historyRes.value.data.items || []);
-        if (postsRes.status === "fulfilled") setUpcomingPosts(postsRes.value.data.posts || []);
-        if (accountsRes.status === "fulfilled") setSocialAccounts(accountsRes.value.data.accounts || []);
+        if (postsRes.status === "fulfilled") setUpcomingPosts(Array.isArray(postsRes.value.data) ? postsRes.value.data : []);
+        if (accountsRes.status === "fulfilled") setSocialAccounts(Array.isArray(accountsRes.value.data) ? accountsRes.value.data : []);
         if (expiringRes.status === "fulfilled") setExpiringCredits(expiringRes.value.data);
       } catch (error) {
         console.error("Failed to fetch dashboard data", error);

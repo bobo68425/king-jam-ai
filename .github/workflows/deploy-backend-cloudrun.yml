@@ -144,6 +144,10 @@ jobs:
           _TW_KSID: ${{ secrets.TWILIO_API_KEY_SID }}
           _TW_KSEC: ${{ secrets.TWILIO_API_KEY_SECRET }}
           _TW_FROM: ${{ secrets.TWILIO_FROM_NUMBER }}
+          _GOOGLE_CID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          _GOOGLE_CSEC: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          _FB_APP_ID: ${{ secrets.FACEBOOK_APP_ID }}
+          _FB_APP_SEC: ${{ secrets.FACEBOOK_APP_SECRET }}
         run: |
           # 組合 DATABASE_URL（透過 Unix socket 連 Cloud SQL）
           DB_URL="postgresql://postgres:${_DB_PASS}@/kingjam?host=/cloudsql/${{ env.PROJECT_ID }}:${{ env.REGION }}:kingjam-db"
@@ -161,7 +165,7 @@ jobs:
             --max-instances 10 \
             --timeout 600 \
             --concurrency 80 \
-            --update-env-vars "^@@^DATABASE_URL=${DB_URL}@@SECRET_KEY=${_SECRET_KEY}@@ENVIRONMENT=production@@FRONTEND_URL=https://kingjam.app@@BACKEND_URL=https://api.kingjam.app@@GCS_BUCKET_NAME=kingjam-media@@REPLICATE_API_TOKEN=${_REPLICATE_TOKEN}@@PAYMENT_MODE=production@@ECPAY_MERCHANT_ID=${_ECPAY_MID}@@ECPAY_HASH_KEY=${_ECPAY_HKEY}@@ECPAY_HASH_IV=${_ECPAY_HIV}@@ECPAY_LOGISTICS_HASH_KEY=${_ECPAY_LHKEY}@@ECPAY_LOGISTICS_HASH_IV=${_ECPAY_LHIV}@@NEWEBPAY_MERCHANT_ID=${_NP_MID}@@NEWEBPAY_HASH_KEY=${_NP_HKEY}@@NEWEBPAY_HASH_IV=${_NP_HIV}@@SMS_PROVIDER=twilio@@TWILIO_ACCOUNT_SID=${_TW_SID}@@TWILIO_API_KEY_SID=${_TW_KSID}@@TWILIO_API_KEY_SECRET=${_TW_KSEC}@@TWILIO_FROM_NUMBER=${_TW_FROM}" \
+            --update-env-vars "^@@^DATABASE_URL=${DB_URL}@@SECRET_KEY=${_SECRET_KEY}@@ENVIRONMENT=production@@FRONTEND_URL=https://kingjam.app@@BACKEND_URL=https://api.kingjam.app@@GCS_BUCKET_NAME=kingjam-media@@REPLICATE_API_TOKEN=${_REPLICATE_TOKEN}@@PAYMENT_MODE=production@@ECPAY_MERCHANT_ID=${_ECPAY_MID}@@ECPAY_HASH_KEY=${_ECPAY_HKEY}@@ECPAY_HASH_IV=${_ECPAY_HIV}@@ECPAY_LOGISTICS_HASH_KEY=${_ECPAY_LHKEY}@@ECPAY_LOGISTICS_HASH_IV=${_ECPAY_LHIV}@@NEWEBPAY_MERCHANT_ID=${_NP_MID}@@NEWEBPAY_HASH_KEY=${_NP_HKEY}@@NEWEBPAY_HASH_IV=${_NP_HIV}@@SMS_PROVIDER=twilio@@TWILIO_ACCOUNT_SID=${_TW_SID}@@TWILIO_API_KEY_SID=${_TW_KSID}@@TWILIO_API_KEY_SECRET=${_TW_KSEC}@@TWILIO_FROM_NUMBER=${_TW_FROM}@@GOOGLE_CLIENT_ID=${_GOOGLE_CID}@@GOOGLE_CLIENT_SECRET=${_GOOGLE_CSEC}@@FACEBOOK_APP_ID=${_FB_APP_ID}@@FACEBOOK_APP_SECRET=${_FB_APP_SEC}" \
             --vpc-connector kingjam-connector \
             --vpc-egress private-ranges-only \
             --add-cloudsql-instances ${{ env.PROJECT_ID }}:${{ env.REGION }}:kingjam-db \

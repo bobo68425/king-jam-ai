@@ -183,8 +183,8 @@ export default function AccountsPage() {
 
   const fetchAccounts = async () => {
     try {
-      const res = await api.get<{ accounts: SocialAccount[] }>("/scheduler/accounts");
-      setAccounts(res.data.accounts || []);
+      const res = await api.get<SocialAccount[]>("/scheduler/accounts");
+      setAccounts(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       console.error("Failed to fetch accounts", error);
     } finally {
