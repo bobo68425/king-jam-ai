@@ -245,6 +245,12 @@ celery_app.conf.beat_schedule = {
         "schedule": crontab(hour=5, minute=0),
         "options": {"queue": "queue_default"}
     },
+    # 每月 1 號 00:05 發放預付訂閱點數（募資 6 個月等）
+    "grant-prepaid-subscription-credits": {
+        "task": "app.tasks.credit_tasks.grant_prepaid_subscription_credits",
+        "schedule": crontab(day_of_month=1, hour=0, minute=5),
+        "options": {"queue": "queue_default"}
+    },
     # 每月最後一天 23:59 歸零月費點數
     "expire-monthly-sub-credits": {
         "task": "app.tasks.credit_tasks.expire_monthly_sub_credits",

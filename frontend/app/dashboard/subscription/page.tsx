@@ -78,8 +78,9 @@ const PLANS = [
     priceYearly: yearlyPrice(299),
     period: "每月",
     description: "適合輕度使用者",
-    monthlyCredits: 0,
+    monthlyCredits: 200,
     features: [
+      { text: "每月 200 點", included: true },
       { text: "基本功能無廣告", included: true },
       { text: "AI 文章生成", included: true },
       { text: "社群圖文設計", included: true },
@@ -199,15 +200,16 @@ function PlanCard({
           <span className="text-4xl font-bold text-white">{plan.price.toLocaleString()}</span>
           {plan.price > 0 && <span className="text-slate-500">/月</span>}
         </div>
+        {plan.monthlyCredits > 0 && (
+          <p className="text-sm font-medium text-emerald-400 mt-1 flex items-center justify-center gap-1">
+            <Gift className="w-4 h-4" />
+            每月 {plan.monthlyCredits.toLocaleString()} 點
+          </p>
+        )}
         {plan.price > 0 && plan.priceYearly != null && (
           <p className="text-sm text-slate-400 mt-2">
             年繳 NT${plan.priceYearly.toLocaleString()}
             <span className="text-emerald-400 ml-1">省 {YEARLY_DISCOUNT_PERCENT}%</span>
-          </p>
-        )}
-        {plan.monthlyCredits > 0 && (
-          <p className="text-sm text-emerald-400 mt-1">
-            每月獲得 {plan.monthlyCredits.toLocaleString()} 點
           </p>
         )}
       </div>
@@ -268,6 +270,19 @@ export default function SubscriptionPage() {
   const [checkoutPlan, setCheckoutPlan] = useState<typeof PLANS[0] | null>(null);
   const [checkoutCycle, setCheckoutCycle] = useState<"monthly" | "yearly">("monthly");
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+
+  // 募資結帳碼
+  const [salesCodeInput, setSalesCodeInput] = useState("");
+  const [salesCodeValidating, setSalesCodeValidating] = useState(false);
+  const [salesCodeRedeeming, setSalesCodeRedeeming] = useState(false);
+  const [salesCodePreview, setSalesCodePreview] = useState<{
+    valid: boolean;
+    project_name?: string;
+    tier_name?: string;
+    plan_name?: string;
+    subscription_months?: number;
+    error?: string;
+  } | null>(null);
 
   useEffect(() => {
     fetchSubscriptionData();
@@ -392,6 +407,55 @@ export default function SubscriptionPage() {
     }
   };
 
+  const handleValidateSalesCode = async () => {
+    const code = salesCodeInput.trim().toUpperCase();
+    if (!code) {
+      toast.error("請輸入結帳碼");
+      return;
+    }
+    setSalesCodeValidating(true);
+    setSalesCodePreview(null);
+    try {
+      const res = await api.get("/payment/sales-code/validate", { params: { code } });
+      const data = res.data;
+      setSalesCodePreview(data);
+      if (data.valid) {
+        toast.success("結帳碼有效，可立即兌換");
+      } else {
+        toast.error(data.error || "無效的結帳碼");
+      }
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || err?.message || "驗證失敗";
+      setSalesCodePreview({ valid: false, error: msg });
+      toast.error(msg);
+    } finally {
+      setSalesCodeValidating(false);
+    }
+  };
+
+  const handleRedeemSalesCode = async () => {
+    const code = salesCodeInput.trim().toUpperCase();
+    if (!code || !salesCodePreview?.valid) return;
+    setSalesCodeRedeeming(true);
+    try {
+      const res = await api.post("/payment/sales-code/redeem", { code });
+      const data = res.data;
+      if (data.success) {
+        toast.success(data.message || "兌換成功！");
+        setSalesCodeInput("");
+        setSalesCodePreview(null);
+        fetchSubscriptionData();
+      } else {
+        toast.error(data.error || "兌換失敗");
+      }
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || err?.response?.data?.detail || err?.message || "兌換失敗";
+      toast.error(typeof msg === "string" ? msg : "兌換失敗，請稍後再試");
+    } finally {
+      setSalesCodeRedeeming(false);
+    }
+  };
+
   const handleCancelSubscription = async () => {
     setActionLoading("cancel");
     // 目前訂閱取消功能需要聯繫客服
@@ -509,6 +573,74 @@ export default function SubscriptionPage() {
                 {subscription.auto_renew ? "已開啟" : "已關閉"}
               </p>
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* 募資結帳碼兌換 */}
+      <div className="p-6 rounded-2xl border border-amber-500/30 bg-amber-500/5">
+        <div className="flex items-center gap-2 mb-3">
+          <Gift className="w-5 h-5 text-amber-400" />
+          <h2 className="text-lg font-semibold text-white">我有募資結帳碼</h2>
+        </div>
+        <p className="text-sm text-slate-400 mb-4">
+          若您已在 flyingV、嘖嘖等募資平台贊助，請輸入結帳碼兌換訂閱
+        </p>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input
+            type="text"
+            value={salesCodeInput}
+            onChange={(e) => {
+              setSalesCodeInput(e.target.value.toUpperCase());
+              setSalesCodePreview(null);
+            }}
+            placeholder="例如：KJ-XXXX-XXXX"
+            className="flex-1 px-4 py-3 bg-slate-800/50 border border-slate-600 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+          />
+          <button
+            onClick={handleValidateSalesCode}
+            disabled={salesCodeValidating || !salesCodeInput.trim()}
+            className="px-6 py-3 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {salesCodeValidating ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              "驗證"
+            )}
+          </button>
+        </div>
+        {salesCodePreview && (
+          <div className={`mt-4 p-4 rounded-xl ${
+            salesCodePreview.valid
+              ? "bg-emerald-500/10 border border-emerald-500/30"
+              : "bg-red-500/10 border border-red-500/30"
+          }`}>
+            {salesCodePreview.valid ? (
+              <>
+                <p className="text-white font-medium mb-1">
+                  {salesCodePreview.project_name} - {salesCodePreview.tier_name}
+                </p>
+                <p className="text-sm text-slate-400 mb-3">
+                  可兌換：{salesCodePreview.plan_name} {salesCodePreview.subscription_months} 個月
+                </p>
+                <button
+                  onClick={handleRedeemSalesCode}
+                  disabled={salesCodeRedeeming}
+                  className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-medium transition-colors flex items-center gap-2"
+                >
+                  {salesCodeRedeeming ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Gift className="w-4 h-4" />
+                      確認兌換
+                    </>
+                  )}
+                </button>
+              </>
+            ) : (
+              <p className="text-red-400">{salesCodePreview.error}</p>
+            )}
           </div>
         )}
       </div>

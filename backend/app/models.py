@@ -41,6 +41,10 @@ class User(Base):
     subscription_plan = Column(String(20), default="free")  # free, basic, pro, enterprise
     subscription_expires_at = Column(DateTime(timezone=True), nullable=True)
     
+    # 預付訂閱（募資兌換等）：剩餘待發放月數、每月點數
+    prepaid_sub_months_remaining = Column(Integer, default=0)
+    prepaid_sub_credits_per_month = Column(Integer, default=0)
+    
     # 身份認證狀態
     is_identity_verified = Column(Boolean, default=False)  # 是否已完成身份認證
     identity_verified_at = Column(DateTime(timezone=True), nullable=True)  # 認證通過時間
@@ -456,6 +460,83 @@ class CreditPackage(Base):
     # 時間戳
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+# ============================================================
+# 募資行銷活動模組
+# ============================================================
+
+class FundingProject(Base):
+    """
+    募資專案
+    透過外部募資平台（flyingV、嘖嘖）增加訂戶
+    """
+    __tablename__ = "funding_projects"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_code = Column(String(50), nullable=False, unique=True)
+    name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    target_plan_code = Column(String(50), nullable=False)  # basic, pro, enterprise
+    subscription_months = Column(Integer, nullable=False, default=6)
+    fundraising_platform = Column(String(50), nullable=True)  # flyingv, zeczec, other
+    platform_url = Column(String(255), nullable=True)
+    is_active = Column(Boolean, default=True)
+    sort_order = Column(Integer, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    tiers = relationship("FundingTier", back_populates="project", order_by="FundingTier.sort_order")
+
+
+class FundingTier(Base):
+    """
+    募資方案層級（超早鳥、早鳥）
+    """
+    __tablename__ = "funding_tiers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("funding_projects.id"), nullable=False)
+    tier_code = Column(String(50), nullable=False)  # super_early_bird, early_bird
+    tier_name = Column(String(100), nullable=False)
+    fundraising_price_twd = Column(Numeric(10, 2), nullable=False)
+    original_price_twd = Column(Numeric(10, 2), nullable=True)
+    is_active = Column(Boolean, default=True)
+    sort_order = Column(Integer, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    project = relationship("FundingProject", back_populates="tiers")
+    sales_codes = relationship("SalesCode", back_populates="tier")
+
+
+class SalesCode(Base):
+    """
+    銷售碼（結帳碼）
+    用戶在募資平台付款後取得，於訂閱頁輸入兌換
+    """
+    __tablename__ = "sales_codes"
+
+    __table_args__ = (
+        Index("idx_sales_code_code", "code", unique=True),
+        Index("idx_sales_code_status", "status"),
+        Index("idx_sales_code_tier", "tier_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String(32), nullable=False, unique=True)
+    tier_id = Column(Integer, ForeignKey("funding_tiers.id"), nullable=False)
+    status = Column(String(20), nullable=False, default="pending")  # pending, redeemed, expired
+    redeemer_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    redeemed_at = Column(DateTime(timezone=True), nullable=True)
+    order_id = Column(Integer, ForeignKey("orders.id"), nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    external_order_id = Column(String(100), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    tier = relationship("FundingTier", back_populates="sales_codes")
 
 
 # ============================================================

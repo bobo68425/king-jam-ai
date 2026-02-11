@@ -229,6 +229,65 @@ def repair_credit_inconsistency(user_id: int, dry_run: bool = True) -> Dict[str,
     return report
 
 
+@celery_app.task(name="app.tasks.credit_tasks.grant_prepaid_subscription_credits")
+def grant_prepaid_subscription_credits() -> Dict[str, Any]:
+    """
+    每月 1 號發放預付訂閱的月費點數（募資兌換等 6 個月方案）
+    
+    條件：prepaid_sub_months_remaining > 0 且訂閱尚未過期
+    """
+    db = SessionLocal()
+    report = {
+        "executed_at": datetime.utcnow().isoformat(),
+        "users_processed": 0,
+        "total_credits_granted": 0,
+        "details": [],
+    }
+    try:
+        credit_service = CreditService(db)
+        now = datetime.utcnow()
+        
+        users = db.query(User).filter(
+            User.prepaid_sub_months_remaining > 0,
+            User.prepaid_sub_credits_per_month > 0,
+            User.subscription_expires_at > now,
+        ).all()
+        
+        for user in users:
+            credits = user.prepaid_sub_credits_per_month or 0
+            if credits <= 0:
+                continue
+            result = credit_service.grant_subscription(
+                user_id=user.id,
+                amount=credits,
+            )
+            if result.success:
+                user.prepaid_sub_months_remaining = (user.prepaid_sub_months_remaining or 0) - 1
+                if user.prepaid_sub_months_remaining <= 0:
+                    user.prepaid_sub_months_remaining = 0
+                    user.prepaid_sub_credits_per_month = 0
+                report["users_processed"] += 1
+                report["total_credits_granted"] += credits
+                report["details"].append({
+                    "user_id": user.id,
+                    "credits_granted": credits,
+                    "months_remaining": user.prepaid_sub_months_remaining,
+                })
+        
+        db.commit()
+        logger.info(
+            f"[PrepaidGrant] ✅ 預付訂閱發放：{report['users_processed']} 用戶，"
+            f"共 {report['total_credits_granted']} 點"
+        )
+    except Exception as e:
+        logger.error(f"[PrepaidGrant] ❌ 執行失敗: {e}")
+        db.rollback()
+        report["error"] = str(e)
+    finally:
+        db.close()
+    return report
+
+
 @celery_app.task(name="app.tasks.credit_tasks.expire_monthly_sub_credits")
 def expire_monthly_sub_credits() -> Dict[str, Any]:
     """

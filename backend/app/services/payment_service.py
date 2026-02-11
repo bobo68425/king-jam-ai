@@ -1129,8 +1129,16 @@ class PaymentService:
             ).first()
             
             if plan and plan.monthly_credits > 0:
-                user.credits_sub = (user.credits_sub or 0) + plan.monthly_credits
-                user.credits = (user.credits or 0) + plan.monthly_credits
+                # 單月訂閱：一次發放；多月（募資）：首月發放，其餘由每月排程發放
+                if months <= 1:
+                    credits_to_add = plan.monthly_credits
+                else:
+                    credits_to_add = plan.monthly_credits  # 只發首月
+                    # 記錄預付月數，供每月排程發放
+                    user.prepaid_sub_months_remaining = (user.prepaid_sub_months_remaining or 0) + (months - 1)
+                    user.prepaid_sub_credits_per_month = plan.monthly_credits
+                user.credits_sub = (user.credits_sub or 0) + credits_to_add
+                user.credits = (user.credits or 0) + credits_to_add
             
             self._log_payment(
                 order_id=order.id,

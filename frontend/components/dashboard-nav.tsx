@@ -80,6 +80,7 @@ const adminNavItems = [
       { href: "/dashboard/admin/users", icon: Users, label: "用戶管理" },
       { href: "/dashboard/admin/verification", icon: Shield, label: "身份認證" },
       { href: "/dashboard/admin/campaigns", icon: Megaphone, label: "行銷活動", isNew: true },
+      { href: "/dashboard/admin/funding", icon: Gift, label: "募資銷售碼" },
       { href: "/dashboard/admin/notifications", icon: Bell, label: "通知中心", isNew: true },
       { href: "/dashboard/admin/withdrawals", icon: Wallet, label: "提領審核" },
       { href: "/dashboard/admin/fraud", icon: ShieldAlert, label: "詐騙偵測" },
