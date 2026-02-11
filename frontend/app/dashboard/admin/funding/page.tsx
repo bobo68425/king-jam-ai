@@ -42,6 +42,7 @@ interface SalesCodeItem {
   redeemed_at: string | null;
   expires_at: string | null;
   created_at: string | null;
+  redeemer_email: string | null;
 }
 
 export default function AdminFundingPage() {
@@ -325,6 +326,7 @@ export default function AdminFundingPage() {
                   <th className="text-left py-2 text-slate-400 font-medium">專案</th>
                   <th className="text-left py-2 text-slate-400 font-medium">方案</th>
                   <th className="text-left py-2 text-slate-400 font-medium">狀態</th>
+                  <th className="text-left py-2 text-slate-400 font-medium">使用帳號</th>
                   <th className="text-left py-2 text-slate-400 font-medium">兌換時間</th>
                   <th className="text-left py-2 text-slate-400 font-medium">建立時間</th>
                 </tr>
@@ -351,6 +353,9 @@ export default function AdminFundingPage() {
                           ? "已兌換"
                           : "已過期"}
                       </span>
+                    </td>
+                    <td className="py-2 text-slate-400">
+                      {c.redeemer_email ?? "-"}
                     </td>
                     <td className="py-2 text-slate-500">
                       {c.redeemed_at

@@ -12,7 +12,7 @@ from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc
 
 from app.database import get_db
@@ -416,7 +416,12 @@ async def list_sales_codes(
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="需要管理員權限")
     
-    query = db.query(SalesCode).join(FundingTier).join(FundingProject)
+    query = (
+        db.query(SalesCode)
+        .options(joinedload(SalesCode.redeemer))
+        .join(FundingTier)
+        .join(FundingProject)
+    )
     
     if tier_id:
         query = query.filter(SalesCode.tier_id == tier_id)
@@ -439,6 +444,7 @@ async def list_sales_codes(
                 "redeemed_at": s.redeemed_at.isoformat() if s.redeemed_at else None,
                 "expires_at": s.expires_at.isoformat() if s.expires_at else None,
                 "created_at": s.created_at.isoformat() if s.created_at else None,
+                "redeemer_email": s.redeemer.email if s.redeemer else None,
             }
             for s in items
         ],

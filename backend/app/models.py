@@ -537,6 +537,7 @@ class SalesCode(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     tier = relationship("FundingTier", back_populates="sales_codes")
+    redeemer = relationship("User", foreign_keys=[redeemer_user_id])
 
 
 # ============================================================
