@@ -584,15 +584,15 @@ function IdentityVerificationModal({ isOpen, onClose, onSuccess }: { isOpen: boo
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("image_type", imageType);
       
-      const res = await api.post("/verification/identity/upload-image", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      
-      setImage(res.data.image_url);
+      const res = await api.post("/upload/media", formData);
+      const url = res.data?.url || res.data?.image_url;
+      if (!url) throw new Error("未取得上傳結果");
+      setImage(url);
     } catch (err: any) {
-      setError(err.response?.data?.detail || "上傳失敗，請稍後再試");
+      const detail = err.response?.data?.detail;
+      const msg = typeof detail === "string" ? detail : Array.isArray(detail) && detail[0]?.msg ? detail[0].msg : "";
+      setError(msg || "上傳失敗，請稍後再試");
     } finally {
       setUploading(false);
     }
