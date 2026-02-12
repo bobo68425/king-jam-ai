@@ -584,9 +584,10 @@ function IdentityVerificationModal({ isOpen, onClose, onSuccess }: { isOpen: boo
     try {
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("image_type", imageType);
       
-      const res = await api.post("/upload/media", formData);
-      const url = res.data?.url || res.data?.image_url;
+      const res = await api.post("/verification/identity/upload-image", formData);
+      const url = res.data?.image_url || res.data?.url;
       if (!url) throw new Error("未取得上傳結果");
       setImage(url);
     } catch (err: any) {

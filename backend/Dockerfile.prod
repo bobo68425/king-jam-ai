@@ -12,7 +12,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8080
 
-# 安裝系統依賴
+# 安裝系統依賴（含中文字體供證件浮水印使用）
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         gcc \
@@ -20,6 +20,7 @@ RUN apt-get update \
         ffmpeg \
         curl \
         ca-certificates \
+        fonts-noto-cjk \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -35,7 +36,7 @@ RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
 # 建立必要目錄
-RUN mkdir -p /app/static/uploads /app/static/videos /app/static/thumbnails
+RUN mkdir -p /app/static/uploads /app/static/uploads/identity /app/static/videos /app/static/thumbnails
 
 # 健康檢查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

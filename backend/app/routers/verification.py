@@ -3,7 +3,9 @@
 用戶提交身份認證、管理員審核
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+import os
+import uuid
+from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File, Form
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from sqlalchemy.orm import Session
@@ -17,6 +19,14 @@ from app.routers.auth import get_current_user
 from app.core.admin_security import require_super_admin, is_super_admin, require_secondary_password
 
 router = APIRouter(prefix="/verification", tags=["身份認證"])
+
+# 證件上傳目錄
+IDENTITY_UPLOAD_DIR = "/app/static/uploads/identity"
+if not os.path.exists("/app/static"):
+    _base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    IDENTITY_UPLOAD_DIR = os.path.join(_base, "static", "uploads", "identity")
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
+MAX_IDENTITY_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB
 
 
 # ============================================================
@@ -254,6 +264,77 @@ async def verify_phone_code(
     return {
         "success": True,
         "message": "手機號碼驗證成功",
+    }
+
+
+# ============================================================
+# 身份認證證件上傳（含浮水印）
+# ============================================================
+
+@router.post("/identity/upload-image")
+async def upload_identity_image(
+    file: UploadFile = File(...),
+    image_type: str = Form("front"),  # front, back, selfie
+    current_user: User = Depends(get_current_user)
+):
+    """
+    上傳證件照，自動加上「僅供網站開通認證使用」浮水印
+    """
+    os.makedirs(IDENTITY_UPLOAD_DIR, exist_ok=True)
+    
+    content_type = file.content_type or ""
+    if content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支援的格式，請上傳 JPG、PNG 或 WebP"
+        )
+    
+    ext = ".jpg" if "jpeg" in content_type or "jpg" in content_type else ".png"
+    if "webp" in content_type:
+        ext = ".webp"
+    
+    filename = f"{current_user.id}_{uuid.uuid4().hex[:8]}{ext}"
+    file_path = os.path.join(IDENTITY_UPLOAD_DIR, filename)
+    
+    chunk_size = 64 * 1024
+    total_size = 0
+    try:
+        with open(file_path, "wb") as f:
+            while True:
+                chunk = await file.read(chunk_size)
+                if not chunk:
+                    break
+                total_size += len(chunk)
+                if total_size > MAX_IDENTITY_IMAGE_SIZE:
+                    f.close()
+                    os.remove(file_path)
+                    raise HTTPException(
+                        status_code=400,
+                        detail="照片大小超過 5MB 限制"
+                    )
+                f.write(chunk)
+    except HTTPException:
+        raise
+    except Exception as e:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise HTTPException(status_code=500, detail=f"儲存失敗：{str(e)}")
+    
+    # 加上浮水印
+    try:
+        from app.services.identity_watermark import add_watermark
+        add_watermark(file_path, file_path)
+    except Exception as e:
+        # 浮水印失敗仍保留原圖
+        import logging
+        logging.getLogger(__name__).warning(f"浮水印處理失敗，保留原圖: {e}")
+    
+    # 回傳 URL（與 /upload/media 格式一致，由 static 提供）
+    image_url = f"/static/uploads/identity/{filename}"
+    return {
+        "success": True,
+        "image_url": image_url,
+        "url": image_url,
     }
 
 
