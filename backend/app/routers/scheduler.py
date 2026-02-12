@@ -1145,13 +1145,21 @@ async def get_supported_platforms():
             if not val or val.startswith("your_"):
                 return "needs_setup"
         return "active"
+
+    def check_meta_ready() -> str:
+        """Meta (FB/IG/Threads) 可選用 FACEBOOK_APP_ID/SECRET"""
+        meta_id = os.getenv("META_APP_ID") or os.getenv("FACEBOOK_APP_ID") or ""
+        meta_sec = os.getenv("META_APP_SECRET") or os.getenv("FACEBOOK_APP_SECRET") or ""
+        if not meta_id or not meta_sec or meta_id.startswith("your_") or meta_sec.startswith("your_"):
+            return "needs_setup"
+        return "active"
     
     return {
         "platforms": [
             {"id": "wordpress", "name": "WordPress", "icon": "📝", "status": "active", "description": "部落格文章排程發布"},
-            {"id": "instagram", "name": "Instagram", "icon": "📸", "status": check_platform_ready(["META_APP_ID", "META_APP_SECRET"]), "description": "分享照片和短影音"},
-            {"id": "facebook", "name": "Facebook", "icon": "📘", "status": check_platform_ready(["META_APP_ID", "META_APP_SECRET"]), "description": "連接朋友和社群"},
-            {"id": "threads", "name": "Threads", "icon": "🧵", "status": check_platform_ready(["META_APP_ID", "META_APP_SECRET"]), "description": "文字為主的社群"},
+            {"id": "instagram", "name": "Instagram", "icon": "📸", "status": check_meta_ready(), "description": "分享照片和短影音"},
+            {"id": "facebook", "name": "Facebook", "icon": "📘", "status": check_meta_ready(), "description": "連接朋友和社群"},
+            {"id": "threads", "name": "Threads", "icon": "🧵", "status": check_meta_ready(), "description": "文字為主的社群"},
             {"id": "tiktok", "name": "TikTok", "icon": "🎵", "status": check_platform_ready(["TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET"]), "description": "短影音創作平台"},
             {"id": "linkedin", "name": "LinkedIn", "icon": "💼", "status": check_platform_ready(["LINKEDIN_CLIENT_ID", "LINKEDIN_CLIENT_SECRET"]), "description": "專業人脈網絡"},
             {"id": "youtube", "name": "YouTube", "icon": "📺", "status": check_platform_ready(["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]), "description": "影片分享平台"},

@@ -53,7 +53,12 @@ async def initiate_oauth(
     
     返回授權 URL，前端應導向此 URL
     """
-    # 平台對應的必要環境變數
+    # 平台對應的必要環境變數（Meta 可fallback FACEBOOK_APP_ID/SECRET）
+    def _check_meta_keys():
+        meta_id = os.getenv("META_APP_ID") or os.getenv("FACEBOOK_APP_ID") or ""
+        meta_sec = os.getenv("META_APP_SECRET") or os.getenv("FACEBOOK_APP_SECRET") or ""
+        return not (not meta_id or not meta_sec or meta_id.startswith("your_") or meta_sec.startswith("your_"))
+
     platform_env_keys = {
         "instagram": ("META_APP_ID", "META_APP_SECRET"),
         "facebook": ("META_APP_ID", "META_APP_SECRET"),
@@ -69,18 +74,24 @@ async def initiate_oauth(
         raise HTTPException(status_code=400, detail=f"不支援的平台: {platform}")
     
     # 檢查 API 金鑰是否已設定
-    env_keys = platform_env_keys[platform]
-    missing_keys = []
-    for key in env_keys:
-        val = os.getenv(key, "")
-        if not val or val.startswith("your_"):
-            missing_keys.append(key)
-    
-    if missing_keys:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"{platform} 尚未設定 API 金鑰。請在 docker-compose.yml 中設定: {', '.join(missing_keys)}"
-        )
+    if platform in ["instagram", "facebook", "threads"]:
+        if not _check_meta_keys():
+            raise HTTPException(
+                status_code=400,
+                detail=f"{platform} 尚未設定 API 金鑰。請設定 FACEBOOK_APP_ID 與 FACEBOOK_APP_SECRET（或 META_APP_ID、META_APP_SECRET）"
+            )
+    else:
+        env_keys = platform_env_keys[platform]
+        missing_keys = []
+        for key in env_keys:
+            val = os.getenv(key, "")
+            if not val or val.startswith("your_"):
+                missing_keys.append(key)
+        if missing_keys:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{platform} 尚未設定 API 金鑰。請設定: {', '.join(missing_keys)}"
+            )
     
     # 生成防 CSRF 的 state
     state = secrets.token_urlsafe(32)

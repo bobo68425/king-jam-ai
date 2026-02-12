@@ -34,14 +34,24 @@ class MetaPlatform(BasePlatform):
     GRAPH_API_BASE = f"https://graph.facebook.com/{GRAPH_API_VERSION}"
     
     @classmethod
+    def _get_meta_credentials(cls) -> tuple:
+        """取得 Meta 憑證（優先 META_*，次之 FACEBOOK_*）"""
+        app_id = os.getenv("META_APP_ID") or os.getenv("FACEBOOK_APP_ID") or ""
+        app_secret = os.getenv("META_APP_SECRET") or os.getenv("FACEBOOK_APP_SECRET") or ""
+        return app_id, app_secret
+
+    @classmethod
     def create_instagram_config(cls) -> PlatformConfig:
         """創建 Instagram 配置"""
+        app_id, app_secret = cls._get_meta_credentials()
+        backend_url = os.getenv("BACKEND_URL", "http://localhost:8000")
+        redirect_uri = os.getenv("META_REDIRECT_URI") or f"{backend_url.rstrip('/')}/oauth/meta/callback"
         return PlatformConfig(
             platform_id="instagram",
             name="Instagram",
-            client_id=os.getenv("META_APP_ID", ""),
-            client_secret=os.getenv("META_APP_SECRET", ""),
-            redirect_uri=os.getenv("META_REDIRECT_URI", "http://localhost:8000/oauth/meta/callback"),
+            client_id=app_id,
+            client_secret=app_secret,
+            redirect_uri=redirect_uri,
             scopes=[
                 "instagram_basic",
                 "instagram_content_publish",
@@ -67,12 +77,15 @@ class MetaPlatform(BasePlatform):
     @classmethod
     def create_facebook_config(cls) -> PlatformConfig:
         """創建 Facebook 配置"""
+        app_id, app_secret = cls._get_meta_credentials()
+        backend_url = os.getenv("BACKEND_URL", "http://localhost:8000")
+        redirect_uri = os.getenv("META_REDIRECT_URI") or f"{backend_url.rstrip('/')}/oauth/meta/callback"
         return PlatformConfig(
             platform_id="facebook",
             name="Facebook",
-            client_id=os.getenv("META_APP_ID", ""),
-            client_secret=os.getenv("META_APP_SECRET", ""),
-            redirect_uri=os.getenv("META_REDIRECT_URI", "http://localhost:8000/oauth/meta/callback"),
+            client_id=app_id,
+            client_secret=app_secret,
+            redirect_uri=redirect_uri,
             scopes=[
                 "pages_show_list",
                 "pages_read_engagement",
@@ -95,12 +108,15 @@ class MetaPlatform(BasePlatform):
     @classmethod
     def create_threads_config(cls) -> PlatformConfig:
         """創建 Threads 配置"""
+        app_id, app_secret = cls._get_meta_credentials()
+        backend_url = os.getenv("BACKEND_URL", "http://localhost:8000")
+        redirect_uri = os.getenv("META_REDIRECT_URI") or f"{backend_url.rstrip('/')}/oauth/meta/callback"
         return PlatformConfig(
             platform_id="threads",
             name="Threads",
-            client_id=os.getenv("META_APP_ID", ""),
-            client_secret=os.getenv("META_APP_SECRET", ""),
-            redirect_uri=os.getenv("META_REDIRECT_URI", "http://localhost:8000/oauth/meta/callback"),
+            client_id=app_id,
+            client_secret=app_secret,
+            redirect_uri=redirect_uri,
             scopes=[
                 "threads_basic",
                 "threads_content_publish",
