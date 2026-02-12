@@ -123,12 +123,12 @@ export default function AdminVerificationPage() {
   // 圖片預覽
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || (typeof window !== "undefined" && /^(.+\.)?kingjam\.app$/.test(window.location?.hostname || "") ? "https://api.kingjam.app" : "http://localhost:8000");
 
   /** 將相對路徑轉為完整 URL（證件圖由後端 static 提供） */
   const resolveImageUrl = (url: string | null | undefined): string => {
     if (!url || !url.trim()) return "";
-    if (url.startsWith("http")) return url;
+    if (url.startsWith("http") || url.startsWith("data:")) return url;
     return `${API_URL.replace(/\/$/, "")}${url.startsWith("/") ? url : `/${url}`}`;
   };
 
@@ -224,7 +224,7 @@ export default function AdminVerificationPage() {
         body: JSON.stringify({
           action,
           review_note: reviewNote || null,
-          reject_reason: action === "reject" ? rejectReason : null,
+          rejection_reason: action === "reject" ? rejectReason : null,
           secondary_password: secondaryPassword,
         }),
       });

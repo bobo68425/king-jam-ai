@@ -999,25 +999,32 @@ export default function InsightsPage() {
 
   // Convert platform data（排除 GA4 等非社群平台）
   const NON_SOCIAL_PLATFORMS = ["ga4"];
-  const platformsData: PlatformData[] = dashboardData?.platforms?.filter((p: any) => !NON_SOCIAL_PLATFORMS.includes(p.platform?.toLowerCase())).map((p: any) => ({
-    platform: p.platform,
-    icon: getPlatformIcon(p.platform),
-    color: getPlatformColor(p.platform),
-    username: p.username,
-    avatar: p.avatar,
-    followers: p.metrics?.follower_count || p.metrics?.page_fans || p.metrics?.subscribers || 0,
-    reach: p.totals?.total_impressions || p.metrics?.impressions || p.metrics?.reach || 0,
-    engagement: p.totals?.total_likes && p.totals?.total_impressions 
+  const platformsData: PlatformData[] = dashboardData?.platforms?.filter((p: any) => !NON_SOCIAL_PLATFORMS.includes(p.platform?.toLowerCase())).map((p: any) => {
+    // 曝光：IG 用 totals/impressions，FB 用 totals 或 metrics_sum.page_impressions 或 metrics
+    const reach = p.totals?.total_impressions ?? p.totals?.total_reach ?? p.metrics?.impressions ?? p.metrics?.reach ?? p.metrics_sum?.page_impressions ?? p.metrics?.page_impressions ?? 0;
+    // 互動率：有 totals.engagement_rate 優先，否則用 total_likes/total_impressions
+    const engagement = p.totals?.engagement_rate ?? (p.totals?.total_likes != null && p.totals?.total_impressions
       ? Number(((p.totals.total_likes / p.totals.total_impressions) * 100).toFixed(1))
-      : 0,
-    posts: p.totals?.post_count || 0,
-    trend: 0,
-    metrics: p.metrics,
-    totals: p.totals,
-    top_posts: p.top_posts,
-    error: p.error,
-    ga4_property_id: p.ga4_property_id,
-  })) || [];
+      : 0);
+    const posts = p.totals?.post_count ?? 0;
+    return {
+      platform: p.platform,
+      icon: getPlatformIcon(p.platform),
+      color: getPlatformColor(p.platform),
+      username: p.username,
+      avatar: p.avatar,
+      followers: p.metrics?.follower_count || p.metrics?.page_fans || p.metrics?.subscribers || 0,
+      reach,
+      engagement,
+      posts,
+      trend: 0,
+      metrics: p.metrics,
+      totals: p.totals,
+      top_posts: p.top_posts,
+      error: p.error,
+      ga4_property_id: p.ga4_property_id,
+    };
+  }) || [];
 
   // Content performance from analytics API (優先) 或 insights API
   const contentPerformance: ContentPerformance[] = [];

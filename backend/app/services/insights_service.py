@@ -211,7 +211,8 @@ class InsightsService:
                 elif platform == "facebook":
                     # Facebook Page Insights API
                     page_id = account.platform_user_id
-                    page_token = account.extra_settings.get("page_access_token", access_token)
+                    extra = account.extra_settings or {}
+                    page_token = extra.get("page_access_token", access_token)
                     
                     metrics_endpoint = f"{self.META_GRAPH_API}/{page_id}/insights"
                     params = {
@@ -224,14 +225,37 @@ class InsightsService:
                         if response.status == 200:
                             data = await response.json()
                             metrics = self._parse_meta_insights(data.get("data", []))
+                            # 對 period=day 的數據求和，取得期間總量
+                            metrics_sum = self._parse_meta_insights_sum(data.get("data", []))
                         else:
                             metrics = {}
+                            metrics_sum = {}
+                    
+                    # 取得貼文數量
+                    posts_insights = await self._get_facebook_posts_insights(
+                        session, page_id, page_token, days
+                    )
+                    totals = posts_insights.get("totals", {})
+                    # 使用 page_impressions 總和作為曝光
+                    total_impressions = totals.get("total_impressions") or metrics_sum.get("page_impressions", 0)
+                    total_engaged = metrics_sum.get("page_engaged_users", 0)
+                    # 計算互動率：engaged_users / impressions * 100
+                    engagement_rate = (total_engaged / total_impressions * 100) if total_impressions else 0
                     
                     return {
                         "platform": "facebook",
                         "username": account.platform_username,
                         "avatar": account.platform_avatar,
-                        "metrics": metrics
+                        "metrics": metrics,
+                        "metrics_sum": metrics_sum,
+                        "totals": {
+                            "total_impressions": total_impressions,
+                            "total_reach": total_impressions,
+                            "total_likes": total_engaged,
+                            "post_count": totals.get("post_count", 0),
+                            "engagement_rate": round(engagement_rate, 1),
+                        },
+                        "top_posts": posts_insights.get("top_posts", []),
                     }
         
         except Exception as e:
@@ -343,16 +367,85 @@ class InsightsService:
     
     def _parse_meta_insights(self, insights_data: List[Dict]) -> Dict[str, Any]:
         """
-        解析 Meta 洞察數據
+        解析 Meta 洞察數據（取最近一天）
         """
         metrics = {}
         for item in insights_data:
             name = item.get("name", "")
             values = item.get("values", [])
             if values:
-                # 取最近一天的數據
                 metrics[name] = values[-1].get("value", 0)
         return metrics
+
+    def _parse_meta_insights_sum(self, insights_data: List[Dict]) -> Dict[str, Any]:
+        """
+        解析 Meta 洞察數據（ period=day 時對期間內所有天數求和）
+        """
+        metrics = {}
+        for item in insights_data:
+            name = item.get("name", "")
+            values = item.get("values", [])
+            total = sum(v.get("value", 0) for v in values)
+            metrics[name] = total
+        return metrics
+
+    async def _get_facebook_posts_insights(
+        self,
+        session: aiohttp.ClientSession,
+        page_id: str,
+        access_token: str,
+        days: int
+    ) -> Dict[str, Any]:
+        """
+        取得 Facebook 粉絲專頁貼文數量與 top 貼文
+        """
+        try:
+            posts_url = f"{self.META_GRAPH_API}/{page_id}/published_posts"
+            params = {
+                "fields": "id,created_time,message,permalink_url",
+                "limit": 25,
+                "access_token": access_token
+            }
+            async with session.get(posts_url, params=params) as response:
+                if response.status != 200:
+                    return {"top_posts": [], "totals": {"post_count": 0}}
+                data = await response.json()
+                posts = data.get("data", [])
+
+            # 計算日期範圍內的貼文數
+            cutoff = (datetime.now() - timedelta(days=days)).replace(tzinfo=None)
+            in_range = 0
+            for p in posts:
+                ct = p.get("created_time")
+                if ct:
+                    try:
+                        dt = datetime.fromisoformat(ct.replace("Z", "+00:00"))
+                        dt_naive = dt.replace(tzinfo=None) if dt.tzinfo else dt
+                        if dt_naive >= cutoff:
+                            in_range += 1
+                    except (ValueError, TypeError):
+                        in_range += 1
+                else:
+                    in_range += 1
+            post_count = in_range if in_range > 0 else len(posts)
+
+            top_posts = [
+                {
+                    "id": p.get("id"),
+                    "caption": (p.get("message") or "")[:100],
+                    "type": "post",
+                    "permalink": p.get("permalink_url"),
+                    "timestamp": p.get("created_time"),
+                    "metrics": {}
+                }
+                for p in posts[:5]
+            ]
+            return {
+                "top_posts": top_posts,
+                "totals": {"post_count": post_count}
+            }
+        except Exception as e:
+            return {"top_posts": [], "totals": {"post_count": 0}, "error": str(e)}
     
     async def _get_linkedin_insights(
         self,

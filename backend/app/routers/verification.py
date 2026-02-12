@@ -618,6 +618,15 @@ async def get_verification_admin(
     
     user = db.query(User).filter(User.id == verification.user_id).first()
     
+    # 證件圖：相對路徑轉為完整 URL（方便前端跨域載入）
+    backend_url = os.getenv("BACKEND_URL", "http://localhost:8000").rstrip("/")
+    def _full_url(path: Optional[str]) -> str:
+        if not path or not path.strip():
+            return ""
+        if path.startswith("http") or path.startswith("data:"):
+            return path
+        return f"{backend_url}{path}" if path.startswith("/") else f"{backend_url}/{path}"
+    
     return {
         "success": True,
         "verification": {
@@ -630,9 +639,9 @@ async def get_verification_admin(
             "birth_date": verification.birth_date.strftime("%Y-%m-%d") if verification.birth_date else None,
             "gender": None,
             "status": verification.status,
-            "id_front_image": verification.id_front_image or "",
-            "id_back_image": verification.id_back_image or "",
-            "selfie_image": verification.selfie_image or "",
+            "id_front_image": _full_url(verification.id_front_image),
+            "id_back_image": _full_url(verification.id_back_image),
+            "selfie_image": _full_url(verification.selfie_image),
             "risk_flags": [],
             "is_duplicate_id": False,
             "duplicate_users": [],
