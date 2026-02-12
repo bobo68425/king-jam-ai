@@ -182,6 +182,9 @@ async def send_phone_verification_code(
             detail=f"發送失敗：{result.error}"
         )
     
+    # 存儲 OTP 供驗證使用
+    await otp_manager.store_otp(formatted_phone, otp)
+    
     # 開發環境返回驗證碼（方便測試）
     response_data = {
         "success": True,

@@ -376,7 +376,9 @@ function PhoneVerificationModal({ isOpen, onClose, onSuccess }: { isOpen: boolea
       setCountdown(60);
       if (res.data.dev_code) setDevCode(res.data.dev_code);
     } catch (err: any) { 
-      setError(err.response?.data?.detail || "發送失敗，請稍後再試"); 
+      const d = err.response?.data?.detail;
+      const msg = typeof d === "string" ? d : Array.isArray(d) && d[0]?.msg ? d[0].msg : "";
+      setError(msg || "發送失敗，請稍後再試"); 
     }
     finally { setLoading(false); }
   };

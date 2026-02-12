@@ -149,7 +149,7 @@ async def send_otp(
         logger.error(f"[Phone] OTP 發送失敗: {result.error}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="驗證碼發送失敗，請稍後再試"
+            detail=f"發送失敗：{result.error}"
         )
     
     # 存儲 OTP
