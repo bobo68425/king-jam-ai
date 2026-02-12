@@ -23,8 +23,8 @@ router = APIRouter(prefix="/oauth", tags=["OAuth"])
 # 存儲 OAuth state (生產環境應使用 Redis)
 oauth_states = {}
 
-# 前端回調頁面 URL
-FRONTEND_CALLBACK_URL = os.getenv("FRONTEND_URL", "http://localhost:3000") + "/dashboard/settings"
+# 前端回調頁面 URL（OAuth 完成後導向，預設為社群帳號頁）
+FRONTEND_CALLBACK_URL = os.getenv("FRONTEND_URL", "http://localhost:3000") + "/dashboard/accounts"
 
 
 # ==================== 平台實例 ====================

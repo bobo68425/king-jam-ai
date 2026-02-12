@@ -148,12 +148,27 @@ curl -s "https://api.kingjam.app/scheduler/platforms" \
 
 | 現象 | 可能原因 | 解法 |
 |------|----------|------|
+| **無法載入網址、網域未包含在應用程式中** | 應用程式網域未設定 | 見下方「應用程式網域設定」 |
 | **Invalid Scopes: instagram_basic, instagram_content_publish...** | 標準 Facebook Login 不支援 Instagram 權限 | 見下方「Invalid Scopes 解法」 |
 | 點連結無反應 | 未設定 FACEBOOK_APP_ID / SECRET | 檢查 GitHub Secrets 或 .env |
 | 授權後顯示錯誤 | OAuth 重新導向 URI 未設定 | 在 Meta 後台加入 `https://api.kingjam.app/oauth/meta/callback` |
 | 顯示「needs_setup」 | 憑證未設定或部署未更新 | 確認 Secrets 並重新部署 |
 | 授權成功但無法發文 | 權限未審核、IG 非商業帳號、粉專未連結 | 確認 IG 為商業帳號且已連結粉專，並申請 `instagram_content_publish` |
 | 找不到 Instagram 選項 | 粉專未連結 IG 商業帳號 | 在 FB 粉專設定中連結 IG 帳號 |
+
+### 應用程式網域設定（無法載入網址時）
+
+若出現「無法載入網址」或「這個網址的網域未包含在應用程式的網域中」：
+
+1. 進入 Meta 後台 → **設定** → **基本資料**
+2. 找到 **「應用程式網域」** 區塊
+3. 新增以下網域（每行一個，**不含** `https://`）：
+   - `kingjam.app`
+   - `www.kingjam.app`
+   - `api.kingjam.app`
+4. 儲存變更
+5. 確認 **「用戶端 OAuth 設定」** 中的「有效的 OAuth 重新導向 URI」包含：
+   - `https://api.kingjam.app/oauth/meta/callback`（必須完全一致，含結尾斜線與否）
 
 ### Invalid Scopes 解法
 

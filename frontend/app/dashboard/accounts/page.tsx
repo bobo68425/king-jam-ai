@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import api from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -153,7 +154,13 @@ interface WordPressSite {
   ga4_property_id?: string | null;
 }
 
-export default function AccountsPage() {
+const PLATFORM_NAMES: Record<string, string> = {
+  instagram: "Instagram", facebook: "Facebook", tiktok: "TikTok",
+  youtube: "YouTube", linkedin: "LinkedIn", line: "LINE", wordpress: "WordPress"
+};
+
+function AccountsContent() {
+  const searchParams = useSearchParams();
   // 防止 Hydration 錯誤
   const [isMounted, setIsMounted] = useState(false);
   
@@ -180,6 +187,24 @@ export default function AccountsPage() {
     fetchAccounts();
     fetchWpSites();
   }, [isMounted]);
+
+  // 處理 OAuth 回調結果（連結完成後導回此頁）
+  useEffect(() => {
+    const oauthResult = searchParams.get("oauth");
+    const platform = searchParams.get("platform");
+    const username = searchParams.get("username");
+    const errorMessage = searchParams.get("message");
+    if (oauthResult === "success" && platform) {
+      toast.success(`${PLATFORM_NAMES[platform] || platform} 連結成功！`, {
+        description: username ? `已連結帳號 @${username}` : undefined
+      });
+      window.history.replaceState({}, "", "/dashboard/accounts");
+      fetchAccounts();
+    } else if (oauthResult === "error") {
+      toast.error("連結失敗", { description: errorMessage || "請重試或聯繫客服" });
+      window.history.replaceState({}, "", "/dashboard/accounts");
+    }
+  }, [searchParams]);
 
   const fetchAccounts = async () => {
     try {
@@ -884,5 +909,13 @@ export default function AccountsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function AccountsPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-[200px]"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>}>
+      <AccountsContent />
+    </Suspense>
   );
 }
