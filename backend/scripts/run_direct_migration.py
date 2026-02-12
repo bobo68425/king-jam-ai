@@ -153,6 +153,37 @@ def main():
             conn.commit()
             print("  ✅ payment_logs 表已確認")
 
+            # ── 6. identity_verifications 表（身份認證） ──
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS identity_verifications (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),
+                    real_name VARCHAR(50),
+                    id_number VARCHAR(10),
+                    id_number_hash VARCHAR(64),
+                    birth_date TIMESTAMPTZ,
+                    id_front_image VARCHAR(255),
+                    id_back_image VARCHAR(255),
+                    selfie_image VARCHAR(255),
+                    status VARCHAR(20) DEFAULT 'pending',
+                    reviewed_by INTEGER REFERENCES users(id),
+                    reviewed_at TIMESTAMPTZ,
+                    rejection_reason TEXT,
+                    submitted_at TIMESTAMPTZ DEFAULT NOW(),
+                    approved_at TIMESTAMPTZ,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ
+                );
+            """))
+            conn.commit()
+            for idx_sql in [
+                "CREATE INDEX IF NOT EXISTS idx_identity_user ON identity_verifications(user_id);",
+                "CREATE INDEX IF NOT EXISTS idx_identity_status ON identity_verifications(status);",
+            ]:
+                conn.execute(text(idx_sql))
+            conn.commit()
+            print("  ✅ identity_verifications 表已確認")
+
         print("✅ 全部遷移完成")
     except Exception as e:
         print(f"❌ 遷移失敗: {e}", file=sys.stderr)

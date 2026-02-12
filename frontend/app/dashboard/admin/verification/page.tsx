@@ -125,6 +125,13 @@ export default function AdminVerificationPage() {
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+  /** 將相對路徑轉為完整 URL（證件圖由後端 static 提供） */
+  const resolveImageUrl = (url: string | null | undefined): string => {
+    if (!url || !url.trim()) return "";
+    if (url.startsWith("http")) return url;
+    return `${API_URL.replace(/\/$/, "")}${url.startsWith("/") ? url : `/${url}`}`;
+  };
+
   const fetchVerifications = useCallback(async () => {
     setLoading(true);
     try {
@@ -599,14 +606,19 @@ export default function AdminVerificationPage() {
                     身份證正面
                   </Label>
                   <div 
-                    className="border rounded-lg overflow-hidden cursor-pointer"
-                    onClick={() => setPreviewImage(selectedVerification.id_front_image)}
+                    className="border rounded-lg overflow-hidden cursor-pointer min-h-[12rem] flex items-center justify-center bg-muted"
+                    onClick={() => resolveImageUrl(selectedVerification.id_front_image) && setPreviewImage(resolveImageUrl(selectedVerification.id_front_image))}
                   >
-                    <img 
-                      src={selectedVerification.id_front_image} 
-                      alt="身份證正面"
-                      className="w-full h-48 object-contain bg-muted"
-                    />
+                    {resolveImageUrl(selectedVerification.id_front_image) ? (
+                      <img 
+                        src={resolveImageUrl(selectedVerification.id_front_image)} 
+                        alt="身份證正面"
+                        className="w-full h-48 object-contain"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                      />
+                    ) : (
+                      <span className="text-muted-foreground text-sm">無圖片</span>
+                    )}
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -615,14 +627,19 @@ export default function AdminVerificationPage() {
                     身份證反面
                   </Label>
                   <div 
-                    className="border rounded-lg overflow-hidden cursor-pointer"
-                    onClick={() => setPreviewImage(selectedVerification.id_back_image)}
+                    className="border rounded-lg overflow-hidden cursor-pointer min-h-[12rem] flex items-center justify-center bg-muted"
+                    onClick={() => resolveImageUrl(selectedVerification.id_back_image) && setPreviewImage(resolveImageUrl(selectedVerification.id_back_image))}
                   >
-                    <img 
-                      src={selectedVerification.id_back_image} 
-                      alt="身份證反面"
-                      className="w-full h-48 object-contain bg-muted"
-                    />
+                    {resolveImageUrl(selectedVerification.id_back_image) ? (
+                      <img 
+                        src={resolveImageUrl(selectedVerification.id_back_image)} 
+                        alt="身份證反面"
+                        className="w-full h-48 object-contain"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                      />
+                    ) : (
+                      <span className="text-muted-foreground text-sm">無圖片</span>
+                    )}
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -631,14 +648,19 @@ export default function AdminVerificationPage() {
                     手持身份證自拍
                   </Label>
                   <div 
-                    className="border rounded-lg overflow-hidden cursor-pointer"
-                    onClick={() => setPreviewImage(selectedVerification.selfie_image)}
+                    className="border rounded-lg overflow-hidden cursor-pointer min-h-[12rem] flex items-center justify-center bg-muted"
+                    onClick={() => resolveImageUrl(selectedVerification.selfie_image) && setPreviewImage(resolveImageUrl(selectedVerification.selfie_image))}
                   >
-                    <img 
-                      src={selectedVerification.selfie_image} 
-                      alt="手持自拍"
-                      className="w-full h-48 object-contain bg-muted"
-                    />
+                    {resolveImageUrl(selectedVerification.selfie_image) ? (
+                      <img 
+                        src={resolveImageUrl(selectedVerification.selfie_image)} 
+                        alt="手持自拍"
+                        className="w-full h-48 object-contain"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                      />
+                    ) : (
+                      <span className="text-muted-foreground text-sm">無圖片</span>
+                    )}
                   </div>
                 </div>
               </div>

@@ -197,6 +197,10 @@ export default function UserDetailPage() {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
   const fetchUserDetail = useCallback(async () => {
+    if (!userId || userId === "undefined") {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
@@ -210,13 +214,20 @@ export default function UserDetailPage() {
           return;
         }
         if (response.status === 404) {
-          router.push("/dashboard/admin/users");
+          setUser(null);
+          setLoading(false);
           return;
         }
-        throw new Error("Failed to fetch user");
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || "Failed to fetch user");
       }
 
       const data = await response.json();
+      if (!data.user) {
+        setUser(null);
+        setLoading(false);
+        return;
+      }
       setUser(data.user);
       setCreditBalance(data.credit_balance);
       setOrders(data.recent_orders);
@@ -403,8 +414,12 @@ export default function UserDetailPage() {
 
   if (!user) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-muted-foreground">用戶不存在</p>
+      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
+        <p className="text-muted-foreground">用戶不存在或無法載入</p>
+        <Button variant="outline" onClick={() => router.push("/dashboard/admin/users")}>
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          返回用戶列表
+        </Button>
       </div>
     );
   }
