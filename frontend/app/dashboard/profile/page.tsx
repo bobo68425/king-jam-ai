@@ -512,16 +512,16 @@ function ImageUploadBox({
             <p className="text-sm text-slate-400">上傳中...</p>
           </div>
         ) : imageUrl ? (
-          <div className="relative">
+          <div className="relative min-h-[8rem]">
             <img 
               src={imageUrl.startsWith('http') ? imageUrl : `${process.env.NEXT_PUBLIC_API_URL || ''}${imageUrl}`} 
               alt={label} 
-              className="w-full h-32 object-cover rounded-lg"
+              className="w-full h-32 object-contain rounded-lg bg-slate-800/50"
             />
-            <div className="absolute inset-0 bg-black/50 opacity-0 hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
-              <p className="text-white text-sm">點擊更換</p>
+            <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/60 rounded text-white text-xs opacity-0 hover:opacity-100 transition-opacity">
+              點擊更換
             </div>
-            <div className="absolute top-2 right-2 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+            <div className="absolute top-2 right-2 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center shrink-0">
               <CheckCircle className="w-4 h-4 text-white" />
             </div>
           </div>
@@ -619,7 +619,7 @@ function IdentityVerificationModal({ isOpen, onClose, onSuccess }: { isOpen: boo
     setLoading(true);
     setError("");
     try {
-      await api.post("/verification/identity/submit", { 
+      await api.post("/verification/submit", { 
         id_number: idNumber.toUpperCase(), 
         real_name: realName, 
         birth_date: birthDate,
