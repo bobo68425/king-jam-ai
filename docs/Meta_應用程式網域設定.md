@@ -4,6 +4,19 @@
 
 ---
 
+## 快速檢查（請逐項確認）
+
+| 項目 | 正確設定 |
+|------|----------|
+| 應用程式網域 #1 | `kingjam.app`（無 https://） |
+| 應用程式網域 #2 | `www.kingjam.app` |
+| 應用程式網域 #3 | `api.kingjam.app` |
+| OAuth 重新導向 URI | `https://api.kingjam.app/oauth/meta/callback` |
+| 編輯的應用程式 | 需與 FACEBOOK_APP_ID 相同 |
+| 已按「儲存變更」 | ✓ |
+
+---
+
 ## 一、正確位置
 
 1. 前往 [developers.facebook.com](https://developers.facebook.com/)
@@ -80,3 +93,11 @@ api.kingjam.app
 2. **應用程式模式**：測試模式／正式上線皆可，網域設定需正確
 3. **改用無痕模式**：排除舊快取或擴充套件干擾
 4. **檢查網域**：確認 `api.kingjam.app` 可正常開啟、無 SSL 錯誤
+5. **Facebook Login for Business**：若使用 META_CONFIG_ID，網域仍須在「設定 → 基本資料」的「應用程式網域」設定，Configuration 不會覆蓋此設定
+6. **等待生效**：Meta 設定有時需 5–10 分鐘才生效，請稍候再試
+
+### 常見遺漏
+
+- **只加了 OAuth URI 沒加應用程式網域**：二者都需要，缺一不可
+- **加錯應用程式**：若有多個 Meta 應用程式，請確認編輯的是 King Jam AI 用的那一個（對應 GitHub Secrets 的 FACEBOOK_APP_ID）
+- **網域前後多餘空格**：貼上後請檢查是否有多餘空白

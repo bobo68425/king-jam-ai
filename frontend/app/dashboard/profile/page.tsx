@@ -174,7 +174,7 @@ function GlowCard({ children, className = "", glowColor = "indigo" }: { children
   
   return (
     <div className={`relative group ${className}`}>
-      <div className={`absolute -inset-0.5 bg-gradient-to-r ${gradient} rounded-2xl blur opacity-0 group-hover:opacity-20 transition duration-500`}></div>
+      <div className={`absolute -inset-0.5 bg-gradient-to-r ${gradient} rounded-2xl blur opacity-0 group-hover:opacity-20 transition duration-500 pointer-events-none`}></div>
       <div className="relative bg-slate-800/80 backdrop-blur-xl rounded-2xl border border-slate-700/50 overflow-hidden">
         {children}
       </div>
@@ -326,6 +326,7 @@ function SecurityCard({
                 </div>
               )}
               <button
+                type="button"
                 onClick={onAction}
                 className={`w-full px-4 py-2.5 bg-gradient-to-r ${colors.btnGradient} text-white rounded-lg text-sm font-medium transition-all shadow-lg ${colors.btnShadow}`}
               >

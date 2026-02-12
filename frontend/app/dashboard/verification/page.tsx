@@ -375,6 +375,7 @@ export default function VerificationPage() {
                     審核時間：{formatDate(status.reviewed_at)}
                   </p>
                   <Button 
+                    type="button"
                     className="mt-3" 
                     onClick={() => {
                       setShowForm(true);
