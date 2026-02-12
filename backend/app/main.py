@@ -4,11 +4,82 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
+import logging
 import os
 
 from app.routers import auth, social_auth, blog, social, video, scheduler, upload, oauth, history, tasks, credits, referral, verification, users, notifications, wordpress, admin, insights, analytics, queue_monitor, brand_kit, prompts, design_studio, payment, account, campaigns, admin_notifications, assistant, phone_verification, line_webhook, funding
 
+logger = logging.getLogger(__name__)
+
+origins = [
+    "http://localhost:3000",  # Next.js 開發環境
+    "http://localhost:3001",  # Next.js 開發環境 (備用 port)
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
+    "https://kingjam.app",    # 正式網域
+    "https://www.kingjam.app",
+    "http://kingjam.app",
+    "http://www.kingjam.app",
+]
+
 app = FastAPI(title="King Jam AI API", version="1.0.1")  # 2026-02-03 更新
+
+
+def _cors_headers(origin: str):
+    """回傳 CORS 標頭，確保錯誤回應也能被前端讀取"""
+    if origin in origins:
+        return {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+        }
+    return {}
+
+
+class CORSEnforceMiddleware(BaseHTTPMiddleware):
+    """確保所有回應都帶有 CORS 標頭（含 500 錯誤）"""
+    async def dispatch(self, request, call_next):
+        origin = request.headers.get("origin", "")
+        try:
+            response = await call_next(request)
+            if origin and "Access-Control-Allow-Origin" not in response.headers:
+                for k, v in _cors_headers(origin).items():
+                    response.headers[k] = v
+            return response
+        except Exception as e:
+            logger.exception(f"[CORSEnforce] 未處理的例外: {e}")
+            return JSONResponse(
+                status_code=500,
+                content={"detail": str(e)},
+                headers=_cors_headers(origin),
+            )
+
+
+# 先加入 CORS 補強（最先加入 = 最外層 = 最後處理 response）
+app.add_middleware(CORSEnforceMiddleware)
+
+# 全域例外處理：確保未處理的 500 錯誤也回傳 JSON 與 CORS 標頭
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    from fastapi import HTTPException
+    if isinstance(exc, HTTPException):
+        origin = request.headers.get("origin", "")
+        # HTTPException 由 FastAPI 處理，補上 CORS 標頭
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail},
+            headers=_cors_headers(origin),
+        )
+    origin = request.headers.get("origin", "")
+    logger.exception(f"[Global] 未處理的例外: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc)},
+        headers=_cors_headers(origin),
+    )
+
 
 # 添加 validation error 詳細日誌
 @app.exception_handler(RequestValidationError)
@@ -25,17 +96,6 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         status_code=422,
         content={"detail": exc.errors()}
     )
-
-origins = [
-    "http://localhost:3000",  # Next.js 開發環境
-    "http://localhost:3001",  # Next.js 開發環境 (備用 port)
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:3001",
-    "https://kingjam.app",    # 正式網域
-    "https://www.kingjam.app",
-    "http://kingjam.app",
-    "http://www.kingjam.app",
-]
 
 app.add_middleware(
     CORSMiddleware,
