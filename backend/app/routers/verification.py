@@ -242,16 +242,11 @@ async def verify_phone_code(
             detail="驗證碼錯誤或已過期"
         )
     
-    # 更新驗證狀態
+    # 更新驗證狀態（phone_verifications 為主記錄，credits/withdrawal 皆由此讀取）
     db.execute(text("""
         UPDATE phone_verifications 
         SET is_verified = true, verified_at = NOW(), updated_at = NOW()
         WHERE user_id = :user_id
-    """), {"user_id": current_user.id})
-    
-    # 更新用戶的 phone_verified 欄位（如果存在）
-    db.execute(text("""
-        UPDATE users SET phone_verified = true WHERE id = :user_id
     """), {"user_id": current_user.id})
     
     db.commit()
