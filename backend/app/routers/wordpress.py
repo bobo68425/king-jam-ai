@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
 import json
+import pytz
 
 from app.database import get_db
 from app.models import User, SocialAccount, ScheduledPost, PublishLog
@@ -472,7 +473,9 @@ async def schedule_wordpress_post(
     if not request.scheduled_at:
         raise HTTPException(status_code=400, detail="需要提供排程時間")
     
-    if request.scheduled_at <= datetime.utcnow():
+    now_utc = datetime.now(pytz.UTC)
+    scheduled_utc = request.scheduled_at.astimezone(pytz.UTC) if request.scheduled_at.tzinfo else pytz.timezone("Asia/Taipei").localize(request.scheduled_at).astimezone(pytz.UTC)
+    if scheduled_utc <= now_utc:
         raise HTTPException(status_code=400, detail="排程時間必須是未來時間")
     
     account = db.query(SocialAccount).filter(
