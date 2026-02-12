@@ -786,14 +786,16 @@ def _validate_tw_id_number(id_number: str) -> bool:
     }
     
     letter_num = letter_map.get(id_number[0], 0)
+    if letter_num == 0:
+        return False
     n1 = letter_num // 10
     n2 = letter_num % 10
     
-    weights = [1, 9, 8, 7, 6, 5, 4, 3, 2, 1]
-    total = n1 + n2 * 9
-    
+    # 台灣身分證檢查碼公式：權重 n1,n2,d1~d9 = 1,9,8,7,6,5,4,3,2,1,1
+    total = n1 * 1 + n2 * 9
+    digit_weights = [8, 7, 6, 5, 4, 3, 2, 1, 1]
     for i, digit in enumerate(id_number[1:]):
-        total += int(digit) * weights[i + 1]
+        total += int(digit) * digit_weights[i]
     
     return total % 10 == 0
 

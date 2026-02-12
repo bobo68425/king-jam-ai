@@ -143,6 +143,7 @@ export default function VerificationPage() {
     reader.readAsDataURL(file);
   };
 
+  /** 台灣身分證檢查碼：權重 n1,n2,d1~d9 = 1,9,8,7,6,5,4,3,2,1,1 */
   const validateIdNumber = (id: string): boolean => {
     if (!id || id.length !== 10) return false;
     
@@ -158,14 +159,15 @@ export default function VerificationPage() {
     };
     
     const letterNum = letterMap[upper[0]];
+    if (!letterNum) return false;
     const n1 = Math.floor(letterNum / 10);
     const n2 = letterNum % 10;
     
-    const weights = [1, 9, 8, 7, 6, 5, 4, 3, 2, 1];
-    let total = n1 + n2 * 9;
+    const digitWeights = [8, 7, 6, 5, 4, 3, 2, 1, 1];
+    let total = n1 * 1 + n2 * 9;
     
     for (let i = 1; i < upper.length; i++) {
-      total += parseInt(upper[i]) * weights[i];
+      total += parseInt(upper[i]) * digitWeights[i - 1];
     }
     
     return total % 10 === 0;

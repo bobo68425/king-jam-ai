@@ -512,11 +512,11 @@ function ImageUploadBox({
             <p className="text-sm text-slate-400">上傳中...</p>
           </div>
         ) : imageUrl ? (
-          <div className="relative min-h-[8rem]">
+          <div className="relative min-h-[12rem] flex items-center justify-center bg-slate-800/30 rounded-lg">
             <img 
               src={imageUrl.startsWith('http') ? imageUrl : `${process.env.NEXT_PUBLIC_API_URL || ''}${imageUrl}`} 
               alt={label} 
-              className="w-full h-32 object-contain rounded-lg bg-slate-800/50"
+              className="max-w-full max-h-52 object-contain object-center rounded-lg"
             />
             <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/60 rounded text-white text-xs opacity-0 hover:opacity-100 transition-opacity">
               點擊更換
@@ -556,20 +556,39 @@ function IdentityVerificationModal({ isOpen, onClose, onSuccess }: { isOpen: boo
   const [uploadingBack, setUploadingBack] = useState(false);
   const [uploadingSelfie, setUploadingSelfie] = useState(false);
 
-  /** 台灣身分證格式：1 英文字母 + 1 或 2（性別）+ 8 位數字。回傳是否有效 */
+  /** 台灣身分證格式與檢查碼驗證（權重 1,9,8,7,6,5,4,3,2,1,1） */
   const validateId = (): boolean => {
     if (idNumber.length < 10) {
       setIdValid(null);
       return false;
     }
     const n = idNumber.toUpperCase();
-    const valid = n.length === 10 &&
-      n[0].match(/[A-Z]/) &&
-      n[1].match(/[12]/) &&
-      n.slice(2).match(/^\d{8}$/);
-    setIdValid(!!valid);
-    setError(valid ? "" : "請輸入正確的身分證字號格式（如 A123456789）");
-    return !!valid;
+    if (n.length !== 10 || !/^[A-Z][12]\d{8}$/.test(n)) {
+      setIdValid(false);
+      setError("請輸入正確的身分證字號格式（如 A123456789）");
+      return false;
+    }
+    const letterMap: Record<string, number> = {
+      'A': 10, 'B': 11, 'C': 12, 'D': 13, 'E': 14, 'F': 15,
+      'G': 16, 'H': 17, 'I': 34, 'J': 18, 'K': 19, 'L': 20,
+      'M': 21, 'N': 22, 'O': 35, 'P': 23, 'Q': 24, 'R': 25,
+      'S': 26, 'T': 27, 'U': 28, 'V': 29, 'W': 32, 'X': 30,
+      'Y': 31, 'Z': 33
+    };
+    const letterNum = letterMap[n[0]];
+    if (!letterNum) {
+      setIdValid(false);
+      setError("請輸入正確的身分證字號格式（如 A123456789）");
+      return false;
+    }
+    const n1 = Math.floor(letterNum / 10), n2 = letterNum % 10;
+    const digitWeights = [8, 7, 6, 5, 4, 3, 2, 1, 1];
+    let total = n1 * 1 + n2 * 9;
+    for (let i = 1; i < n.length; i++) total += parseInt(n[i]) * digitWeights[i - 1];
+    const valid = total % 10 === 0;
+    setIdValid(valid);
+    setError(valid ? "" : "身分證字號檢查碼不正確，請確認輸入");
+    return valid;
   };
 
   const uploadImage = async (file: File, imageType: "front" | "back" | "selfie") => {
