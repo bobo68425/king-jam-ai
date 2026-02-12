@@ -51,6 +51,7 @@ export default function VerificationPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [status, setStatus] = useState<VerificationStatus | null>(null);
   const [showForm, setShowForm] = useState(false);
 
@@ -72,8 +73,15 @@ export default function VerificationPage() {
   const idFrontRef = useRef<HTMLInputElement>(null);
   const idBackRef = useRef<HTMLInputElement>(null);
   const selfieRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLDivElement>(null);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || (typeof window !== "undefined" && /^(.+\.)?kingjam\.app$/.test(window.location?.hostname || "") ? "https://api.kingjam.app" : "http://localhost:8000");
+
+  const resolveImageSrc = (url: string | null) => {
+    if (!url) return "";
+    if (url.startsWith("http") || url.startsWith("data:")) return url;
+    return `${API_URL.replace(/\/$/, "")}${url.startsWith("/") ? url : `/${url}`}`;
+  };
 
   const fetchStatus = useCallback(async () => {
     setLoading(true);
@@ -116,31 +124,44 @@ export default function VerificationPage() {
     fetchStatus();
   }, [fetchStatus]);
 
-  const handleImageUpload = (
+  const handleImageUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
-    setter: (value: string | null) => void
+    setter: (value: string | null) => void,
+    imageType: "front" | "back" | "selfie"
   ) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // 檢查檔案大小（最大 5MB）
     if (file.size > 5 * 1024 * 1024) {
       alert("圖片大小不能超過 5MB");
       return;
     }
-
-    // 檢查檔案類型
     if (!file.type.startsWith("image/")) {
       alert("請上傳圖片檔案");
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64 = event.target?.result as string;
-      setter(base64);
-    };
-    reader.readAsDataURL(file);
+    try {
+      setUploadingImage(true);
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("image_type", imageType);
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_URL}/verification/identity/upload-image`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await res.json();
+      const url = data?.image_url || data?.url;
+      if (!url) throw new Error("未取得上傳結果");
+      setter(url);
+    } catch (err: any) {
+      alert(err?.message || "上傳失敗，請稍後再試");
+    } finally {
+      setUploadingImage(false);
+      (e.target as HTMLInputElement).value = "";
+    }
   };
 
   /** 台灣身分證檢查碼：權重 n1,n2,d1~d9 = 1,9,8,7,6,5,4,3,2,1,1 */
@@ -355,7 +376,10 @@ export default function VerificationPage() {
                   </p>
                   <Button 
                     className="mt-3" 
-                    onClick={() => setShowForm(true)}
+                    onClick={() => {
+                      setShowForm(true);
+                      setTimeout(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+                    }}
                   >
                     <RefreshCw className="h-4 w-4 mr-2" />
                     重新提交
@@ -381,6 +405,7 @@ export default function VerificationPage() {
 
       {/* 認證表單 */}
       {showForm && !status?.is_verified && (
+        <div ref={formRef}>
         <Card>
           <CardHeader>
             <CardTitle>提交身份認證</CardTitle>
@@ -496,7 +521,7 @@ export default function VerificationPage() {
                   {idFrontImage ? (
                     <div className="relative">
                       <img 
-                        src={idFrontImage} 
+                        src={resolveImageSrc(idFrontImage)} 
                         alt="身份證正面" 
                         className="max-h-32 mx-auto rounded"
                         onClick={(e) => {
@@ -518,7 +543,7 @@ export default function VerificationPage() {
                   type="file"
                   accept="image/*"
                   className="hidden"
-                  onChange={(e) => handleImageUpload(e, setIdFrontImage)}
+                  onChange={(e) => handleImageUpload(e, setIdFrontImage, "front")}
                 />
               </div>
 
@@ -536,7 +561,7 @@ export default function VerificationPage() {
                   {idBackImage ? (
                     <div className="relative">
                       <img 
-                        src={idBackImage} 
+                        src={resolveImageSrc(idBackImage)} 
                         alt="身份證反面" 
                         className="max-h-32 mx-auto rounded"
                         onClick={(e) => {
@@ -558,7 +583,7 @@ export default function VerificationPage() {
                   type="file"
                   accept="image/*"
                   className="hidden"
-                  onChange={(e) => handleImageUpload(e, setIdBackImage)}
+                  onChange={(e) => handleImageUpload(e, setIdBackImage, "back")}
                 />
               </div>
 
@@ -576,7 +601,7 @@ export default function VerificationPage() {
                   {selfieImage ? (
                     <div className="relative">
                       <img 
-                        src={selfieImage} 
+                        src={resolveImageSrc(selfieImage)} 
                         alt="手持自拍照" 
                         className="max-h-32 mx-auto rounded"
                         onClick={(e) => {
@@ -598,7 +623,7 @@ export default function VerificationPage() {
                   type="file"
                   accept="image/*"
                   className="hidden"
-                  onChange={(e) => handleImageUpload(e, setSelfieImage)}
+                  onChange={(e) => handleImageUpload(e, setSelfieImage, "selfie")}
                 />
               </div>
             </div>
@@ -635,6 +660,7 @@ export default function VerificationPage() {
             </Button>
           </CardFooter>
         </Card>
+        </div>
       )}
 
       {/* 圖片預覽對話框 */}
@@ -644,7 +670,7 @@ export default function VerificationPage() {
             <DialogTitle>圖片預覽</DialogTitle>
           </DialogHeader>
           {previewImage && (
-            <img src={previewImage} alt="預覽" className="w-full rounded-lg" />
+            <img src={resolveImageSrc(previewImage)} alt="預覽" className="w-full rounded-lg" />
           )}
         </DialogContent>
       </Dialog>

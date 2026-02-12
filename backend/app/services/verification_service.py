@@ -63,7 +63,7 @@ class VerificationService:
             "pending": "身份認證審核中，請耐心等候",
             "reviewing": "身份認證審核中，請耐心等候",
             "approved": "身份認證已通過",
-            "rejected": f"身份認證未通過：{verification.reject_reason or '請重新提交'}",
+            "rejected": f"身份認證未通過：{verification.rejection_reason or '請重新提交'}",
         }
         
         return {
