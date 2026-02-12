@@ -24,6 +24,7 @@ import os
 import re
 import random
 import logging
+import json
 import aiohttp
 import hashlib
 from typing import Optional, Dict, Any, Tuple
@@ -232,7 +233,16 @@ class SMSService:
                 }
                 
                 async with session.post(url, data=data, auth=auth) as resp:
-                    result = await resp.json()
+                    text = await resp.text()
+                    try:
+                        result = json.loads(text)
+                    except json.JSONDecodeError:
+                        logger.error(f"[SMS] Twilio 回應非 JSON (status={resp.status}): {text[:200]}")
+                        return SMSResult(
+                            success=False,
+                            error=f"簡訊服務異常 (HTTP {resp.status})",
+                            provider="twilio"
+                        )
                     
                     if resp.status == 201:
                         logger.info(f"[SMS] Twilio 發送成功 ({auth_method}): {phone}")
@@ -242,12 +252,14 @@ class SMSService:
                             provider="twilio"
                         )
                     else:
-                        error = result.get("message", "發送失敗")
-                        logger.error(f"[SMS] Twilio 發送失敗: {error}")
+                        code = result.get("code") or result.get("error_code")
+                        msg = result.get("message", "發送失敗")
+                        error = f"[{code}] {msg}" if code else msg
+                        logger.error(f"[SMS] Twilio 發送失敗 ({resp.status}): {error}")
                         return SMSResult(success=False, error=error, provider="twilio")
                         
         except Exception as e:
-            logger.error(f"[SMS] Twilio 錯誤: {e}")
+            logger.error(f"[SMS] Twilio 錯誤: {e}", exc_info=True)
             return SMSResult(success=False, error=str(e), provider="twilio")
     
     # ==================== 每客簡訊 (Mitake) ====================
