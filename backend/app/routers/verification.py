@@ -257,6 +257,99 @@ async def verify_phone_code(
     }
 
 
+# ============================================================
+# 雙重驗證 (2FA / TOTP) API
+# ============================================================
+
+@router.post("/2fa/setup")
+async def setup_2fa(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    發起 2FA 設定：產生 TOTP secret 與 provisioning URI（供 QR Code 掃描）
+    """
+    import pyotp
+
+    # 產生新的 TOTP secret
+    secret = pyotp.random_base32()
+    totp = pyotp.TOTP(secret)
+    provisioning_uri = totp.provisioning_uri(
+        name=current_user.email or str(current_user.id),
+        issuer_name="King Jam AI",
+    )
+
+    # 寫入 two_factor_auth（尚未啟用，需驗證後才啟用）
+    db.execute(text("""
+        INSERT INTO two_factor_auth (user_id, totp_secret, is_totp_enabled, created_at, updated_at)
+        VALUES (:user_id, :secret, false, NOW(), NOW())
+        ON CONFLICT (user_id) DO UPDATE SET
+            totp_secret = :secret,
+            is_totp_enabled = false,
+            updated_at = NOW()
+    """), {"user_id": current_user.id, "secret": secret})
+    db.commit()
+
+    return {
+        "success": True,
+        "secret": secret,
+        "provisioning_uri": provisioning_uri,
+    }
+
+
+class TwoFactorVerifyRequest(BaseModel):
+    """2FA 驗證並啟用請求"""
+    code: str = Field(..., min_length=6, max_length=6, description="6 位數 TOTP 驗證碼")
+
+
+@router.post("/2fa/verify")
+async def verify_and_enable_2fa(
+    data: TwoFactorVerifyRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    驗證 TOTP 驗證碼並啟用 2FA，回傳備用碼
+    """
+    import pyotp
+    import secrets
+    import json
+
+    two_factor = db.execute(text("""
+        SELECT totp_secret FROM two_factor_auth WHERE user_id = :user_id
+    """), {"user_id": current_user.id}).fetchone()
+
+    if not two_factor or not two_factor.totp_secret:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="請先執行 2FA 設定"
+        )
+
+    totp = pyotp.TOTP(two_factor.totp_secret)
+    if not totp.verify(data.code, valid_window=1):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="驗證碼錯誤或已過期"
+        )
+
+    # 產生備用碼（每組 8 字元，共 8 組）
+    backup_codes = [secrets.token_hex(4).upper() for _ in range(8)]
+
+    # 啟用 2FA 並儲存備用碼
+    db.execute(text("""
+        UPDATE two_factor_auth 
+        SET is_totp_enabled = true, enabled_at = NOW(), backup_codes = :backup_codes, updated_at = NOW()
+        WHERE user_id = :user_id
+    """), {"user_id": current_user.id, "backup_codes": json.dumps(backup_codes)})
+    db.commit()
+
+    return {
+        "success": True,
+        "message": "雙重驗證已啟用",
+        "backup_codes": backup_codes,
+    }
+
+
 @router.post("/submit")
 async def submit_verification(
     request: Request,
