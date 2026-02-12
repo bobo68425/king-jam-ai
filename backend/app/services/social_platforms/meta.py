@@ -53,11 +53,13 @@ class MetaPlatform(BasePlatform):
             client_secret=app_secret,
             redirect_uri=redirect_uri,
             scopes=[
+                # 依賴權限需先於 instagram_*（見 Meta 權限文件）
+                "pages_read_user_content",
+                "pages_show_list",
+                "pages_read_engagement",
                 "instagram_basic",
                 "instagram_content_publish",
                 "instagram_manage_insights",
-                "pages_show_list",
-                "pages_read_engagement",
                 "business_management"
             ],
             auth_url="https://www.facebook.com/v18.0/dialog/oauth",
@@ -145,14 +147,22 @@ class MetaPlatform(BasePlatform):
     # ==================== OAuth 授權流程 ====================
     
     def get_auth_url(self, state: str) -> str:
-        """生成 Meta OAuth 授權 URL"""
+        """生成 Meta OAuth 授權 URL
+        
+        若已設定 META_CONFIG_ID（Facebook Login for Business 設定 ID），
+        則使用 config_id 取代 scope，可正確取得 Instagram 權限。
+        """
         params = {
             "client_id": self.config.client_id,
             "redirect_uri": self.config.redirect_uri,
-            "scope": ",".join(self.config.scopes),
             "response_type": "code",
             "state": state
         }
+        config_id = os.getenv("META_CONFIG_ID") or os.getenv("FACEBOOK_LOGIN_CONFIG_ID")
+        if config_id and self.config.platform_id in ("instagram", "facebook"):
+            params["config_id"] = config_id
+        else:
+            params["scope"] = ",".join(self.config.scopes)
         return f"{self.config.auth_url}?{urlencode(params)}"
     
     async def exchange_code_for_token(self, code: str) -> AuthToken:
