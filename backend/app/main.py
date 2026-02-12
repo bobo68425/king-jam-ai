@@ -23,7 +23,7 @@ origins = [
     "http://www.kingjam.app",
 ]
 
-app = FastAPI(title="King Jam AI API", version="1.0.1")  # 2026-02-03 更新
+app = FastAPI(title="King Jam AI API", version="1.0.1")  # 2026-02-08 更新
 
 
 def _cors_headers(origin: str):
