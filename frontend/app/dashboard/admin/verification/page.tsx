@@ -308,7 +308,7 @@ export default function AdminVerificationPage() {
               variant="ghost" 
               size="sm" 
               className="mt-2 w-full"
-              onClick={() => { setStatusFilter("pending"); setPage(1); }}
+              onClick={() => { setStatusFilter("pending"); setSearch(""); setPage(1); }}
             >
               查看
             </Button>
@@ -328,7 +328,7 @@ export default function AdminVerificationPage() {
               variant="ghost" 
               size="sm" 
               className="mt-2 w-full"
-              onClick={() => { setStatusFilter("reviewing"); setPage(1); }}
+              onClick={() => { setStatusFilter("reviewing"); setSearch(""); setPage(1); }}
             >
               查看
             </Button>
@@ -348,7 +348,7 @@ export default function AdminVerificationPage() {
               variant="ghost" 
               size="sm" 
               className="mt-2 w-full"
-              onClick={() => { setStatusFilter("approved"); setPage(1); }}
+              onClick={() => { setStatusFilter("approved"); setSearch(""); setPage(1); }}
             >
               查看
             </Button>
@@ -368,7 +368,7 @@ export default function AdminVerificationPage() {
               variant="ghost" 
               size="sm" 
               className="mt-2 w-full"
-              onClick={() => { setStatusFilter("rejected"); setPage(1); }}
+              onClick={() => { setStatusFilter("rejected"); setSearch(""); setPage(1); }}
             >
               查看
             </Button>
@@ -391,7 +391,7 @@ export default function AdminVerificationPage() {
                 />
               </div>
             </div>
-            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setSearch(""); setPage(1); }}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="狀態" />
               </SelectTrigger>
@@ -424,6 +424,9 @@ export default function AdminVerificationPage() {
             <div className="text-center py-12 text-muted-foreground">
               <Shield className="h-12 w-12 mx-auto mb-3" />
               <p>目前沒有{statusFilter === "all" ? "" : getStatusBadge(statusFilter).props.children}的認證申請</p>
+              {search && (statusFilter === "all" ? stats.pending + stats.reviewing + stats.approved + stats.rejected > 0 : (stats as Record<string, number>)[statusFilter] > 0) && (
+                <p className="text-sm mt-2 text-amber-500/80">搜尋「{search}」無符合結果，可清除搜尋查看全部</p>
+              )}
             </div>
           ) : (
             <>
