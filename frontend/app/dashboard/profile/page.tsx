@@ -556,14 +556,20 @@ function IdentityVerificationModal({ isOpen, onClose, onSuccess }: { isOpen: boo
   const [uploadingBack, setUploadingBack] = useState(false);
   const [uploadingSelfie, setUploadingSelfie] = useState(false);
 
-  const validateId = async () => {
-    if (idNumber.length < 10) return;
-    try {
-      const res = await fetch(`http://localhost:8000/verification/identity/validate-id?id_number=${idNumber}`, { method: "POST" });
-      const data = await res.json();
-      setIdValid(data.valid);
-      if (!data.valid) setError(data.message); else setError("");
-    } catch {}
+  /** 台灣身分證格式：1 英文字母 + 1 或 2（性別）+ 8 位數字。回傳是否有效 */
+  const validateId = (): boolean => {
+    if (idNumber.length < 10) {
+      setIdValid(null);
+      return false;
+    }
+    const n = idNumber.toUpperCase();
+    const valid = n.length === 10 &&
+      n[0].match(/[A-Z]/) &&
+      n[1].match(/[12]/) &&
+      n.slice(2).match(/^\d{8}$/);
+    setIdValid(!!valid);
+    setError(valid ? "" : "請輸入正確的身分證字號格式（如 A123456789）");
+    return !!valid;
   };
 
   const uploadImage = async (file: File, imageType: "front" | "back" | "selfie") => {
@@ -593,7 +599,9 @@ function IdentityVerificationModal({ isOpen, onClose, onSuccess }: { isOpen: boo
   };
 
   const goToUpload = () => {
-    if (!idValid || !realName || !birthDate) {
+    // 點擊時重新驗證（避免未 blur 導致 idValid 為 null）
+    const idOk = validateId();
+    if (!idOk || !realName.trim() || !birthDate) {
       setError("請先完整填寫基本資料");
       return;
     }
@@ -700,7 +708,7 @@ function IdentityVerificationModal({ isOpen, onClose, onSuccess }: { isOpen: boo
                 />
               </div>
               {error && <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">{error}</div>}
-              <button onClick={goToUpload} disabled={!idValid || !realName || !birthDate}
+              <button onClick={goToUpload} disabled={idNumber.length < 10 || !realName.trim() || !birthDate}
                 className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:from-slate-600 disabled:to-slate-600 disabled:cursor-not-allowed text-white rounded-xl font-medium transition-all shadow-lg shadow-blue-500/20">
                 下一步：上傳證件
                 <ArrowRight className="w-4 h-4" />
