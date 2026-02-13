@@ -162,6 +162,7 @@ export default function UserDetailPage() {
 
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<UserDetail | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [creditBalance, setCreditBalance] = useState<Record<string, number>>({});
   const [orders, setOrders] = useState<Order[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -198,10 +199,20 @@ export default function UserDetailPage() {
 
   const fetchUserDetail = useCallback(async () => {
     if (!userId || userId === "undefined") {
+      setErrorMsg("無效的用戶 ID");
+      setUser(null);
+      setLoading(false);
+      return;
+    }
+    const idNum = parseInt(userId, 10);
+    if (isNaN(idNum) || idNum < 1) {
+      setErrorMsg(`無效的用戶 ID：${userId}`);
+      setUser(null);
       setLoading(false);
       return;
     }
     setLoading(true);
+    setErrorMsg(null);
     try {
       const token = localStorage.getItem("token");
       const response = await fetch(`${API_URL}/admin/users/${userId}`, {
@@ -213,39 +224,49 @@ export default function UserDetailPage() {
           router.push("/dashboard");
           return;
         }
+        const errData = await response.json().catch(() => ({}));
+        const detail = typeof errData.detail === "string" ? errData.detail : errData.detail?.[0]?.msg || "無法載入";
         if (response.status === 404) {
+          setErrorMsg(`用戶不存在（ID: ${userId}）`);
           setUser(null);
           setLoading(false);
           return;
         }
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.detail || "Failed to fetch user");
-      }
-
-      const data = await response.json();
-      if (!data.user) {
+        setErrorMsg(detail);
         setUser(null);
         setLoading(false);
         return;
       }
-      setUser(data.user);
-      setCreditBalance(data.credit_balance);
-      setOrders(data.recent_orders);
-      setTransactions(data.recent_transactions);
-      setGenerations(data.recent_generations);
-      setReferralInfo(data.referral_info);
-      setSocialAccounts(data.social_accounts);
-      setStats(data.stats);
+
+      const data = await response.json();
+      const userData = data.user ?? data.data?.user;
+      if (!userData) {
+        setErrorMsg("API 回傳格式異常，缺少 user 資料");
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+      setUser(userData);
+      setCreditBalance(data.credit_balance ?? {});
+      setOrders(data.recent_orders ?? []);
+      setTransactions(data.recent_transactions ?? []);
+      setGenerations(data.recent_generations ?? []);
+      setReferralInfo(data.referral_info ?? null);
+      setSocialAccounts(data.social_accounts ?? []);
+      setStats(data.stats ?? null);
+      setErrorMsg(null);
       
       // 設置編輯表單初始值
       setEditForm({
-        full_name: data.user.full_name || "",
-        tier: data.user.tier,
-        partner_tier: data.user.partner_tier,
-        subscription_plan: data.user.subscription_plan,
+        full_name: userData.full_name || "",
+        tier: userData.tier,
+        partner_tier: userData.partner_tier,
+        subscription_plan: userData.subscription_plan,
       });
     } catch (error) {
       console.error("Error fetching user:", error);
+      setErrorMsg(error instanceof Error ? error.message : "網路錯誤，請稍後重試");
+      setUser(null);
     } finally {
       setLoading(false);
     }
@@ -414,12 +435,25 @@ export default function UserDetailPage() {
 
   if (!user) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
-        <p className="text-muted-foreground">用戶不存在或無法載入</p>
-        <Button variant="outline" onClick={() => router.push("/dashboard/admin/users")}>
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          返回用戶列表
-        </Button>
+      <div className="flex flex-col items-center justify-center min-h-screen gap-4 px-4">
+        <p className="text-muted-foreground text-center">
+          {errorMsg || "用戶不存在或無法載入"}
+        </p>
+        {userId && (
+          <p className="text-sm text-muted-foreground/70 font-mono">
+            請求的用戶 ID：{userId}
+          </p>
+        )}
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => router.push("/dashboard/admin/users")}>
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            返回用戶列表
+          </Button>
+          <Button variant="secondary" onClick={() => fetchUserDetail()}>
+            <RefreshCw className="w-4 h-4 mr-2" />
+            重試
+          </Button>
+        </div>
       </div>
     );
   }

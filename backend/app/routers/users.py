@@ -3,7 +3,10 @@
 核心營運需求 - 用戶列表、搜索、詳情、點數調整、狀態管理
 """
 
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+
+logger = logging.getLogger(__name__)
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
@@ -617,6 +620,7 @@ async def get_user_detail(
     """
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
+        logger.warning("User detail not found: user_id=%s (type=%s)", user_id, type(user_id).__name__)
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="用戶不存在"
