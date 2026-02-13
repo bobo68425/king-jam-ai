@@ -2,6 +2,8 @@
 
 本指南說明如何將 Instagram 商業帳號串接到 King Jam AI，以支援排程發文、發布貼文與限時動態。
 
+**參考文件**：[Instagram API with Facebook Login](https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login) | [Get Started](https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/get-started)
+
 ---
 
 ## 一、前置條件
@@ -170,23 +172,30 @@ curl -s "https://api.kingjam.app/scheduler/platforms" \
 5. 確認 **「用戶端 OAuth 設定」** 中的「有效的 OAuth 重新導向 URI」包含：
    - `https://api.kingjam.app/oauth/meta/callback`（必須完全一致，含結尾斜線與否）
 
-### Invalid Scopes 解法
+### Invalid Scopes 解法（必做）
 
-若授權時出現「Invalid Scopes: instagram_basic, instagram_content_publish, instagram_manage_insights」：
+依 [官方文件](https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/get-started)，Instagram API 必須使用 **Facebook Login for Business**，標準 OAuth scope 會出現 Invalid Scopes。
 
-**方式一：使用 Facebook Login for Business（推薦）**
+**步驟 1：Configure Facebook Login for Business**
 
-1. 確認應用程式為「**商業**」類型
-2. 左側選單「Facebook 登入」→「設定」→ 點「Get started with Facebook Login for Business」
-3. 左側選單「**Configurations**」→「Create configuration」或「Create from template」
-4. 選擇「**Instagram Graph API**」或手動新增權限：`pages_read_user_content`、`pages_show_list`、`pages_read_engagement`、`instagram_basic`、`instagram_content_publish`（發文用）
-5. 建立後取得 **Configuration ID**
-6. 在 GitHub Secrets 或環境變數新增：`META_CONFIG_ID`（或 `FACEBOOK_LOGIN_CONFIG_ID`）= 該 Configuration ID
-7. 重新部署後端
+1. Meta 後台 → 應用程式 → 左側「**Facebook 登入**」→「**設定**」
+2. 點「**Get started with Facebook Login for Business**」
+3. 若已啟用可略過
 
-**方式二：確認權限已加入**
+**步驟 2：建立 Configuration**
 
-已更新程式加入 `pages_read_user_content` 依賴。若仍報錯，請在 Meta 後台「應用程式審查」→「權限與功能」中，確認 `instagram_basic`、`instagram_content_publish` 已加入並完成審核。
+1. 左側「**Configurations**」→「**Create configuration**」
+2. **登入資料版本** 選擇「**Instagram 圖形 API**」（必選，否則仍會 Invalid Scopes）
+3. 依序完成：存取權杖 → 資產 → **權限**
+4. 權限至少包含：`instagram_basic`、`pages_show_list`（官方最低要求）
+5. 若需發文，再加：`instagram_content_publish`、`pages_read_engagement`
+6. 建立完成後，複製 **Configuration ID**
+
+**步驟 3：設定 GitHub Secret**
+
+1. GitHub → Settings → Secrets → Actions
+2. 新增 `META_CONFIG_ID` = Configuration ID
+3. 重新部署後端（Secret 僅在部署時寫入 Cloud Run）
 
 ---
 
@@ -195,4 +204,5 @@ curl -s "https://api.kingjam.app/scheduler/platforms" \
 - 後端 Meta 整合：`backend/app/services/social_platforms/meta.py`
 - OAuth 流程：`backend/app/routers/oauth.py`
 - 社群帳號頁面：`frontend/app/dashboard/accounts/page.tsx`
+- Invalid Scopes 排除：`docs/IG_Invalid_Scopes_排除.md`
 - 共通檢查：`docs/FB_IG_串接檢查.md`

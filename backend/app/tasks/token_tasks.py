@@ -200,15 +200,17 @@ def refresh_token_sync(social_account_id: int) -> Dict[str, Any]:
         
         if not account:
             return {"success": False, "error": "帳號不存在"}
-        
-        if not account.refresh_token:
-            return {"success": False, "error": "無 Refresh Token，需要用戶重新授權"}
-        
-        # 根據平台調用對應的刷新邏輯
+
         platform = account.platform.lower()
-        
+        # Meta/Threads 使用 access_token 自行刷新，不需 refresh_token
+        if platform not in ["instagram", "facebook", "threads"] and not account.refresh_token:
+            return {"success": False, "error": "無 Refresh Token，需要用戶重新授權"}
+
+        # 根據平台調用對應的刷新邏輯
         if platform in ["instagram", "facebook"]:
             result = _refresh_meta_token(account)
+        elif platform == "threads":
+            result = _refresh_threads_token(account)
         elif platform == "tiktok":
             result = _refresh_tiktok_token(account)
         elif platform == "youtube":
@@ -294,6 +296,38 @@ def _refresh_meta_token(account: SocialAccount) -> Dict[str, Any]:
         else:
             return {"success": False, "error": data.get("error", {}).get("message", "刷新失敗")}
             
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def _refresh_threads_token(account: SocialAccount) -> Dict[str, Any]:
+    """
+    刷新 Threads Token。使用 graph.threads.net/refresh_access_token
+    見 https://developers.facebook.com/docs/threads/get-started/long-lived-tokens
+    """
+    import os
+    import httpx
+
+    try:
+        url = "https://graph.threads.net/refresh_access_token"
+        params = {
+            "grant_type": "th_refresh_token",
+            "access_token": account.access_token
+        }
+
+        response = httpx.get(url, params=params, timeout=30)
+        data = response.json()
+
+        if "access_token" in data:
+            expires_in = data.get("expires_in", 5184000)
+            expires_at = datetime.now(pytz.UTC) + timedelta(seconds=expires_in)
+            return {
+                "success": True,
+                "access_token": data["access_token"],
+                "expires_at": expires_at
+            }
+        else:
+            return {"success": False, "error": data.get("error", {}).get("message", "刷新失敗")}
     except Exception as e:
         return {"success": False, "error": str(e)}
 

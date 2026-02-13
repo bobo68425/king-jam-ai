@@ -107,6 +107,12 @@ META_REDIRECT_URI=http://localhost:8000/oauth/meta/callback
 2. 在 Threads use case 的 **Settings** 取得 Threads app ID 與 app secret
 3. 設定 `THREADS_APP_ID` 與 `THREADS_APP_SECRET`（不要用 FACEBOOK_APP_ID）
 
+### 「Long-lived token exchange failed: Error validating application」
+
+**原因**：Threads 使用專用端點 `graph.threads.net/access_token` 交換長期 token，不可用 Facebook 的 `graph.facebook.com`。
+
+**解法**：已修正，Threads 現使用 `grant_type=th_exchange_token` 與 `https://graph.threads.net/access_token`。請重新部署後端。
+
 ### 「網址已遭封鎖」「重新導向失敗」(error_code: 1349168)
 
 **原因**：OAuth 重新導向 URI 未在 Threads 設定中列入許可名單。

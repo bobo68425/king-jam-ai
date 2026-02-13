@@ -193,8 +193,12 @@ class MetaPlatform(BasePlatform):
                 if "error" in data:
                     raise Exception(f"Token exchange failed: {data['error']['message']}")
                 
-                # 短期 token 轉換為長期 token
-                long_lived_token = await self._get_long_lived_token(data["access_token"])
+                short_token = data["access_token"]
+                # Threads 使用專用端點交換長期 token，見 https://developers.facebook.com/docs/threads/get-started/long-lived-tokens
+                if self.config.platform_id == "threads":
+                    long_lived_token = await self._get_threads_long_lived_token(short_token)
+                else:
+                    long_lived_token = await self._get_long_lived_token(short_token)
                 
                 return AuthToken(
                     access_token=long_lived_token["access_token"],
@@ -203,7 +207,7 @@ class MetaPlatform(BasePlatform):
                 )
     
     async def _get_long_lived_token(self, short_token: str) -> Dict[str, Any]:
-        """將短期 token 轉換為長期 token (60 天)"""
+        """將短期 token 轉換為長期 token (60 天)，用於 FB/IG"""
         params = {
             "grant_type": "fb_exchange_token",
             "client_id": self.config.client_id,
@@ -218,13 +222,48 @@ class MetaPlatform(BasePlatform):
                 if "error" in data:
                     raise Exception(f"Long-lived token exchange failed: {data['error']['message']}")
                 return data
+
+    async def _get_threads_long_lived_token(self, short_token: str) -> Dict[str, Any]:
+        """Threads 專用：將短期 token 轉換為長期 token (60 天)。使用 graph.threads.net，非 graph.facebook.com"""
+        params = {
+            "grant_type": "th_exchange_token",
+            "client_secret": self.config.client_secret,
+            "access_token": short_token
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            url = "https://graph.threads.net/access_token"
+            async with session.get(url, params=params) as response:
+                data = await response.json()
+                if "error" in data:
+                    raise Exception(f"Long-lived token exchange failed: {data['error']['message']}")
+                return data
     
-    async def refresh_token(self, refresh_token: str) -> AuthToken:
+    async def refresh_token(self, current_token: str) -> AuthToken:
         """
         Meta 長期 token 不使用 refresh_token，
         而是在過期前用現有 token 換取新 token
         """
-        return await self._get_long_lived_token(refresh_token)
+        if self.config.platform_id == "threads":
+            params = {
+                "grant_type": "th_refresh_token",
+                "access_token": current_token
+            }
+            async with aiohttp.ClientSession() as session:
+                async with session.get("https://graph.threads.net/refresh_access_token", params=params) as response:
+                    data = await response.json()
+                    if "error" in data:
+                        raise Exception(f"Token refresh failed: {data['error']['message']}")
+                    return AuthToken(
+                        access_token=data["access_token"],
+                        expires_at=datetime.now() + timedelta(seconds=data.get("expires_in", 5184000)),
+                        token_type="Bearer"
+                    )
+        return AuthToken(
+            access_token=(await self._get_long_lived_token(current_token))["access_token"],
+            expires_at=datetime.now() + timedelta(seconds=5184000),
+            token_type="Bearer"
+        )
     
     async def revoke_token(self, access_token: str) -> bool:
         """撤銷授權"""
