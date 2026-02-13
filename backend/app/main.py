@@ -23,7 +23,7 @@ origins = [
     "http://www.kingjam.app",
 ]
 
-app = FastAPI(title="King Jam AI API", version="1.0.1")  # 2026-02-08 更新
+app = FastAPI(title="King Jam AI API", version="1.0.2")  # 2026-02-13 META_CONFIG_ID support
 
 
 def _cors_headers(origin: str):
