@@ -243,31 +243,43 @@ class MetaPlatform(BasePlatform):
             raise ValueError(f"Unknown platform: {self.platform_id}")
     
     async def _get_instagram_profile(self, access_token: str) -> UserProfile:
-        """獲取 Instagram Business 帳號資料。遍歷所有粉專，使用第一個有連結 IG 的。"""
-        pages = await self._get_facebook_pages_with_ig(access_token)
+        """獲取 Instagram Business 帳號資料。依 Meta 官方流程：先取粉專列表，再逐一查詢各粉專的 IG。"""
+        pages = await self._get_facebook_pages(access_token)
         if not pages:
             raise Exception("No Facebook Pages found. Instagram Business requires a linked Facebook Page.")
         
-        # 找第一個有連結 Instagram Business Account 的粉專
-        for page in pages:
-            ig = page.get("instagram_business_account")
-            if ig and isinstance(ig, dict) and ig.get("id"):
-                self._page_id = page["id"]
-                self._ig_user_id = ig["id"]
-                return UserProfile(
-                    platform_id="instagram",
-                    platform_user_id=ig["id"],
-                    username=ig.get("username", ""),
-                    display_name=ig.get("name"),
-                    avatar_url=ig.get("profile_picture_url"),
-                    profile_url=f"https://instagram.com/{ig.get('username', '')}",
-                    followers_count=ig.get("followers_count"),
-                    extra_data={"page_id": page["id"], "page_name": page["name"]}
-                )
+        async with aiohttp.ClientSession() as session:
+            for page in pages:
+                url = f"{self.GRAPH_API_BASE}/{page['id']}"
+                # 優先使用 Page Access Token（若有的話），對該粉專權限較完整
+                token = page.get("access_token") or access_token
+                params = {
+                    "fields": "instagram_business_account{id,username,name,profile_picture_url,followers_count}",
+                    "access_token": token
+                }
+                async with session.get(url, params=params) as response:
+                    data = await response.json()
+                    if "error" in data:
+                        continue
+                    ig = data.get("instagram_business_account")
+                    if ig and isinstance(ig, dict) and ig.get("id"):
+                        self._page_id = page["id"]
+                        self._ig_user_id = ig["id"]
+                        return UserProfile(
+                            platform_id="instagram",
+                            platform_user_id=ig["id"],
+                            username=ig.get("username", ""),
+                            display_name=ig.get("name"),
+                            avatar_url=ig.get("profile_picture_url"),
+                            profile_url=f"https://instagram.com/{ig.get('username', '')}",
+                            followers_count=ig.get("followers_count"),
+                            extra_data={"page_id": page["id"], "page_name": page["name"]}
+                        )
         
+        page_names = ", ".join(p.get("name", p.get("id", "?")) for p in pages[:5])
         raise Exception(
-            "No Instagram Business Account linked to any of your Facebook Pages. "
-            "Please link an Instagram Business/Creator account to your Page in Facebook Page Settings → Instagram."
+            f"No Instagram Business Account linked to any of your Facebook Pages ({page_names}). "
+            "Please link an Instagram Business/Creator account in Facebook Page Settings → Instagram."
         )
     
     async def _get_facebook_profile(self, access_token: str) -> UserProfile:
@@ -331,20 +343,6 @@ class MetaPlatform(BasePlatform):
                 data = await response.json()
                 return data.get("data", [])
 
-    async def _get_facebook_pages_with_ig(self, access_token: str) -> List[Dict[str, Any]]:
-        """獲取 Facebook Pages 並包含 instagram_business_account 欄位"""
-        async with aiohttp.ClientSession() as session:
-            url = f"{self.GRAPH_API_BASE}/me/accounts"
-            params = {
-                "fields": "id,name,username,access_token,picture,followers_count,instagram_business_account{id,username,name,profile_picture_url,followers_count}",
-                "access_token": access_token
-            }
-            async with session.get(url, params=params) as response:
-                data = await response.json()
-                if "error" in data:
-                    raise Exception(data["error"].get("message", str(data["error"])))
-                return data.get("data", [])
-    
     # ==================== 內容發布 ====================
     
     async def publish(self, access_token: str, content: PublishContent) -> PublishResult:
