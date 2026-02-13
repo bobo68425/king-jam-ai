@@ -1137,35 +1137,92 @@ async def get_publish_logs(
 async def get_supported_platforms():
     """取得支援的社群平台列表"""
     import os
-    
-    # 檢查各平台是否已設定 API 金鑰
+
+    def _ok(val: str) -> bool:
+        return bool(val and not val.startswith("your_"))
+
     def check_platform_ready(env_keys: list) -> str:
         for key in env_keys:
-            val = os.getenv(key, "")
-            if not val or val.startswith("your_"):
+            if not _ok(os.getenv(key, "")):
                 return "needs_setup"
         return "active"
 
     def check_meta_ready() -> str:
-        """Meta (FB/IG/Threads) 可選用 FACEBOOK_APP_ID/SECRET"""
+        """Facebook：需 META/FACEBOOK_APP_ID + SECRET"""
         meta_id = os.getenv("META_APP_ID") or os.getenv("FACEBOOK_APP_ID") or ""
         meta_sec = os.getenv("META_APP_SECRET") or os.getenv("FACEBOOK_APP_SECRET") or ""
-        if not meta_id or not meta_sec or meta_id.startswith("your_") or meta_sec.startswith("your_"):
-            return "needs_setup"
-        return "active"
-    
+        return "active" if _ok(meta_id) and _ok(meta_sec) else "needs_setup"
+
+    def check_instagram_ready() -> str:
+        """Instagram：可用 Facebook Login (META) 或 Instagram Login (INSTAGRAM_APP_ID)"""
+        meta_ok = check_meta_ready() == "active"
+        ig_id = os.getenv("INSTAGRAM_APP_ID") or ""
+        ig_sec = os.getenv("INSTAGRAM_APP_SECRET") or ""
+        ig_ok = _ok(ig_id) and _ok(ig_sec)
+        return "active" if (meta_ok or ig_ok) else "needs_setup"
+
+    def check_threads_ready() -> str:
+        """Threads：需 THREADS_APP_ID + SECRET（不可用 FB 憑證）"""
+        return check_platform_ready(["THREADS_APP_ID", "THREADS_APP_SECRET"])
+
     return {
         "platforms": [
             {"id": "wordpress", "name": "WordPress", "icon": "📝", "status": "active", "description": "部落格文章排程發布"},
-            {"id": "instagram", "name": "Instagram", "icon": "📸", "status": check_meta_ready(), "description": "分享照片和短影音"},
+            {"id": "instagram", "name": "Instagram", "icon": "📸", "status": check_instagram_ready(), "description": "分享照片和短影音"},
             {"id": "facebook", "name": "Facebook", "icon": "📘", "status": check_meta_ready(), "description": "連接朋友和社群"},
-            {"id": "threads", "name": "Threads", "icon": "🧵", "status": check_meta_ready(), "description": "文字為主的社群"},
+            {"id": "threads", "name": "Threads", "icon": "🧵", "status": check_threads_ready(), "description": "文字為主的社群"},
             {"id": "tiktok", "name": "TikTok", "icon": "🎵", "status": check_platform_ready(["TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET"]), "description": "短影音創作平台"},
             {"id": "linkedin", "name": "LinkedIn", "icon": "💼", "status": check_platform_ready(["LINKEDIN_CLIENT_ID", "LINKEDIN_CLIENT_SECRET"]), "description": "專業人脈網絡"},
             {"id": "youtube", "name": "YouTube", "icon": "📺", "status": check_platform_ready(["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]), "description": "影片分享平台"},
             {"id": "xiaohongshu", "name": "小紅書", "icon": "📕", "status": "coming_soon", "description": "生活方式分享社群"},
             {"id": "line", "name": "LINE", "icon": "💬", "status": check_platform_ready(["LINE_CHANNEL_ID", "LINE_CHANNEL_SECRET"]), "description": "即時通訊與社群"},
         ]
+    }
+
+
+@router.get("/platforms/diagnostic")
+async def get_platforms_diagnostic():
+    """
+    診斷社群平台環境變數（不揭露實際值，僅顯示是否已設定）。
+    用於排查線上環境連接狀況。
+    """
+    import os
+
+    def _set(key: str) -> bool:
+        v = os.getenv(key, "")
+        return bool(v and not v.startswith("your_"))
+
+    return {
+        "meta": {
+            "META_APP_ID": _set("META_APP_ID") or _set("FACEBOOK_APP_ID"),
+            "META_APP_SECRET": _set("META_APP_SECRET") or _set("FACEBOOK_APP_SECRET"),
+            "META_CONFIG_ID": _set("META_CONFIG_ID"),
+            "META_REDIRECT_URI": _set("META_REDIRECT_URI"),
+        },
+        "instagram_login": {
+            "INSTAGRAM_APP_ID": _set("INSTAGRAM_APP_ID"),
+            "INSTAGRAM_APP_SECRET": _set("INSTAGRAM_APP_SECRET"),
+        },
+        "threads": {
+            "THREADS_APP_ID": _set("THREADS_APP_ID"),
+            "THREADS_APP_SECRET": _set("THREADS_APP_SECRET"),
+        },
+        "tiktok": {
+            "TIKTOK_CLIENT_KEY": _set("TIKTOK_CLIENT_KEY"),
+            "TIKTOK_CLIENT_SECRET": _set("TIKTOK_CLIENT_SECRET"),
+        },
+        "linkedin": {
+            "LINKEDIN_CLIENT_ID": _set("LINKEDIN_CLIENT_ID"),
+            "LINKEDIN_CLIENT_SECRET": _set("LINKEDIN_CLIENT_SECRET"),
+        },
+        "youtube": {
+            "GOOGLE_CLIENT_ID": _set("GOOGLE_CLIENT_ID"),
+            "GOOGLE_CLIENT_SECRET": _set("GOOGLE_CLIENT_SECRET"),
+        },
+        "line": {
+            "LINE_CHANNEL_ID": _set("LINE_CHANNEL_ID"),
+            "LINE_CHANNEL_SECRET": _set("LINE_CHANNEL_SECRET"),
+        },
     }
 
 
