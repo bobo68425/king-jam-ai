@@ -156,8 +156,8 @@ class MetaPlatform(BasePlatform):
     def get_auth_url(self, state: str) -> str:
         """生成 Meta OAuth 授權 URL
         
-        若已設定 META_CONFIG_ID（Facebook Login for Business 設定 ID），
-        則使用 config_id 取代 scope，可正確取得 Instagram 權限。
+        Instagram 必須使用 META_CONFIG_ID（Facebook Login for Business），
+        否則會出現 Invalid Scopes: instagram_basic。
         """
         params = {
             "client_id": self.config.client_id,
@@ -165,8 +165,13 @@ class MetaPlatform(BasePlatform):
             "response_type": "code",
             "state": state
         }
-        config_id = os.getenv("META_CONFIG_ID") or os.getenv("FACEBOOK_LOGIN_CONFIG_ID")
-        if config_id and self.config.platform_id in ("instagram", "facebook"):
+        config_id = (os.getenv("META_CONFIG_ID") or os.getenv("FACEBOOK_LOGIN_CONFIG_ID") or "").strip()
+        if self.config.platform_id in ("instagram", "facebook"):
+            if not config_id:
+                raise ValueError(
+                    "Instagram 需設定 META_CONFIG_ID。請在 Meta 後台建立 Configuration（登入資料版本選「Instagram 圖形 API」），"
+                    "取得 Configuration ID 後於 GitHub Secrets 新增 META_CONFIG_ID。"
+                )
             params["config_id"] = config_id
         else:
             params["scope"] = ",".join(self.config.scopes)
