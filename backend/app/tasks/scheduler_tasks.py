@@ -180,8 +180,8 @@ def publish_scheduled_post(self, scheduled_post_id: int):
                 # 重新載入帳號資料
                 db.refresh(social_account)
         
-        # 取得平台發布器
-        platform_publisher = get_platform_publisher(social_account.platform)
+        # 取得平台發布器（Instagram 依 account.extra_settings.oauth_flow 決定配置）
+        platform_publisher = get_platform_publisher(social_account.platform, account=social_account)
         
         if not platform_publisher:
             # 平台尚未實作，標記為成功但記錄警告
@@ -370,12 +370,13 @@ def publish_to_wordpress(post: ScheduledPost, social_account: SocialAccount) -> 
         return {"success": False, "error": str(e)}
 
 
-def get_platform_publisher(platform: str):
+def get_platform_publisher(platform: str, account=None):
     """
     取得平台發布器實例
     
     Args:
         platform: 平台名稱 (instagram, facebook, tiktok, etc.)
+        account: 可選，SocialAccount。Instagram 時依 extra_settings.oauth_flow 決定用 Instagram Login 或 Facebook Login 配置
         
     Returns:
         平台發布器實例，若尚未實作則返回 None
@@ -385,7 +386,8 @@ def get_platform_publisher(platform: str):
         try:
             from app.services.social_platforms.meta import MetaPlatform
             if platform == "instagram":
-                return MetaPlatform(MetaPlatform.create_instagram_config())
+                config = MetaPlatform.create_instagram_config(account=account)
+                return MetaPlatform(config)
             elif platform == "facebook":
                 return MetaPlatform(MetaPlatform.create_facebook_config())
             elif platform == "threads":

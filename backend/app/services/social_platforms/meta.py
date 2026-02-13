@@ -48,8 +48,68 @@ class MetaPlatform(BasePlatform):
         return app_id, app_secret
 
     @classmethod
-    def create_instagram_config(cls) -> PlatformConfig:
-        """創建 Instagram 配置"""
+    def _get_instagram_login_credentials(cls) -> tuple:
+        """取得 Instagram API with Instagram Login 專用憑證。見 https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login"""
+        app_id = os.getenv("INSTAGRAM_APP_ID") or ""
+        app_secret = os.getenv("INSTAGRAM_APP_SECRET") or ""
+        return app_id, app_secret
+
+    @classmethod
+    def create_instagram_config(cls, account=None) -> PlatformConfig:
+        """
+        創建 Instagram 配置。
+        - 若 account 有 extra_settings.oauth_flow == "instagram_login"，使用 Instagram Login 配置
+        - 若 account 無 oauth_flow 或為 Facebook Login，使用 Facebook Login 配置
+        - 若無 account，依 env：INSTAGRAM_APP_ID/SECRET 優先，否則 Facebook Login
+        """
+        use_instagram_login = False
+        if account and getattr(account, "extra_settings", None):
+            extra = account.extra_settings or {}
+            use_instagram_login = extra.get("oauth_flow") == "instagram_login"
+        elif not account:
+            ig_id, ig_sec = cls._get_instagram_login_credentials()
+            use_instagram_login = bool(ig_id and ig_sec)
+        if use_instagram_login:
+            ig_app_id, ig_app_secret = cls._get_instagram_login_credentials()
+            if ig_app_id and ig_app_secret:
+                return cls._create_instagram_login_config(ig_app_id, ig_app_secret)
+        return cls._create_instagram_facebook_login_config()
+
+    @classmethod
+    def _create_instagram_login_config(cls, app_id: str, app_secret: str) -> PlatformConfig:
+        """Instagram API with Instagram Login：用戶用 IG 帳號登入，不需 Facebook 粉專。"""
+        backend_url = os.getenv("BACKEND_URL", "http://localhost:8000")
+        redirect_uri = os.getenv("META_REDIRECT_URI") or os.getenv("INSTAGRAM_REDIRECT_URI") or f"{backend_url.rstrip('/')}/oauth/meta/callback"
+        return PlatformConfig(
+            platform_id="instagram",
+            name="Instagram",
+            client_id=app_id,
+            client_secret=app_secret,
+            redirect_uri=redirect_uri,
+            scopes=[
+                "instagram_business_basic",
+                "instagram_business_content_publish",
+                "instagram_business_manage_comments",
+                "instagram_business_manage_messages",
+            ],
+            auth_url="https://www.instagram.com/oauth/authorize",
+            token_url="https://api.instagram.com/oauth/access_token",
+            api_base_url=f"https://graph.instagram.com/{cls.GRAPH_API_VERSION}",
+            supported_content_types=[
+                ContentType.IMAGE,
+                ContentType.VIDEO,
+                ContentType.CAROUSEL,
+                ContentType.REEL,
+                ContentType.STORY,
+            ],
+            max_video_duration=90,
+            max_caption_length=2200,
+            oauth_flow_type="instagram_login",
+        )
+
+    @classmethod
+    def _create_instagram_facebook_login_config(cls) -> PlatformConfig:
+        """Instagram API with Facebook Login：需粉專連結 IG、META_CONFIG_ID。"""
         app_id, app_secret = cls._get_meta_credentials()
         backend_url = os.getenv("BACKEND_URL", "http://localhost:8000")
         redirect_uri = os.getenv("META_REDIRECT_URI") or f"{backend_url.rstrip('/')}/oauth/meta/callback"
@@ -60,27 +120,26 @@ class MetaPlatform(BasePlatform):
             client_secret=app_secret,
             redirect_uri=redirect_uri,
             scopes=[
-                # 依賴權限需先於 instagram_*（見 Meta 權限文件）
                 "pages_read_user_content",
                 "pages_show_list",
                 "pages_read_engagement",
                 "instagram_basic",
                 "instagram_content_publish",
                 "instagram_manage_insights",
-                "business_management"
+                "business_management",
             ],
             auth_url="https://www.facebook.com/v18.0/dialog/oauth",
             token_url=f"https://graph.facebook.com/{cls.GRAPH_API_VERSION}/oauth/access_token",
             api_base_url=f"https://graph.facebook.com/{cls.GRAPH_API_VERSION}",
             supported_content_types=[
-                ContentType.IMAGE, 
-                ContentType.VIDEO, 
+                ContentType.IMAGE,
+                ContentType.VIDEO,
                 ContentType.CAROUSEL,
                 ContentType.REEL,
-                ContentType.STORY
+                ContentType.STORY,
             ],
-            max_video_duration=90,  # Reels 最長 90 秒
-            max_caption_length=2200
+            max_video_duration=90,
+            max_caption_length=2200,
         )
     
     @classmethod
@@ -156,21 +215,24 @@ class MetaPlatform(BasePlatform):
     def get_auth_url(self, state: str) -> str:
         """生成 Meta OAuth 授權 URL
         
-        Instagram 必須使用 META_CONFIG_ID（Facebook Login for Business），
-        否則會出現 Invalid Scopes: instagram_basic。
+        - Instagram Login：使用 scope，不需 META_CONFIG_ID
+        - Instagram/Facebook (Facebook Login)：需 META_CONFIG_ID
+        - Threads：使用 scope
         """
         params = {
             "client_id": self.config.client_id,
             "redirect_uri": self.config.redirect_uri,
             "response_type": "code",
-            "state": state
+            "state": state,
         }
-        config_id = (os.getenv("META_CONFIG_ID") or os.getenv("FACEBOOK_LOGIN_CONFIG_ID") or "").strip()
-        if self.config.platform_id in ("instagram", "facebook"):
+        if getattr(self.config, "oauth_flow_type", "meta") == "instagram_login":
+            params["scope"] = ",".join(self.config.scopes)
+        elif self.config.platform_id in ("instagram", "facebook"):
+            config_id = (os.getenv("META_CONFIG_ID") or os.getenv("FACEBOOK_LOGIN_CONFIG_ID") or "").strip()
             if not config_id:
                 raise ValueError(
-                    "Instagram 需設定 META_CONFIG_ID。請在 Meta 後台建立 Configuration（登入資料版本選「Instagram 圖形 API」），"
-                    "取得 Configuration ID 後於 GitHub Secrets 新增 META_CONFIG_ID。"
+                    "Instagram (Facebook Login) 需設定 META_CONFIG_ID。"
+                    "或改用 Instagram Login：設定 INSTAGRAM_APP_ID 與 INSTAGRAM_APP_SECRET。"
                 )
             params["config_id"] = config_id
         else:
@@ -179,11 +241,14 @@ class MetaPlatform(BasePlatform):
     
     async def exchange_code_for_token(self, code: str) -> AuthToken:
         """用授權碼交換 Access Token"""
+        if getattr(self.config, "oauth_flow_type", "meta") == "instagram_login":
+            return await self._exchange_instagram_login_code(code)
+        
         params = {
             "client_id": self.config.client_id,
             "client_secret": self.config.client_secret,
             "redirect_uri": self.config.redirect_uri,
-            "code": code
+            "code": code,
         }
         
         async with aiohttp.ClientSession() as session:
@@ -194,7 +259,6 @@ class MetaPlatform(BasePlatform):
                     raise Exception(f"Token exchange failed: {data['error']['message']}")
                 
                 short_token = data["access_token"]
-                # Threads 使用專用端點交換長期 token，見 https://developers.facebook.com/docs/threads/get-started/long-lived-tokens
                 if self.config.platform_id == "threads":
                     long_lived_token = await self._get_threads_long_lived_token(short_token)
                 else:
@@ -203,11 +267,57 @@ class MetaPlatform(BasePlatform):
                 return AuthToken(
                     access_token=long_lived_token["access_token"],
                     expires_at=datetime.now() + timedelta(seconds=long_lived_token.get("expires_in", 5184000)),
-                    token_type="Bearer"
+                    token_type="Bearer",
                 )
     
+    async def _exchange_instagram_login_code(self, code: str) -> AuthToken:
+        """Instagram Login：POST 換短期 token，再換長期 token。"""
+        form_data = aiohttp.FormData()
+        form_data.add_field("client_id", self.config.client_id)
+        form_data.add_field("client_secret", self.config.client_secret)
+        form_data.add_field("grant_type", "authorization_code")
+        form_data.add_field("redirect_uri", self.config.redirect_uri)
+        form_data.add_field("code", code)
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(self.config.token_url, data=form_data) as response:
+                data = await response.json()
+                
+                if "error" in data:
+                    raise Exception(f"Token exchange failed: {data.get('error', {}).get('message', str(data))}")
+                
+                # 回傳格式: {"data": [{"access_token": "...", "user_id": "...", "permissions": "..."}]}
+                items = data.get("data") if isinstance(data.get("data"), list) else [data]
+                item = items[0] if items else data
+                short_token = item.get("access_token")
+                if not short_token:
+                    raise Exception("Instagram Login: 未取得 access_token")
+                
+                long_lived = await self._get_instagram_long_lived_token(short_token)
+                return AuthToken(
+                    access_token=long_lived["access_token"],
+                    expires_at=datetime.now() + timedelta(seconds=long_lived.get("expires_in", 5184000)),
+                    token_type="Bearer",
+                )
+
+    async def _get_instagram_long_lived_token(self, short_token: str) -> Dict[str, Any]:
+        """Instagram Login：將短期 token 換成長期 token (60 天)。端點為 graph.instagram.com/access_token（無版本號）"""
+        params = {
+            "grant_type": "ig_exchange_token",
+            "client_secret": self.config.client_secret,
+            "access_token": short_token,
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                "https://graph.instagram.com/access_token", params=params
+            ) as response:
+                data = await response.json()
+                if "error" in data:
+                    raise Exception(f"Long-lived token failed: {data['error'].get('message', str(data))}")
+                return data
+
     async def _get_long_lived_token(self, short_token: str) -> Dict[str, Any]:
-        """將短期 token 轉換為長期 token (60 天)，用於 FB/IG"""
+        """將短期 token 轉換為長期 token (60 天)，用於 FB/IG (Facebook Login)"""
         params = {
             "grant_type": "fb_exchange_token",
             "client_id": self.config.client_id,
@@ -245,24 +355,39 @@ class MetaPlatform(BasePlatform):
         而是在過期前用現有 token 換取新 token
         """
         if self.config.platform_id == "threads":
-            params = {
-                "grant_type": "th_refresh_token",
-                "access_token": current_token
-            }
+            params = {"grant_type": "th_refresh_token", "access_token": current_token}
             async with aiohttp.ClientSession() as session:
-                async with session.get("https://graph.threads.net/refresh_access_token", params=params) as response:
+                async with session.get(
+                    "https://graph.threads.net/refresh_access_token", params=params
+                ) as response:
                     data = await response.json()
                     if "error" in data:
                         raise Exception(f"Token refresh failed: {data['error']['message']}")
                     return AuthToken(
                         access_token=data["access_token"],
-                        expires_at=datetime.now() + timedelta(seconds=data.get("expires_in", 5184000)),
-                        token_type="Bearer"
+                        expires_at=datetime.now()
+                        + timedelta(seconds=data.get("expires_in", 5184000)),
+                        token_type="Bearer",
+                    )
+        if getattr(self.config, "oauth_flow_type", "meta") == "instagram_login":
+            params = {"grant_type": "ig_refresh_token", "access_token": current_token}
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    "https://graph.instagram.com/refresh_access_token", params=params
+                ) as response:
+                    data = await response.json()
+                    if "error" in data:
+                        raise Exception(f"Token refresh failed: {data['error'].get('message', str(data))}")
+                    return AuthToken(
+                        access_token=data["access_token"],
+                        expires_at=datetime.now()
+                        + timedelta(seconds=data.get("expires_in", 5184000)),
+                        token_type="Bearer",
                     )
         return AuthToken(
             access_token=(await self._get_long_lived_token(current_token))["access_token"],
             expires_at=datetime.now() + timedelta(seconds=5184000),
-            token_type="Bearer"
+            token_type="Bearer",
         )
     
     async def revoke_token(self, access_token: str) -> bool:
@@ -287,7 +412,44 @@ class MetaPlatform(BasePlatform):
             raise ValueError(f"Unknown platform: {self.platform_id}")
     
     async def _get_instagram_profile(self, access_token: str) -> UserProfile:
-        """獲取 Instagram Business 帳號資料。依 Meta 官方流程：先取粉專列表，再逐一查詢各粉專的 IG。"""
+        """獲取 Instagram 帳號資料。Instagram Login 直接呼叫 /me；Facebook Login 需透過粉專查詢。"""
+        if getattr(self.config, "oauth_flow_type", "meta") == "instagram_login":
+            return await self._get_instagram_login_profile(access_token)
+        return await self._get_instagram_facebook_login_profile(access_token)
+
+    async def _get_instagram_login_profile(self, access_token: str) -> UserProfile:
+        """Instagram Login：直接 GET graph.instagram.com/me，不需粉專。"""
+        async with aiohttp.ClientSession() as session:
+            url = f"{self.config.api_base_url}/me"
+            params = {
+                "fields": "user_id,username,name,profile_picture_url,followers_count",
+                "access_token": access_token,
+            }
+            async with session.get(url, params=params) as response:
+                data = await response.json()
+                if "error" in data:
+                    raise Exception(f"Instagram API Error: {data['error'].get('message', str(data))}")
+                # 回傳可能是 {"user_id": "...", "username": "..."} 或 {"data": [{"user_id": "...", ...}]}
+                item = data
+                if "data" in data and isinstance(data["data"], list) and data["data"]:
+                    item = data["data"][0]
+                ig_id = item.get("user_id") or item.get("id")
+                if not ig_id:
+                    raise Exception("Instagram Login: 未取得 user_id")
+                self._ig_user_id = str(ig_id)
+                return UserProfile(
+                    platform_id="instagram",
+                    platform_user_id=str(ig_id),
+                    username=item.get("username", ""),
+                    display_name=item.get("name"),
+                    avatar_url=item.get("profile_picture_url"),
+                    profile_url=f"https://instagram.com/{item.get('username', '')}",
+                    followers_count=item.get("followers_count"),
+                    extra_data={"oauth_flow": "instagram_login"},
+                )
+
+    async def _get_instagram_facebook_login_profile(self, access_token: str) -> UserProfile:
+        """Facebook Login：先取粉專列表，再逐一查詢各粉專的 IG。"""
         pages = await self._get_facebook_pages(access_token)
         if not pages:
             raise Exception("No Facebook Pages found. Instagram Business requires a linked Facebook Page.")
@@ -295,11 +457,10 @@ class MetaPlatform(BasePlatform):
         async with aiohttp.ClientSession() as session:
             for page in pages:
                 url = f"{self.GRAPH_API_BASE}/{page['id']}"
-                # 優先使用 Page Access Token（若有的話），對該粉專權限較完整
                 token = page.get("access_token") or access_token
                 params = {
                     "fields": "instagram_business_account{id,username,name,profile_picture_url,followers_count}",
-                    "access_token": token
+                    "access_token": token,
                 }
                 async with session.get(url, params=params) as response:
                     data = await response.json()
@@ -317,7 +478,7 @@ class MetaPlatform(BasePlatform):
                             avatar_url=ig.get("profile_picture_url"),
                             profile_url=f"https://instagram.com/{ig.get('username', '')}",
                             followers_count=ig.get("followers_count"),
-                            extra_data={"page_id": page["id"], "page_name": page["name"]}
+                            extra_data={"page_id": page["id"], "page_name": page["name"]},
                         )
         
         page_names = ", ".join(p.get("name", p.get("id", "?")) for p in pages[:5])
@@ -400,18 +561,23 @@ class MetaPlatform(BasePlatform):
         else:
             return PublishResult(success=False, error_message=f"Unknown platform: {self.platform_id}")
     
+    def _get_instagram_api_base(self) -> str:
+        """取得 Instagram API 基底 URL：Login 用 graph.instagram.com，Facebook Login 用 graph.facebook.com"""
+        if getattr(self.config, "oauth_flow_type", "meta") == "instagram_login":
+            return self.config.api_base_url
+        return self.GRAPH_API_BASE
+
     async def _publish_to_instagram(self, access_token: str, content: PublishContent) -> PublishResult:
         """發布到 Instagram"""
         try:
             if not self._ig_user_id:
-                profile = await self._get_instagram_profile(access_token)
-                
-            # Step 1: 創建媒體容器
-            container_id = await self._create_ig_media_container(access_token, content)
+                await self._get_instagram_profile(access_token)
             
-            # Step 2: 發布媒體
+            api_base = self._get_instagram_api_base()
+            container_id = await self._create_ig_media_container(access_token, content, api_base)
+            
             async with aiohttp.ClientSession() as session:
-                url = f"{self.GRAPH_API_BASE}/{self._ig_user_id}/media_publish"
+                url = f"{api_base}/{self._ig_user_id}/media_publish"
                 params = {
                     "creation_id": container_id,
                     "access_token": access_token
@@ -436,10 +602,14 @@ class MetaPlatform(BasePlatform):
         except Exception as e:
             return PublishResult(success=False, error_message=str(e))
     
-    async def _create_ig_media_container(self, access_token: str, content: PublishContent) -> str:
+    async def _create_ig_media_container(
+        self, access_token: str, content: PublishContent, api_base: Optional[str] = None
+    ) -> str:
         """創建 Instagram 媒體容器"""
+        if api_base is None:
+            api_base = self._get_instagram_api_base()
         async with aiohttp.ClientSession() as session:
-            url = f"{self.GRAPH_API_BASE}/{self._ig_user_id}/media"
+            url = f"{api_base}/{self._ig_user_id}/media"
             
             params = {
                 "access_token": access_token,

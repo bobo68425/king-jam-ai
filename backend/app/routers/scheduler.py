@@ -742,7 +742,7 @@ async def publish_now(
         from app.services.social_platforms import PublishContent, ContentType
         
         print(f"[PublishNow] 取得平台發布器: platform={social_account.platform}")
-        platform_publisher = get_platform_publisher(social_account.platform)
+        platform_publisher = get_platform_publisher(social_account.platform, account=social_account)
         
         if not platform_publisher:
             print(f"[PublishNow] 平台 {social_account.platform} 尚未有發布器實作")

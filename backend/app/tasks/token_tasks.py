@@ -207,7 +207,13 @@ def refresh_token_sync(social_account_id: int) -> Dict[str, Any]:
             return {"success": False, "error": "無 Refresh Token，需要用戶重新授權"}
 
         # 根據平台調用對應的刷新邏輯
-        if platform in ["instagram", "facebook"]:
+        if platform == "instagram":
+            extra = account.extra_settings or {}
+            if extra.get("oauth_flow") == "instagram_login":
+                result = _refresh_instagram_login_token(account)
+            else:
+                result = _refresh_meta_token(account)
+        elif platform == "facebook":
             result = _refresh_meta_token(account)
         elif platform == "threads":
             result = _refresh_threads_token(account)
@@ -296,6 +302,37 @@ def _refresh_meta_token(account: SocialAccount) -> Dict[str, Any]:
         else:
             return {"success": False, "error": data.get("error", {}).get("message", "刷新失敗")}
             
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def _refresh_instagram_login_token(account: SocialAccount) -> Dict[str, Any]:
+    """
+    刷新 Instagram API with Instagram Login 的 Token。
+    使用 graph.instagram.com/refresh_access_token，grant_type=ig_refresh_token
+    """
+    import httpx
+
+    try:
+        url = "https://graph.instagram.com/refresh_access_token"
+        params = {
+            "grant_type": "ig_refresh_token",
+            "access_token": account.access_token,
+        }
+
+        response = httpx.get(url, params=params, timeout=30)
+        data = response.json()
+
+        if "access_token" in data:
+            expires_in = data.get("expires_in", 5184000)
+            expires_at = datetime.now(pytz.UTC) + timedelta(seconds=expires_in)
+            return {
+                "success": True,
+                "access_token": data["access_token"],
+                "expires_at": expires_at,
+            }
+        else:
+            return {"success": False, "error": data.get("error", {}).get("message", "刷新失敗")}
     except Exception as e:
         return {"success": False, "error": str(e)}
 

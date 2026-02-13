@@ -2,7 +2,14 @@
 
 本指南說明如何將 Instagram 商業帳號串接到 King Jam AI，以支援排程發文、發布貼文與限時動態。
 
-**參考文件**：[Instagram API with Facebook Login](https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login) | [Get Started](https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/get-started)
+King Jam AI 支援兩種串接方式：
+
+| 方式 | 參考文件 | 前置條件 |
+|------|----------|----------|
+| **Instagram API with Instagram Login** | [官方文件](https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login) | 不需粉專，用戶用 IG 帳號登入 |
+| **Instagram API with Facebook Login** | [官方文件](https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login) | 需粉專連結 IG、META_CONFIG_ID |
+
+**若設定 `INSTAGRAM_APP_ID` 與 `INSTAGRAM_APP_SECRET`，系統會優先使用 Instagram Login（不需粉專）。**
 
 ---
 
@@ -11,7 +18,8 @@
 ### 1. Instagram 帳號要求
 
 - **必須為商業帳號或創作者帳號**（個人帳號無法使用 Graph API）
-- **必須已連結 Facebook 粉絲專頁**（IG 商業 API 透過 FB 粉專取得授權）
+- **Instagram Login**：不需連結 Facebook 粉專
+- **Facebook Login**：必須已連結 Facebook 粉絲專頁
 
 ### 2. 若尚未轉換為商業帳號
 
@@ -85,10 +93,13 @@
 
 | Secret | 值 |
 |--------|-----|
-| `FACEBOOK_APP_ID` | Meta 應用程式編號 |
-| `FACEBOOK_APP_SECRET` | Meta 應用程式密鑰 |
+| `FACEBOOK_APP_ID` | Meta 應用程式編號（Facebook Login 用） |
+| `FACEBOOK_APP_SECRET` | Meta 應用程式密鑰（Facebook Login 用） |
+| `META_CONFIG_ID` | Facebook Login for Business Configuration ID（Facebook Login 必填） |
+| `INSTAGRAM_APP_ID` | 選用，Instagram Login 的 App ID（不需粉專） |
+| `INSTAGRAM_APP_SECRET` | 選用，Instagram Login 的 App Secret |
 
-後端會自動使用 `FACEBOOK_APP_ID` / `FACEBOOK_APP_SECRET` 作為 Meta（含 IG）的 OAuth 憑證。
+若設定 `INSTAGRAM_APP_ID` 與 `INSTAGRAM_APP_SECRET`，新連結的 IG 會使用 Instagram Login，不需 `META_CONFIG_ID`。
 
 ### 2. 本地開發（docker-compose）
 
@@ -199,7 +210,47 @@ curl -s "https://api.kingjam.app/scheduler/platforms" \
 
 ---
 
-## 七、相關檔案
+## 七、Instagram API with Instagram Login（選用）
+
+若不想透過 Facebook 粉專，可改用 **Instagram Login**：用戶直接用 IG 帳號授權，不需粉專。
+
+### 步驟 1：Meta 後台設定
+
+1. 進入應用程式 → **Instagram** → **API setup with Instagram login**
+2. 若尚未新增，點「新增產品」→ 選擇 **Instagram** → 選「**API setup with Instagram login**」
+3. 進入 **3. Set up Instagram business login** → **Business login settings**
+4. 複製 **Instagram App ID** 與 **Instagram App Secret**（與主 App ID 不同）
+5. 在 **OAuth redirect URIs** 加入：`https://api.kingjam.app/oauth/meta/callback`
+
+### 步驟 2：環境變數
+
+在 GitHub Secrets 或 `.env` 新增：
+
+| 變數 | 值 |
+|------|-----|
+| `INSTAGRAM_APP_ID` | Business login settings 的 Instagram App ID |
+| `INSTAGRAM_APP_SECRET` | Business login settings 的 Instagram App Secret |
+
+設定後，**不需** `META_CONFIG_ID`，新連結的 IG 帳號會使用 Instagram Login 流程。
+
+### 步驟 3：權限（Scope）
+
+Instagram Login 使用新 scope（舊的將於 2025/1/27 棄用）：
+
+- `instagram_business_basic`
+- `instagram_business_content_publish`
+- `instagram_business_manage_comments`
+- `instagram_business_manage_messages`
+
+### 注意事項
+
+- 已透過 Facebook Login 連結的帳號不受影響，仍可正常發文
+- 若同時設定兩種方式，新連結會優先使用 Instagram Login
+- 詳見 [Instagram API with Instagram Login](https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login)
+
+---
+
+## 八、相關檔案
 
 - 後端 Meta 整合：`backend/app/services/social_platforms/meta.py`
 - OAuth 流程：`backend/app/routers/oauth.py`

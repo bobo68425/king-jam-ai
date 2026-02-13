@@ -74,7 +74,17 @@ async def initiate_oauth(
         raise HTTPException(status_code=400, detail=f"不支援的平台: {platform}")
     
     # 檢查 API 金鑰是否已設定
-    if platform in ["instagram", "facebook"]:
+    if platform == "instagram":
+        ig_id = os.getenv("INSTAGRAM_APP_ID") or ""
+        ig_sec = os.getenv("INSTAGRAM_APP_SECRET") or ""
+        if ig_id and ig_sec and not (ig_id.startswith("your_") or ig_sec.startswith("your_")):
+            pass  # Instagram Login 模式，使用 INSTAGRAM_APP_ID/SECRET
+        elif not _check_meta_keys():
+            raise HTTPException(
+                status_code=400,
+                detail="Instagram 需設定 META_APP_ID/META_APP_SECRET（Facebook Login）或 INSTAGRAM_APP_ID/INSTAGRAM_APP_SECRET（Instagram Login）。"
+            )
+    elif platform == "facebook":
         if not _check_meta_keys():
             raise HTTPException(
                 status_code=400,
@@ -118,14 +128,20 @@ async def initiate_oauth(
     # 根據平台獲取授權 URL
     try:
         if platform in ["instagram", "facebook", "threads"]:
-            # Instagram 需要 Facebook Login for Business（config_id），否則會出現 Invalid Scopes
+            # Instagram：若用 Facebook Login 需 META_CONFIG_ID；若用 Instagram Login（INSTAGRAM_APP_ID）則不需
             if platform == "instagram":
-                config_id = os.getenv("META_CONFIG_ID") or os.getenv("FACEBOOK_LOGIN_CONFIG_ID")
-                if not config_id:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="連接 Instagram 需使用 Facebook Login for Business。請在 Meta 後台建立 Configuration（選擇 Instagram Graph API 權限），並在 GitHub Secrets 設定 META_CONFIG_ID。詳見 docs/IG_串接步驟.md"
-                    )
+                ig_login = bool(
+                    os.getenv("INSTAGRAM_APP_ID")
+                    and os.getenv("INSTAGRAM_APP_SECRET")
+                    and not str(os.getenv("INSTAGRAM_APP_ID", "")).startswith("your_")
+                )
+                if not ig_login:
+                    config_id = os.getenv("META_CONFIG_ID") or os.getenv("FACEBOOK_LOGIN_CONFIG_ID")
+                    if not config_id:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Instagram (Facebook Login) 需 META_CONFIG_ID。或改用 Instagram Login：設定 INSTAGRAM_APP_ID 與 INSTAGRAM_APP_SECRET。詳見 docs/IG_串接步驟.md"
+                        )
             platform_instance = get_meta_platform(platform)
         elif platform == "tiktok":
             platform_instance = TikTokPlatform()
@@ -180,13 +196,15 @@ async def meta_oauth_callback(
         # 獲取用戶資料
         profile = await platform_instance.get_user_profile(token.access_token)
         
-        # 構建 extra_settings（儲存平台特定資料，如 Page Access Token）
+        # 構建 extra_settings（儲存平台特定資料，如 Page Access Token、oauth_flow）
         extra_settings = {}
         if profile.extra_data:
             if "page_access_token" in profile.extra_data:
                 extra_settings["page_access_token"] = profile.extra_data["page_access_token"]
             if "page_id" in profile.extra_data:
                 extra_settings["page_id"] = profile.extra_data["page_id"]
+            if "oauth_flow" in profile.extra_data:
+                extra_settings["oauth_flow"] = profile.extra_data["oauth_flow"]
         
         print(f"[OAuth] Meta {platform} 連結成功: user_id={user_id}, platform_user_id={profile.platform_user_id}, username={profile.username}, has_page_token={bool(extra_settings.get('page_access_token'))}")
         
@@ -233,6 +251,36 @@ async def meta_oauth_callback(
     except Exception as e:
         print(f"[OAuth] Meta {platform} 連結失敗: {str(e)}")
         return _error_redirect(f"連結失敗: {str(e)}")
+
+
+@router.get("/meta/webhook")
+async def meta_webhook_verify(
+    hub_mode: str = Query(None, alias="hub.mode"),
+    hub_verify_token: str = Query(None, alias="hub.verify_token"),
+    hub_challenge: str = Query(None, alias="hub.challenge"),
+):
+    """
+    Meta Webhook 驗證端點。Meta 首次設定時會發送 GET 請求，
+    若 hub.verify_token 相符則回傳 hub.challenge 完成驗證。
+    """
+    verify_token = os.getenv("META_WEBHOOK_VERIFY_TOKEN", "kingjam_meta_verify")
+    if hub_mode == "subscribe" and hub_verify_token == verify_token:
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse(content=hub_challenge or "")
+    raise HTTPException(status_code=403, detail="Verification failed")
+
+
+@router.post("/meta/webhook")
+async def meta_webhook_events(request: Request):
+    """Meta Webhook 事件（解除授權、資料刪除等）"""
+    try:
+        body = await request.json()
+        # 依 object 與 entry 解析事件類型，轉發至 deauthorize/delete 邏輯
+        print(f"[OAuth] Meta webhook event: {body}")
+        # TODO: 解析並處理 deauthorize、delete 等事件
+    except Exception:
+        pass
+    return {"success": True}
 
 
 @router.post("/meta/deauthorize")

@@ -37,6 +37,8 @@ class PlatformConfig:
     max_image_size: int = 8 * 1024 * 1024  # 8MB
     max_video_size: int = 100 * 1024 * 1024  # 100MB
     max_caption_length: int = 2200
+    # 用於 Meta 平台：oauth_flow_type = "meta" | "instagram_login" | "threads"
+    oauth_flow_type: str = "meta"
 
 
 @dataclass
