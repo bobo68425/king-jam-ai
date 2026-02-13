@@ -243,31 +243,17 @@ class MetaPlatform(BasePlatform):
             raise ValueError(f"Unknown platform: {self.platform_id}")
     
     async def _get_instagram_profile(self, access_token: str) -> UserProfile:
-        """獲取 Instagram Business 帳號資料"""
-        # 先獲取 Facebook Pages
-        pages = await self._get_facebook_pages(access_token)
+        """獲取 Instagram Business 帳號資料。遍歷所有粉專，使用第一個有連結 IG 的。"""
+        pages = await self._get_facebook_pages_with_ig(access_token)
         if not pages:
             raise Exception("No Facebook Pages found. Instagram Business requires a linked Facebook Page.")
         
-        # 獲取第一個 Page 的 Instagram Business Account
-        page = pages[0]
-        self._page_id = page["id"]
-        
-        async with aiohttp.ClientSession() as session:
-            url = f"{self.GRAPH_API_BASE}/{page['id']}"
-            params = {
-                "fields": "instagram_business_account{id,username,name,profile_picture_url,followers_count}",
-                "access_token": access_token
-            }
-            async with session.get(url, params=params) as response:
-                data = await response.json()
-                
-                if "instagram_business_account" not in data:
-                    raise Exception("No Instagram Business Account linked to this Facebook Page")
-                
-                ig = data["instagram_business_account"]
+        # 找第一個有連結 Instagram Business Account 的粉專
+        for page in pages:
+            ig = page.get("instagram_business_account")
+            if ig and isinstance(ig, dict) and ig.get("id"):
+                self._page_id = page["id"]
                 self._ig_user_id = ig["id"]
-                
                 return UserProfile(
                     platform_id="instagram",
                     platform_user_id=ig["id"],
@@ -278,6 +264,11 @@ class MetaPlatform(BasePlatform):
                     followers_count=ig.get("followers_count"),
                     extra_data={"page_id": page["id"], "page_name": page["name"]}
                 )
+        
+        raise Exception(
+            "No Instagram Business Account linked to any of your Facebook Pages. "
+            "Please link an Instagram Business/Creator account to your Page in Facebook Page Settings → Instagram."
+        )
     
     async def _get_facebook_profile(self, access_token: str) -> UserProfile:
         """獲取 Facebook Page 資料"""
@@ -338,6 +329,20 @@ class MetaPlatform(BasePlatform):
             }
             async with session.get(url, params=params) as response:
                 data = await response.json()
+                return data.get("data", [])
+
+    async def _get_facebook_pages_with_ig(self, access_token: str) -> List[Dict[str, Any]]:
+        """獲取 Facebook Pages 並包含 instagram_business_account 欄位"""
+        async with aiohttp.ClientSession() as session:
+            url = f"{self.GRAPH_API_BASE}/me/accounts"
+            params = {
+                "fields": "id,name,username,access_token,picture,followers_count,instagram_business_account{id,username,name,profile_picture_url,followers_count}",
+                "access_token": access_token
+            }
+            async with session.get(url, params=params) as response:
+                data = await response.json()
+                if "error" in data:
+                    raise Exception(data["error"].get("message", str(data["error"])))
                 return data.get("data", [])
     
     # ==================== 內容發布 ====================
