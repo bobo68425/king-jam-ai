@@ -42,9 +42,9 @@ class MetaPlatform(BasePlatform):
 
     @classmethod
     def _get_threads_credentials(cls) -> tuple:
-        """取得 Threads 專用憑證。Threads API 需使用 Threads use case 的 App ID/Secret，與 FB/IG 不同。"""
-        app_id = os.getenv("THREADS_APP_ID") or os.getenv("META_APP_ID") or os.getenv("FACEBOOK_APP_ID") or ""
-        app_secret = os.getenv("THREADS_APP_SECRET") or os.getenv("META_APP_SECRET") or os.getenv("FACEBOOK_APP_SECRET") or ""
+        """取得 Threads 專用憑證。Threads API 必須使用 Threads use case 的 App ID/Secret，不可用 FB/IG 的。"""
+        app_id = os.getenv("THREADS_APP_ID") or ""
+        app_secret = os.getenv("THREADS_APP_SECRET") or ""
         return app_id, app_secret
 
     @classmethod

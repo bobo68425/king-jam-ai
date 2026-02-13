@@ -81,12 +81,12 @@ async def initiate_oauth(
                 detail=f"{platform} 尚未設定 API 金鑰。請設定 FACEBOOK_APP_ID 與 FACEBOOK_APP_SECRET（或 META_APP_ID、META_APP_SECRET）"
             )
     elif platform == "threads":
-        threads_id = os.getenv("THREADS_APP_ID") or os.getenv("META_APP_ID") or os.getenv("FACEBOOK_APP_ID") or ""
-        threads_sec = os.getenv("THREADS_APP_SECRET") or os.getenv("META_APP_SECRET") or os.getenv("FACEBOOK_APP_SECRET") or ""
+        threads_id = os.getenv("THREADS_APP_ID") or ""
+        threads_sec = os.getenv("THREADS_APP_SECRET") or ""
         if not threads_id or not threads_sec or threads_id.startswith("your_") or threads_sec.startswith("your_"):
             raise HTTPException(
                 status_code=400,
-                detail="Threads 需使用 Threads 專用 App ID（與 FB/IG 不同）。請在 Meta 後台 Use cases → Access the Threads API → Settings 取得 Threads app ID 與 app secret，並設定 THREADS_APP_ID、THREADS_APP_SECRET。詳見 docs/Threads_串接步驟.md"
+                detail="Threads 必須設定 THREADS_APP_ID 與 THREADS_APP_SECRET（不可用 FACEBOOK_APP_ID）。請在 Meta 後台 Use cases → Access the Threads API → Settings 取得 Threads app ID 與 app secret，並在 GitHub Secrets 新增。詳見 docs/Threads_串接步驟.md"
             )
     else:
         env_keys = platform_env_keys[platform]
