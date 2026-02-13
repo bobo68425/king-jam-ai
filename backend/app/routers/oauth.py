@@ -110,6 +110,14 @@ async def initiate_oauth(
     # 根據平台獲取授權 URL
     try:
         if platform in ["instagram", "facebook", "threads"]:
+            # Instagram 需要 Facebook Login for Business（config_id），否則會出現 Invalid Scopes
+            if platform == "instagram":
+                config_id = os.getenv("META_CONFIG_ID") or os.getenv("FACEBOOK_LOGIN_CONFIG_ID")
+                if not config_id:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="連接 Instagram 需使用 Facebook Login for Business。請在 Meta 後台建立 Configuration（選擇 Instagram Graph API 權限），並在 GitHub Secrets 設定 META_CONFIG_ID。詳見 docs/IG_串接步驟.md"
+                    )
             platform_instance = get_meta_platform(platform)
         elif platform == "tiktok":
             platform_instance = TikTokPlatform()

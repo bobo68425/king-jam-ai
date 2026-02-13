@@ -1,4 +1,32 @@
-# IG 連線疑難排解（設定無誤仍無法連接時）
+# IG 連線疑難排解
+
+## Invalid Scopes 錯誤（必須處理）
+
+若出現「**Invalid Scopes: instagram_basic, instagram_content_publish, instagram_manage_insights**」：
+
+**標準 Facebook Login 不支援 Instagram 權限**，必須使用 **Facebook Login for Business**。
+
+### 設定步驟
+
+1. 前往 [developers.facebook.com](https://developers.facebook.com/) → 您的應用程式
+2. 左側選單「**Facebook 登入**」→「**設定**」
+3. 點「**Get started with Facebook Login for Business**」
+4. 左側選單「**Configurations**」→「**Create configuration**」或「**Create from template**」
+5. 選擇「**Instagram Graph API**」模板，或手動加入權限：
+   - `pages_read_user_content`
+   - `pages_show_list`
+   - `pages_read_engagement`
+   - `instagram_basic`
+   - `instagram_content_publish`（發文用）
+   - `instagram_manage_insights`
+6. 建立後取得 **Configuration ID**（一串數字）
+7. 前往 GitHub → Settings → Secrets → Actions
+8. 新增 Secret：`META_CONFIG_ID` = 該 Configuration ID
+9. 重新部署後端
+
+---
+
+## 其他問題（設定無誤仍無法連接時）
 
 當 Meta 後台設定（應用程式網域、OAuth URI）皆正確，仍出現「無法載入網址」或連線失敗時，請依序檢查以下項目。
 
