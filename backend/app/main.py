@@ -23,7 +23,7 @@ origins = [
     "http://www.kingjam.app",
 ]
 
-app = FastAPI(title="King Jam AI API", version="1.0.4")  # META_CONFIG_ID IG Configuration
+app = FastAPI(title="King Jam AI API", version="1.0.5")  # Threads OAuth callbacks
 
 
 def _cors_headers(origin: str):
