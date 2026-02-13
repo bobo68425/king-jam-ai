@@ -235,6 +235,31 @@ async def meta_oauth_callback(
         return _error_redirect(f"連結失敗: {str(e)}")
 
 
+@router.post("/meta/deauthorize")
+async def meta_deauthorize_callback(request: Request):
+    """Meta/Threads 解除授權回調。用戶取消授權時 Meta 會 POST 此網址。"""
+    try:
+        body = await request.json()
+        # 可在此處理：標記 SocialAccount 為已解除、清除 token 等
+        # signed_request 含 user_id，需驗證簽章後解析
+        print(f"[OAuth] Meta deauthorize callback: {body}")
+    except Exception:
+        pass
+    return {"success": True}
+
+
+@router.post("/meta/delete")
+async def meta_data_deletion_callback(request: Request):
+    """Meta/Threads 資料刪除請求回調。用戶要求刪除資料時 Meta 會 POST 此網址。"""
+    try:
+        body = await request.json()
+        # 可在此處理：刪除該用戶的社群連結與相關資料
+        print(f"[OAuth] Meta data deletion callback: {body}")
+    except Exception:
+        pass
+    return {"success": True}
+
+
 # ==================== TikTok 回調 ====================
 
 @router.get("/tiktok/callback")

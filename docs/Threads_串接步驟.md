@@ -30,19 +30,40 @@
 2. 找到 **Threads app ID** 與 **Threads app secret**
 3. 複製這兩個值（**不是**主應用程式的 App ID）
 
-### 步驟 3：設定 OAuth 回調網址
+### 步驟 3：設定 OAuth 回調網址（必做，否則會出現「重新導向失敗」）
 
 在 Threads use case 的 Settings 中：
 
-1. **Client OAuth Settings** → 有效的 OAuth 重新導向 URI：
+1. 找到 **「重新導向回呼網址」** 或 **「Client OAuth Settings」** 或 **「有效的 OAuth 重新導向 URI」**
+2. 在欄位中**一字不差**填入：
    ```
    https://api.kingjam.app/oauth/meta/callback
    ```
+   - 必須是 `https://`
+   - 結尾**不要**加斜線 `/`
+   - 不可有空格或換行
 
-2. **Deauthorize callback URL**（選填）：用戶取消授權時通知
-3. **Data Deletion Requests URL**（選填）：用戶要求刪除資料時通知
+3. **解除安裝回呼網址**（若必填，請填入）：
+   ```
+   https://api.kingjam.app/oauth/meta/deauthorize
+   ```
 
-4. 點擊 **Save**
+4. **刪除回呼網址**（若必填，請填入）：
+   ```
+   https://api.kingjam.app/oauth/meta/delete
+   ```
+
+5. 點擊 **儲存** 或 **Save**
+
+### 步驟 3.5：確認應用程式網域
+
+在 **設定** → **基本資料** 中，確認「**應用程式網域**」包含：
+
+- `kingjam.app`
+- `www.kingjam.app`
+- `api.kingjam.app`
+
+若沒有，請新增後儲存。
 
 ### 步驟 4：新增測試用戶（開發階段）
 
@@ -85,6 +106,18 @@ META_REDIRECT_URI=http://localhost:8000/oauth/meta/callback
 1. 確認應用程式已新增「Access the Threads API」use case
 2. 在 Threads use case 的 **Settings** 取得 Threads app ID 與 app secret
 3. 設定 `THREADS_APP_ID` 與 `THREADS_APP_SECRET`（不要用 FACEBOOK_APP_ID）
+
+### 「網址已遭封鎖」「重新導向失敗」(error_code: 1349168)
+
+**原因**：OAuth 重新導向 URI 未在 Threads 設定中列入許可名單。
+
+**解法**：
+1. 前往 **Use cases** → **Access the Threads API** → **Settings**
+2. 在「重新導向回呼網址」或「Client OAuth Settings」中新增：
+   `https://api.kingjam.app/oauth/meta/callback`
+3. 確認「應用程式網域」已包含 `api.kingjam.app`
+4. 確認已啟用「用戶端 OAuth 登入」與「網站 OAuth 登入」
+5. 點擊儲存
 
 ### 「無法儲存表單」
 
