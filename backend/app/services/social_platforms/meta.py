@@ -41,6 +41,13 @@ class MetaPlatform(BasePlatform):
         return app_id, app_secret
 
     @classmethod
+    def _get_threads_credentials(cls) -> tuple:
+        """取得 Threads 專用憑證。Threads API 需使用 Threads use case 的 App ID/Secret，與 FB/IG 不同。"""
+        app_id = os.getenv("THREADS_APP_ID") or os.getenv("META_APP_ID") or os.getenv("FACEBOOK_APP_ID") or ""
+        app_secret = os.getenv("THREADS_APP_SECRET") or os.getenv("META_APP_SECRET") or os.getenv("FACEBOOK_APP_SECRET") or ""
+        return app_id, app_secret
+
+    @classmethod
     def create_instagram_config(cls) -> PlatformConfig:
         """創建 Instagram 配置"""
         app_id, app_secret = cls._get_meta_credentials()
@@ -109,8 +116,8 @@ class MetaPlatform(BasePlatform):
     
     @classmethod
     def create_threads_config(cls) -> PlatformConfig:
-        """創建 Threads 配置"""
-        app_id, app_secret = cls._get_meta_credentials()
+        """創建 Threads 配置。需使用 Threads use case 的 App ID/Secret（見 Meta 後台 Settings）"""
+        app_id, app_secret = cls._get_threads_credentials()
         backend_url = os.getenv("BACKEND_URL", "http://localhost:8000")
         redirect_uri = os.getenv("META_REDIRECT_URI") or f"{backend_url.rstrip('/')}/oauth/meta/callback"
         return PlatformConfig(
