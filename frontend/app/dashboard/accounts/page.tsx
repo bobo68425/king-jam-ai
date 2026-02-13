@@ -55,6 +55,7 @@ interface PlatformInfo {
   bgColor: string;
   description: string;
   available: boolean;
+  isNew?: boolean;
 }
 
 const platforms: PlatformInfo[] = [
@@ -118,8 +119,9 @@ const platforms: PlatformInfo[] = [
     icon: "🧵",
     color: "text-slate-300",
     bgColor: "bg-gradient-to-br from-slate-500/20 to-slate-600/20 border-slate-500/30",
-    description: "連結 Threads 帳號（即將推出）",
-    available: false,
+    description: "連結 Threads 帳號，發布文字與圖片貼文",
+    available: true,
+    isNew: true,
   },
   {
     id: "xiaohongshu",
@@ -156,7 +158,8 @@ interface WordPressSite {
 
 const PLATFORM_NAMES: Record<string, string> = {
   instagram: "Instagram", facebook: "Facebook", tiktok: "TikTok",
-  youtube: "YouTube", linkedin: "LinkedIn", line: "LINE", wordpress: "WordPress"
+  youtube: "YouTube", linkedin: "LinkedIn", line: "LINE", wordpress: "WordPress",
+  threads: "Threads",
 };
 
 function AccountsContent() {
@@ -583,6 +586,11 @@ function AccountsContent() {
                       {isConnected && (
                         <Badge className="bg-emerald-500/20 text-emerald-400 border-0 text-xs">
                           已連結
+                        </Badge>
+                      )}
+                      {platform.isNew && !isConnected && (
+                        <Badge className="bg-amber-500/20 text-amber-400 border-0 text-xs">
+                          NEW
                         </Badge>
                       )}
                       {!platform.available && (
