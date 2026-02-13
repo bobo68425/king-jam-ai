@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, and_, desc, asc, case
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from app.database import get_db
@@ -759,7 +759,7 @@ async def get_user_detail(
                 else_=0
             )), 0)
         ).filter(CreditTransaction.user_id == user.id).scalar() or 0,
-        "account_age_days": (datetime.utcnow() - user.created_at).days if user.created_at else 0,
+        "account_age_days": (datetime.now(timezone.utc) - user.created_at).days if user.created_at else 0,
     }
     
     # 提領/退款記錄統計
