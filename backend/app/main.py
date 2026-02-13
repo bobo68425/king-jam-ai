@@ -23,7 +23,7 @@ origins = [
     "http://www.kingjam.app",
 ]
 
-app = FastAPI(title="King Jam AI API", version="1.0.5")  # Threads OAuth callbacks
+app = FastAPI(title="King Jam AI API", version="1.0.6")  # Instagram Login, Meta Webhook
 
 
 def _cors_headers(origin: str):
