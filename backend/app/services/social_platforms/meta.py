@@ -279,19 +279,32 @@ class MetaPlatform(BasePlatform):
         form_data.add_field("redirect_uri", self.config.redirect_uri)
         form_data.add_field("code", code)
         
+        print(f"[IG Token Exchange] client_id={self.config.client_id}, redirect_uri={self.config.redirect_uri}, token_url={self.config.token_url}")
+        
         async with aiohttp.ClientSession() as session:
             async with session.post(self.config.token_url, data=form_data) as response:
-                data = await response.json()
+                resp_text = await response.text()
+                print(f"[IG Token Exchange] status={response.status}, response={resp_text[:500]}")
                 
+                try:
+                    data = await response.json(content_type=None)
+                except Exception as json_err:
+                    raise Exception(f"Instagram Login: JSON parse failed: {resp_text[:300]}")
+                
+                # 錯誤處理（error 可能是 dict 或 int）
                 if "error" in data:
-                    raise Exception(f"Token exchange failed: {data.get('error', {}).get('message', str(data))}")
+                    err = data.get("error", {})
+                    if isinstance(err, dict):
+                        raise Exception(f"Token exchange failed: {err.get('message', str(data))}")
+                    else:
+                        raise Exception(f"Token exchange failed: error_type={data.get('error_type')}, error_message={data.get('error_message', str(data))}")
                 
                 # 回傳格式: {"data": [{"access_token": "...", "user_id": "...", "permissions": "..."}]}
                 items = data.get("data") if isinstance(data.get("data"), list) else [data]
                 item = items[0] if items else data
                 short_token = item.get("access_token")
                 if not short_token:
-                    raise Exception("Instagram Login: 未取得 access_token")
+                    raise Exception(f"Instagram Login: 未取得 access_token, response_keys={list(data.keys())}, data={str(data)[:300]}")
                 
                 long_lived = await self._get_instagram_long_lived_token(short_token)
                 return AuthToken(
