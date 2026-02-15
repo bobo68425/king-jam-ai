@@ -18,6 +18,7 @@ credentials/
 
 # Secrets
 secrets/
+deploy/setup-missing-secrets.sh
 
 # Backup files
 backup.sql
