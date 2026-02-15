@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
 from datetime import datetime, timedelta
 import asyncio
+import os
 
 from app.database import get_db
 from app.models import (
@@ -221,7 +222,8 @@ async def quick_health_check():
     # Redis
     try:
         import redis
-        client = redis.from_url("redis://redis:6379/0", socket_timeout=3)
+        redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
+        client = redis.from_url(redis_url, socket_timeout=3)
         client.ping()
         result["checks"]["redis"] = "ok"
     except:
@@ -596,7 +598,8 @@ async def prometheus_metrics():
     try:
         # 佇列長度
         import redis
-        client = redis.from_url("redis://redis:6379/0", socket_timeout=3)
+        redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
+        client = redis.from_url(redis_url, socket_timeout=3)
         
         metrics.append("# HELP kingjam_queue_length Celery queue length")
         metrics.append("# TYPE kingjam_queue_length gauge")
