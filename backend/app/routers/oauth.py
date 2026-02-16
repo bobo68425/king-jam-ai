@@ -273,8 +273,13 @@ async def meta_oauth_callback(
     user_id = state_data["user_id"]
     platform = state_data["platform"]
     
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.warning(f"[OAuth Callback] platform={platform}, user_id={user_id}, code_len={len(code) if code else 0}")
+    
     try:
         platform_instance = get_meta_platform(platform)
+        logger.warning(f"[OAuth Callback] redirect_uri={platform_instance.config.redirect_uri}, oauth_flow={getattr(platform_instance.config, 'oauth_flow_type', 'unknown')}")
         
         # 交換 token
         token = await platform_instance.exchange_code_for_token(code)

@@ -272,6 +272,9 @@ class MetaPlatform(BasePlatform):
     
     async def _exchange_instagram_login_code(self, code: str) -> AuthToken:
         """Instagram Login：POST 換短期 token，再換長期 token。"""
+        import logging
+        logger = logging.getLogger(__name__)
+        
         form_data = aiohttp.FormData()
         form_data.add_field("client_id", self.config.client_id)
         form_data.add_field("client_secret", self.config.client_secret)
@@ -279,25 +282,33 @@ class MetaPlatform(BasePlatform):
         form_data.add_field("redirect_uri", self.config.redirect_uri)
         form_data.add_field("code", code)
         
-        print(f"[IG Token Exchange] client_id={self.config.client_id}, redirect_uri={self.config.redirect_uri}, token_url={self.config.token_url}")
+        logger.warning(f"[IG Token Exchange] client_id={self.config.client_id}, redirect_uri={self.config.redirect_uri}, token_url={self.config.token_url}")
         
         async with aiohttp.ClientSession() as session:
             async with session.post(self.config.token_url, data=form_data) as response:
                 resp_text = await response.text()
-                print(f"[IG Token Exchange] status={response.status}, response={resp_text[:500]}")
+                logger.warning(f"[IG Token Exchange] status={response.status}, response={resp_text[:500]}")
                 
                 try:
                     data = await response.json(content_type=None)
                 except Exception as json_err:
                     raise Exception(f"Instagram Login: JSON parse failed: {resp_text[:300]}")
                 
-                # 錯誤處理（error 可能是 dict 或 int）
+                # 錯誤處理：Instagram Login API 回傳格式為
+                # {"error_type": "OAuthException", "code": 400, "error_message": "..."}
+                # 注意：與 Graph API 的 {"error": {"message": "..."}} 格式不同
+                if "error_type" in data or "error_message" in data:
+                    error_msg = data.get("error_message", str(data))
+                    error_type = data.get("error_type", "unknown")
+                    logger.error(f"[IG Token Exchange] Instagram API error: type={error_type}, message={error_msg}")
+                    raise Exception(f"Instagram Login 授權失敗: {error_msg}")
+                
                 if "error" in data:
                     err = data.get("error", {})
                     if isinstance(err, dict):
                         raise Exception(f"Token exchange failed: {err.get('message', str(data))}")
                     else:
-                        raise Exception(f"Token exchange failed: error_type={data.get('error_type')}, error_message={data.get('error_message', str(data))}")
+                        raise Exception(f"Token exchange failed: {str(data)}")
                 
                 # 回傳格式: {"data": [{"access_token": "...", "user_id": "...", "permissions": "..."}]}
                 items = data.get("data") if isinstance(data.get("data"), list) else [data]
