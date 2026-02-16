@@ -243,6 +243,8 @@ class MetaPlatform(BasePlatform):
         """用授權碼交換 Access Token"""
         if getattr(self.config, "oauth_flow_type", "meta") == "instagram_login":
             return await self._exchange_instagram_login_code(code)
+        if self.config.platform_id == "threads":
+            return await self._exchange_threads_code(code)
         
         params = {
             "client_id": self.config.client_id,
@@ -270,6 +272,46 @@ class MetaPlatform(BasePlatform):
                     token_type="Bearer",
                 )
     
+    async def _exchange_threads_code(self, code: str) -> AuthToken:
+        """Threads：POST 換短期 token，再換長期 token。Threads API 必須用 POST。"""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        form_data = aiohttp.FormData()
+        form_data.add_field("client_id", self.config.client_id)
+        form_data.add_field("client_secret", self.config.client_secret)
+        form_data.add_field("grant_type", "authorization_code")
+        form_data.add_field("redirect_uri", self.config.redirect_uri)
+        form_data.add_field("code", code)
+        
+        logger.warning(f"[Threads Token Exchange] client_id={self.config.client_id}, redirect_uri={self.config.redirect_uri}, token_url={self.config.token_url}")
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(self.config.token_url, data=form_data) as response:
+                resp_text = await response.text()
+                logger.warning(f"[Threads Token Exchange] status={response.status}, response={resp_text[:500]}")
+                
+                if response.status != 200:
+                    try:
+                        err_data = await response.json()
+                        error_msg = err_data.get("error_message") or err_data.get("error", {}).get("message", resp_text[:200])
+                    except Exception:
+                        error_msg = resp_text[:200]
+                    raise Exception(f"Threads 授權失敗: {error_msg}")
+                
+                import json
+                data = json.loads(resp_text)
+                short_token = data["access_token"]
+                
+                # 轉換為長期 token
+                long_lived_token = await self._get_threads_long_lived_token(short_token)
+                
+                return AuthToken(
+                    access_token=long_lived_token["access_token"],
+                    expires_at=datetime.now() + timedelta(seconds=long_lived_token.get("expires_in", 5184000)),
+                    token_type="Bearer",
+                )
+
     async def _exchange_instagram_login_code(self, code: str) -> AuthToken:
         """Instagram Login：POST 換短期 token，再換長期 token。"""
         import logging
