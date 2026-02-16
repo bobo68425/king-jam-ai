@@ -4,6 +4,7 @@
 """
 
 import os
+import json
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional
@@ -20,8 +21,96 @@ from app.services.social_platforms import (
 
 router = APIRouter(prefix="/oauth", tags=["OAuth"])
 
-# 存儲 OAuth state (生產環境應使用 Redis)
-oauth_states = {}
+
+class OAuthStateStore:
+    """
+    OAuth state 儲存（Redis 優先，in-memory 備援）。
+    Cloud Run 多實例環境下，in-memory dict 會導致 state 遺失，
+    必須使用 Redis 作為共享儲存。
+    """
+    REDIS_KEY_PREFIX = "oauth_state:"
+    STATE_TTL_SECONDS = 600  # 10 分鐘
+
+    def __init__(self):
+        self._redis = None
+        self._fallback = {}  # 本地開發備援
+
+    @property
+    def redis_client(self):
+        if self._redis is None:
+            try:
+                import redis
+                redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+                self._redis = redis.from_url(redis_url, decode_responses=True)
+                self._redis.ping()
+                print("[OAuth] ✅ 使用 Redis 儲存 OAuth state")
+            except Exception as e:
+                print(f"[OAuth] ⚠️ Redis 不可用，使用 in-memory 備援: {e}")
+                self._redis = None
+        return self._redis
+
+    def set(self, state: str, data: dict):
+        """儲存 OAuth state"""
+        # 序列化 datetime
+        serializable = {
+            k: (v.isoformat() if isinstance(v, datetime) else v)
+            for k, v in data.items()
+        }
+        client = self.redis_client
+        if client:
+            try:
+                client.setex(
+                    f"{self.REDIS_KEY_PREFIX}{state}",
+                    self.STATE_TTL_SECONDS,
+                    json.dumps(serializable),
+                )
+                return
+            except Exception as e:
+                print(f"[OAuth] Redis set 失敗，使用 in-memory: {e}")
+        self._fallback[state] = data
+
+    def pop(self, state: str) -> Optional[dict]:
+        """取出並刪除 OAuth state（一次性使用）"""
+        client = self.redis_client
+        if client:
+            try:
+                key = f"{self.REDIS_KEY_PREFIX}{state}"
+                raw = client.get(key)
+                if raw:
+                    client.delete(key)
+                    data = json.loads(raw)
+                    # 還原 datetime
+                    if "created_at" in data:
+                        data["created_at"] = datetime.fromisoformat(data["created_at"])
+                    return data
+                # Redis 有連線但找不到 → 也嘗試 fallback
+            except Exception as e:
+                print(f"[OAuth] Redis pop 失敗，嘗試 in-memory: {e}")
+        return self._fallback.pop(state, None)
+
+    def __contains__(self, state: str) -> bool:
+        client = self.redis_client
+        if client:
+            try:
+                if client.exists(f"{self.REDIS_KEY_PREFIX}{state}"):
+                    return True
+            except Exception:
+                pass
+        return state in self._fallback
+
+    def cleanup_expired(self):
+        """清理 in-memory 備援中過期的 state（Redis 有 TTL 自動清理）"""
+        cutoff = datetime.now() - timedelta(seconds=self.STATE_TTL_SECONDS)
+        expired = [
+            k for k, v in self._fallback.items()
+            if isinstance(v.get("created_at"), datetime) and v["created_at"] < cutoff
+        ]
+        for k in expired:
+            del self._fallback[k]
+
+
+# 全域 OAuth state 儲存實例
+oauth_states = OAuthStateStore()
 
 # 前端回調頁面 URL（OAuth 完成後導向，預設為社群帳號頁）
 FRONTEND_CALLBACK_URL = os.getenv("FRONTEND_URL", "http://localhost:3000") + "/dashboard/accounts"
@@ -113,17 +202,14 @@ async def initiate_oauth(
     
     # 生成防 CSRF 的 state
     state = secrets.token_urlsafe(32)
-    oauth_states[state] = {
+    oauth_states.set(state, {
         "user_id": current_user.id,
         "platform": platform,
         "created_at": datetime.now()
-    }
+    })
     
-    # 清理過期的 state (超過 10 分鐘)
-    cutoff = datetime.now() - timedelta(minutes=10)
-    expired_states = [k for k, v in oauth_states.items() if v["created_at"] < cutoff]
-    for k in expired_states:
-        del oauth_states[k]
+    # 清理過期的 state (in-memory 備援；Redis 有 TTL 自動清理)
+    oauth_states.cleanup_expired()
     
     # 根據平台獲取授權 URL
     try:

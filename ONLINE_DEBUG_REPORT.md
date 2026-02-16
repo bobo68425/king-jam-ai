@@ -1,6 +1,6 @@
 # 🌐 King Jam AI 線上環境偵錯報告
 
-> 檢測時間：2026-02-15  
+> 檢測時間：2026-02-15 (更新：2026-02-16)  
 > 網站：https://kingjam.app  
 > API：https://api.kingjam.app  
 
@@ -56,16 +56,16 @@
 | Meta (IG/FB/Threads) | META_APP_SECRET | ✅ 已設定 |
 | Meta (IG/FB/Threads) | META_CONFIG_ID | ✅ 已設定 |
 | Meta (IG/FB/Threads) | META_REDIRECT_URI | ✅ 已設定 |
-| Instagram Login | INSTAGRAM_APP_ID | ✅ 已設定 |
+| Instagram Login | INSTAGRAM_APP_ID | ✅ 已設定 (King Jam AIG: `2470376900051701`) |
 | Instagram Login | INSTAGRAM_APP_SECRET | ✅ 已設定 |
 | Threads | THREADS_APP_ID | ✅ 已設定 |
 | Threads | THREADS_APP_SECRET | ✅ 已設定 |
+| YouTube | GOOGLE_CLIENT_ID | ✅ 已設定 |
+| YouTube | GOOGLE_CLIENT_SECRET | ✅ 已設定 |
 | **TikTok** | TIKTOK_CLIENT_KEY | ❌ **未設定** |
 | **TikTok** | TIKTOK_CLIENT_SECRET | ❌ **未設定** |
 | **LinkedIn** | LINKEDIN_CLIENT_ID | ❌ **未設定** |
 | **LinkedIn** | LINKEDIN_CLIENT_SECRET | ❌ **未設定** |
-| **YouTube** | GOOGLE_CLIENT_ID | ❌ **未設定** |
-| **YouTube** | GOOGLE_CLIENT_SECRET | ❌ **未設定** |
 | LINE | LINE_CHANNEL_ID | ✅ 已設定 |
 | LINE | LINE_CHANNEL_SECRET | ✅ 已設定 |
 
@@ -118,7 +118,7 @@
 |------|------|------|
 | `GET /health` | 健康檢查 | ✅ |
 | `GET /health/db` | 資料庫連線 | ✅ |
-| `GET /admin/health/quick` | 快速健康檢查 | ⚠️ Redis 異常 |
+| `GET /admin/health/quick` | 快速健康檢查 | ✅ Redis + DB 正常 |
 | `GET /openapi.json` | API 文件 | ✅ |
 | `GET /video/pricing` | 影片定價 | ✅ |
 | `GET /credits/packages` | 點數方案 | ✅ |
@@ -264,12 +264,42 @@ LINE_CHANNEL_SECRET          # 🟢 P2 - 可能已手動設定
 
 ---
 
+## 🧪 Instagram OAuth 串接測試 (2026-02-16)
+
+### 測試結果
+
+| 測試項目 | 結果 | 說明 |
+|----------|------|------|
+| 後端 Health | ✅ PASS | `/health` 回傳 ok, `/admin/health/quick` Redis + DB 正常 |
+| 環境變數 | ✅ PASS | `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET` 已設定 |
+| OAuth 授權 URL | ✅ PASS | Instagram 登入表單正確顯示，無 "Invalid client_id" 錯誤 |
+| Callback 端點 | ✅ PASS | `/oauth/meta/callback` 正確回傳 302，無效 state 被攔截 |
+| CSRF 防護 | ✅ PASS | 測試用假 state 被拒絕，回傳「無效的授權請求」 |
+| Webhook 端點 | ✅ PASS | `/oauth/meta/webhook` 回傳 403（verify_token 不匹配，安全行為正確） |
+
+### 架構確認
+
+| Meta App | App ID | 用途 |
+|----------|--------|------|
+| King Jam AI | `2307913626397839` | Facebook Login (META_APP_ID) |
+| King Jam AIG | `1207276628272799` | Instagram Login (主要 IG 功能) |
+| Instagram App | `2470376900051701` | INSTAGRAM_APP_ID (由 King Jam AIG 持有) |
+
+### ⚠️ 注意事項
+- **權限層級**: 所有 `instagram_business_*` 權限目前為 **Standard Access**
+- **影響**: 僅 App 管理員/開發者/測試者可使用 IG 功能
+- **公開使用**: 需提交 App Review 取得 Advanced Access
+- **詳細設定**: 參見 `docs/IG_線上環境串接指南.md`
+
+---
+
 ## 📸 檢測截圖
 
 - 首頁截圖：正常載入，顯示「用 AI 創造爆款內容」標題
 - `/pricing` 截圖：404 - This page could not be found
 - 登入頁：正常載入，提供 Google/Facebook/Email 登入
+- Instagram OAuth：授權 URL 正確顯示 Instagram 登入表單
 
 ---
 
-*報告生成完成。如需進一步診斷特定問題，請告知。*
+*報告生成完成。最後更新：2026-02-16 05:04。如需進一步診斷特定問題，請告知。*
