@@ -121,6 +121,7 @@ jobs:
         env:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           FACEBOOK_APP_ID: ${{ secrets.FACEBOOK_APP_ID }}
+          LINE_LOGIN_CHANNEL_ID: ${{ secrets.LINE_LOGIN_CHANNEL_ID }}
         run: |
           echo "📦 Building Docker image..."
           echo "   Image: ${{ steps.meta.outputs.image_sha }}"
@@ -130,6 +131,7 @@ jobs:
             --build-arg NEXT_PUBLIC_SITE_URL=${{ env.NEXT_PUBLIC_SITE_URL }} \
             --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-} \
             --build-arg NEXT_PUBLIC_FACEBOOK_APP_ID=${FACEBOOK_APP_ID:-} \
+            --build-arg NEXT_PUBLIC_LINE_LOGIN_CHANNEL_ID=${LINE_LOGIN_CHANNEL_ID:-} \
             --tag ${{ steps.meta.outputs.image_sha }} \
             --tag ${{ steps.meta.outputs.image_latest }} \
             --tag ${{ steps.meta.outputs.image_timestamped }} \

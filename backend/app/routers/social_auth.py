@@ -29,6 +29,10 @@ GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 LINE_CHANNEL_ID = os.getenv("LINE_CHANNEL_ID")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 
+# LINE Login 使用獨立的 Channel（不同於 Messaging API Channel）
+LINE_LOGIN_CHANNEL_ID = os.getenv("LINE_LOGIN_CHANNEL_ID", LINE_CHANNEL_ID)
+LINE_LOGIN_CHANNEL_SECRET = os.getenv("LINE_LOGIN_CHANNEL_SECRET", LINE_CHANNEL_SECRET)
+
 FACEBOOK_APP_ID = os.getenv("FACEBOOK_APP_ID")
 FACEBOOK_APP_SECRET = os.getenv("FACEBOOK_APP_SECRET")
 
@@ -174,8 +178,8 @@ async def line_login(request: SocialLoginRequest, req: Request, db: Session = De
         'grant_type': 'authorization_code',
         'code': request.code,
         'redirect_uri': request.redirect_uri,
-        'client_id': LINE_CHANNEL_ID,
-        'client_secret': LINE_CHANNEL_SECRET
+        'client_id': LINE_LOGIN_CHANNEL_ID,
+        'client_secret': LINE_LOGIN_CHANNEL_SECRET
     }
     
     async with httpx.AsyncClient() as client:
@@ -191,7 +195,7 @@ async def line_login(request: SocialLoginRequest, req: Request, db: Session = De
         verify_url = "https://api.line.me/oauth2/v2.1/verify"
         verify_response = await client.post(verify_url, data={
             'id_token': id_token,
-            'client_id': LINE_CHANNEL_ID
+            'client_id': LINE_LOGIN_CHANNEL_ID
         })
         user_info = verify_response.json()
 
