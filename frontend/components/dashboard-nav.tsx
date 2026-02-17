@@ -4,11 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { 
-  LayoutDashboard, 
-  PenTool, 
-  Image as ImageIcon, 
-  Video, 
+import {
+  LayoutDashboard,
+  PenTool,
+  Image as ImageIcon,
+  Video,
   Calendar,
   Settings,
   Coins,
@@ -28,10 +28,11 @@ import {
   Wallet,
   Bell,
   Megaphone,
+  MessageCircle,
 } from "lucide-react";
 
 const navItems = [
-  { 
+  {
     section: "總覽",
     items: [
       { href: "/dashboard", icon: LayoutDashboard, label: "儀表板" },
@@ -85,6 +86,7 @@ const adminNavItems = [
       { href: "/dashboard/admin/withdrawals", icon: Wallet, label: "提領審核" },
       { href: "/dashboard/admin/fraud", icon: ShieldAlert, label: "詐騙偵測" },
       { href: "/dashboard/admin/prompts", icon: FileText, label: "Prompt 管理" },
+      { href: "/dashboard/chat", icon: MessageCircle, label: "LINE 客服", isNew: true },
     ]
   },
 ];
@@ -96,19 +98,19 @@ export function DashboardNav() {
 
   useEffect(() => {
     setMounted(true);
-    
+
     // 檢查用戶是否為管理員
     const checkAdminStatus = async () => {
       try {
         const token = localStorage.getItem("token");
         if (!token) return;
-        
+
         const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/auth/me`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
         });
-        
+
         if (response.ok) {
           const user = await response.json();
           setIsAdmin(user.is_admin === true);
@@ -117,7 +119,7 @@ export function DashboardNav() {
         console.error("Failed to check admin status:", error);
       }
     };
-    
+
     checkAdminStatus();
   }, []);
 
@@ -130,8 +132,8 @@ export function DashboardNav() {
         <div key={sectionIndex} className="mb-4">
           <h3 className={cn(
             "mb-2 px-3 text-xs font-semibold uppercase tracking-wider",
-            section.section === "管理後台" 
-              ? "text-amber-500" 
+            section.section === "管理後台"
+              ? "text-amber-500"
               : "text-muted-foreground"
           )}>
             {section.section === "管理後台" && (
@@ -150,8 +152,8 @@ export function DashboardNav() {
                   href={item.href}
                   className={cn(
                     "group flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
-                    isActive 
-                      ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-500/25" 
+                    isActive
+                      ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-500/25"
                       : "text-muted-foreground hover:bg-accent hover:text-foreground"
                   )}
                 >
@@ -176,7 +178,7 @@ export function DashboardNav() {
           </div>
         </div>
       ))}
-      
+
       {/* 底部幫助連結 */}
       <div className="mt-auto pt-4 border-t border-sidebar-border">
         <Link

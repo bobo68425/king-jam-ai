@@ -8,7 +8,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 import logging
 import os
 
-from app.routers import auth, social_auth, blog, social, video, scheduler, upload, oauth, history, tasks, credits, referral, verification, users, notifications, wordpress, admin, insights, analytics, queue_monitor, brand_kit, prompts, design_studio, payment, account, campaigns, admin_notifications, assistant, phone_verification, line_webhook, funding
+from app.routers import auth, social_auth, blog, social, video, scheduler, upload, oauth, history, tasks, credits, referral, verification, users, notifications, wordpress, admin, insights, analytics, queue_monitor, brand_kit, prompts, design_studio, payment, account, campaigns, admin_notifications, assistant, phone_verification, line_webhook, line_chat, funding
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +138,7 @@ app.include_router(admin_notifications.router)
 app.include_router(assistant.router)
 app.include_router(phone_verification.router)
 app.include_router(line_webhook.router)
+app.include_router(line_chat.router)
 app.include_router(funding.router)
 
 # 確保上傳目錄存在 - 支援 Docker 和本地開發
@@ -413,6 +414,31 @@ def _auto_init_db():
         """))
         db.commit()
         print("[Startup] ✅ notifications.priority 欄位已確認")
+
+        # ── 7. line_messages 表（LINE 客服對話）──
+        db.execute(text("""
+            CREATE TABLE IF NOT EXISTS line_messages (
+                id SERIAL PRIMARY KEY,
+                line_user_id VARCHAR(50) NOT NULL,
+                display_name VARCHAR(200),
+                avatar_url VARCHAR(500),
+                direction VARCHAR(10) NOT NULL,
+                message_type VARCHAR(20) NOT NULL DEFAULT 'text',
+                content TEXT,
+                line_message_id VARCHAR(50),
+                is_read BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+        """))
+        for idx_sql in [
+            "CREATE INDEX IF NOT EXISTS idx_line_msg_user ON line_messages(line_user_id);",
+            "CREATE INDEX IF NOT EXISTS idx_line_msg_created ON line_messages(created_at);",
+            "CREATE INDEX IF NOT EXISTS idx_line_msg_user_created ON line_messages(line_user_id, created_at);",
+            "CREATE INDEX IF NOT EXISTS idx_line_msg_unread ON line_messages(line_user_id, is_read);",
+        ]:
+            db.execute(text(idx_sql))
+        db.commit()
+        print("[Startup] ✅ line_messages 表已初始化")
 
         db.close()
     except Exception as e:

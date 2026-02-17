@@ -1563,3 +1563,49 @@ class IdentityVerification(Base):
 
 
 # IdentityVerificationLog 模型已移除（資料庫中不存在此表）
+
+
+# ============================================================
+# LINE 客服對話 (LINE Chat Messages)
+# ============================================================
+
+class LineMessage(Base):
+    """
+    LINE 客服對話訊息
+    
+    儲存所有進出的 LINE 訊息，支援：
+    - 對話列表（按最新訊息排序）
+    - 訊息歷史
+    - 未讀數統計
+    """
+    __tablename__ = "line_messages"
+    
+    __table_args__ = (
+        Index("idx_line_msg_user", "line_user_id"),
+        Index("idx_line_msg_created", "created_at"),
+        Index("idx_line_msg_user_created", "line_user_id", "created_at"),
+        Index("idx_line_msg_unread", "line_user_id", "is_read"),
+    )
+    
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # LINE 用戶資訊
+    line_user_id = Column(String(50), nullable=False, index=True)
+    display_name = Column(String(200), nullable=True)
+    avatar_url = Column(String(500), nullable=True)
+    
+    # 訊息方向
+    direction = Column(String(10), nullable=False)  # incoming, outgoing
+    
+    # 訊息內容
+    message_type = Column(String(20), nullable=False, default="text")  # text, image, sticker, etc.
+    content = Column(Text, nullable=True)  # 文字內容或描述
+    
+    # LINE 原始資訊
+    line_message_id = Column(String(50), nullable=True)  # LINE 的 message ID
+    
+    # 狀態
+    is_read = Column(Boolean, default=False)
+    
+    # 時間戳
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

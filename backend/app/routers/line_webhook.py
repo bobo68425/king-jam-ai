@@ -1,17 +1,20 @@
 """
 LINE Messaging API Webhook
-接收 LINE 訊息並自動回覆
+接收 LINE 訊息並自動回覆，同時儲存對話記錄
 """
 
-from fastapi import APIRouter, Request, HTTPException
-from pydantic import BaseModel
-from typing import Optional, List
+from fastapi import APIRouter, Request, HTTPException, Depends
+from sqlalchemy.orm import Session
+from typing import Optional
 import os
 import hashlib
 import hmac
 import base64
 import json
 import httpx
+
+from app.database import get_db
+from app.models import LineMessage
 
 router = APIRouter(prefix="/api/line", tags=["line"])
 
@@ -32,6 +35,26 @@ def verify_signature(body: bytes, signature: str) -> bool:
     ).digest()
     expected = base64.b64encode(hash_value).decode("utf-8")
     return hmac.compare_digest(signature, expected)
+
+
+async def get_user_profile(user_id: str) -> dict:
+    """使用 LINE API 取得用戶資訊"""
+    if not LINE_CHANNEL_ACCESS_TOKEN:
+        return {}
+    try:
+        url = f"https://api.line.me/v2/bot/profile/{user_id}"
+        headers = {"Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"}
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                return {
+                    "display_name": data.get("displayName"),
+                    "avatar_url": data.get("pictureUrl"),
+                }
+    except Exception as e:
+        print(f"[LINE] Failed to get profile: {e}")
+    return {}
 
 
 async def reply_message(reply_token: str, messages: list):
@@ -105,6 +128,7 @@ async def line_webhook(request: Request):
     LINE Messaging API Webhook 端點
     
     接收 LINE 平台推送的事件（訊息、追蹤、取消追蹤等）
+    同時將訊息儲存到資料庫
     """
     body = await request.body()
     
@@ -121,41 +145,143 @@ async def line_webhook(request: Request):
     
     events = data.get("events", [])
     
-    for event in events:
-        event_type = event.get("type")
-        reply_token = event.get("replyToken")
-        
-        if event_type == "message" and reply_token:
-            message = event.get("message", {})
-            msg_type = message.get("type")
+    # 取得 DB session（手動，因為 webhook 不使用 Depends）
+    from app.database import SessionLocal
+    db = SessionLocal()
+    
+    try:
+        for event in events:
+            event_type = event.get("type")
+            reply_token = event.get("replyToken")
+            source = event.get("source", {})
+            user_id = source.get("userId", "")
             
-            if msg_type == "text":
-                user_text = message.get("text", "")
-                print(f"[LINE] Received message: {user_text}")
+            if event_type == "message" and reply_token:
+                message = event.get("message", {})
+                msg_type = message.get("type")
+                msg_id = message.get("id")
                 
-                # 嘗試自動回覆
-                auto_reply = get_auto_reply(user_text)
-                reply_text = auto_reply if auto_reply else DEFAULT_REPLY
+                # 取得用戶資料
+                profile = await get_user_profile(user_id)
+                display_name = profile.get("display_name")
+                avatar_url = profile.get("avatar_url")
                 
-                await reply_message(reply_token, [
-                    {"type": "text", "text": reply_text}
-                ])
-            else:
-                # 非文字訊息
-                await reply_message(reply_token, [
-                    {"type": "text", "text": "感謝您的訊息！目前我只能處理文字訊息 😊\n\n請輸入文字查詢，或前往 https://kingjam.app 了解更多。"}
-                ])
+                if msg_type == "text":
+                    user_text = message.get("text", "")
+                    print(f"[LINE] Received from {display_name or user_id}: {user_text}")
+                    
+                    # 儲存收到的訊息
+                    incoming_msg = LineMessage(
+                        line_user_id=user_id,
+                        display_name=display_name,
+                        avatar_url=avatar_url,
+                        direction="incoming",
+                        message_type="text",
+                        content=user_text,
+                        line_message_id=msg_id,
+                        is_read=False,
+                    )
+                    db.add(incoming_msg)
+                    
+                    # 嘗試自動回覆
+                    auto_reply = get_auto_reply(user_text)
+                    reply_text = auto_reply if auto_reply else DEFAULT_REPLY
+                    
+                    await reply_message(reply_token, [
+                        {"type": "text", "text": reply_text}
+                    ])
+                    
+                    # 儲存自動回覆的訊息
+                    outgoing_msg = LineMessage(
+                        line_user_id=user_id,
+                        display_name=display_name,
+                        avatar_url=avatar_url,
+                        direction="outgoing",
+                        message_type="text",
+                        content=reply_text,
+                        is_read=True,
+                    )
+                    db.add(outgoing_msg)
+                else:
+                    # 非文字訊息
+                    content_desc = f"[{msg_type}]"
+                    if msg_type == "image":
+                        content_desc = "[圖片]"
+                    elif msg_type == "sticker":
+                        content_desc = "[貼圖]"
+                    elif msg_type == "video":
+                        content_desc = "[影片]"
+                    elif msg_type == "audio":
+                        content_desc = "[語音]"
+                    elif msg_type == "location":
+                        content_desc = "[位置]"
+                    
+                    # 儲存非文字訊息
+                    incoming_msg = LineMessage(
+                        line_user_id=user_id,
+                        display_name=display_name,
+                        avatar_url=avatar_url,
+                        direction="incoming",
+                        message_type=msg_type,
+                        content=content_desc,
+                        line_message_id=msg_id,
+                        is_read=False,
+                    )
+                    db.add(incoming_msg)
+                    
+                    reply_text = "感謝您的訊息！目前我只能處理文字訊息 😊\n\n請輸入文字查詢，或前往 https://kingjam.app 了解更多。"
+                    await reply_message(reply_token, [
+                        {"type": "text", "text": reply_text}
+                    ])
+                    
+                    # 儲存自動回覆
+                    outgoing_msg = LineMessage(
+                        line_user_id=user_id,
+                        display_name=display_name,
+                        avatar_url=avatar_url,
+                        direction="outgoing",
+                        message_type="text",
+                        content=reply_text,
+                        is_read=True,
+                    )
+                    db.add(outgoing_msg)
+            
+            elif event_type == "follow":
+                # 用戶追蹤（加好友）
+                profile = await get_user_profile(user_id)
+                display_name = profile.get("display_name")
+                avatar_url = profile.get("avatar_url")
+                
+                welcome_text = "歡迎加入 King Jam AI！🎉\n\n我是 AI 智能助手，可以幫您：\n✨ 了解平台功能\n💰 查詢點數方案\n📧 聯繫客服\n\n輸入「功能」或「價格」開始查詢！\n\n前往平台：https://kingjam.app"
+                
+                if reply_token:
+                    await reply_message(reply_token, [
+                        {"type": "text", "text": welcome_text}
+                    ])
+                
+                # 儲存歡迎訊息
+                outgoing_msg = LineMessage(
+                    line_user_id=user_id,
+                    display_name=display_name,
+                    avatar_url=avatar_url,
+                    direction="outgoing",
+                    message_type="text",
+                    content=welcome_text,
+                    is_read=True,
+                )
+                db.add(outgoing_msg)
+                print(f"[LINE] New follower: {display_name or user_id}")
+            
+            elif event_type == "unfollow":
+                print(f"[LINE] User unfollowed: {user_id}")
         
-        elif event_type == "follow":
-            # 用戶追蹤（加好友）
-            if reply_token:
-                await reply_message(reply_token, [
-                    {"type": "text", "text": "歡迎加入 King Jam AI！🎉\n\n我是 AI 智能助手，可以幫您：\n✨ 了解平台功能\n💰 查詢點數方案\n📧 聯繫客服\n\n輸入「功能」或「價格」開始查詢！\n\n前往平台：https://kingjam.app"}
-                ])
-            print(f"[LINE] New follower")
-        
-        elif event_type == "unfollow":
-            print(f"[LINE] User unfollowed")
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"[LINE] Webhook error: {e}")
+        raise
+    finally:
+        db.close()
     
     return {"status": "ok"}
 
