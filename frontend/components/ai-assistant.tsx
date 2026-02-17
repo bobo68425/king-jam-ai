@@ -16,8 +16,11 @@ import {
   Video,
   FileText,
   Wand2,
-  ChevronUp,
   ChevronDown,
+  Search,
+  ArrowLeft,
+  RefreshCw,
+  CheckCheck,
 } from "lucide-react";
 
 // ============================================================
@@ -38,7 +41,6 @@ function getBubbleMode(key: string, fallback: BubbleMode = "full"): BubbleMode {
 function setBubbleMode(key: string, mode: BubbleMode) {
   if (typeof window === "undefined") return;
   localStorage.setItem(key, mode);
-  // 同步事件給其他元件（幫助中心設定頁）
   window.dispatchEvent(new CustomEvent("bubble-mode-change", { detail: { key, mode } }));
 }
 
@@ -124,6 +126,53 @@ function LineIcon({ size = 20 }: { size?: number }) {
 }
 
 // ============================================================
+// 時間格式化工具
+// ============================================================
+function formatTime(dateStr: string) {
+  try {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    if (diffMins < 1) return "剛剛";
+    if (diffMins < 60) return `${diffMins}分`;
+    if (diffHours < 24) return `${diffHours}時`;
+    if (diffDays < 7) return `${diffDays}天`;
+    return date.toLocaleDateString("zh-TW");
+  } catch { return ""; }
+}
+
+function formatMsgTime(dateStr: string) {
+  try {
+    return new Date(dateStr).toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" });
+  } catch { return ""; }
+}
+
+// ============================================================
+// LINE 對話介面型別
+// ============================================================
+interface LineConversation {
+  line_user_id: string;
+  display_name: string;
+  avatar_url: string | null;
+  last_message: string;
+  last_message_direction: string;
+  last_message_at: string;
+  unread_count: number;
+}
+
+interface LineMsg {
+  id: number;
+  direction: string;
+  message_type: string;
+  content: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+// ============================================================
 // 主元件：整合小幫手 + LINE 泡泡
 // ============================================================
 export function AIAssistant() {
@@ -141,8 +190,22 @@ export function AIAssistant() {
 
   // LINE 泡泡狀態
   const [lineMode, setLineMode] = useState<BubbleMode>("full");
+  // LINE 對話 — 管理員限定
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [lineOpen, setLineOpen] = useState(false);
+  const [lineMini, setLineMini] = useState(false);
+  const [conversations, setConversations] = useState<LineConversation[]>([]);
+  const [selectedUser, setSelectedUser] = useState<string | null>(null);
+  const [lineMessages, setLineMessages] = useState<LineMsg[]>([]);
+  const [lineUserInfo, setLineUserInfo] = useState<{ display_name: string; avatar_url: string | null }>({ display_name: "", avatar_url: null });
+  const [lineInput, setLineInput] = useState("");
+  const [lineSending, setLineSending] = useState(false);
+  const [lineSearch, setLineSearch] = useState("");
+  const [lineLoadingMsgs, setLineLoadingMsgs] = useState(false);
+  const lineEndRef = useRef<HTMLDivElement>(null);
+  const lineInputRef = useRef<HTMLTextAreaElement>(null);
 
-  // 初始化 - 從 localStorage 讀取
+  // 初始化 - 從 localStorage 讀取 + 檢查管理員
   useEffect(() => {
     setAssistantMode(getBubbleMode(STORAGE_KEY_ASSISTANT, "full"));
     setLineMode(getBubbleMode(STORAGE_KEY_LINE, "full"));
@@ -154,12 +217,32 @@ export function AIAssistant() {
       if (key === STORAGE_KEY_LINE) setLineMode(mode);
     };
     window.addEventListener("bubble-mode-change", handler);
+
+    // 檢查管理員身份
+    const checkAdmin = async () => {
+      try {
+        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        if (!token) return;
+        const API = process.env.NEXT_PUBLIC_API_URL || "https://api.kingjam.app";
+        const res = await fetch(`${API}/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
+        if (res.ok) {
+          const data = await res.json();
+          setIsAdmin(data.is_admin === true);
+        }
+      } catch { /* ignore */ }
+    };
+    checkAdmin();
+
     return () => window.removeEventListener("bubble-mode-change", handler);
   }, []);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs]);
+
+  useEffect(() => {
+    lineEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [lineMessages]);
 
   // 更新模式
   const updateAssistantMode = useCallback((mode: BubbleMode) => {
@@ -204,6 +287,95 @@ export function AIAssistant() {
     }, 500);
   };
 
+  // ========== LINE 對話 API ==========
+  const apiCall = useCallback(async (path: string, opts?: RequestInit) => {
+    const token = localStorage.getItem("token");
+    const API = process.env.NEXT_PUBLIC_API_URL || "https://api.kingjam.app";
+    return fetch(`${API}${path}`, {
+      ...opts,
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(opts?.headers || {}) },
+    });
+  }, []);
+
+  const fetchConversations = useCallback(async () => {
+    try {
+      const res = await apiCall("/api/line-chat/conversations");
+      if (res.ok) {
+        const data = await res.json();
+        setConversations(data.conversations || []);
+      }
+    } catch { /* ignore */ }
+  }, [apiCall]);
+
+  const fetchMessages = useCallback(async (userId: string) => {
+    setLineLoadingMsgs(true);
+    try {
+      const res = await apiCall(`/api/line-chat/conversations/${userId}/messages?page_size=100`);
+      if (res.ok) {
+        const data = await res.json();
+        setLineMessages(data.messages || []);
+        setLineUserInfo(data.user_info || { display_name: userId, avatar_url: null });
+      }
+      // 標記已讀
+      await apiCall(`/api/line-chat/conversations/${userId}/read`, { method: "POST" });
+      setConversations(prev => prev.map(c =>
+        c.line_user_id === userId ? { ...c, unread_count: 0 } : c
+      ));
+    } catch { /* ignore */ }
+    setLineLoadingMsgs(false);
+  }, [apiCall]);
+
+  // LINE 自動刷新
+  useEffect(() => {
+    if (isAdmin && lineOpen) {
+      fetchConversations();
+      const interval = setInterval(fetchConversations, 10000);
+      return () => clearInterval(interval);
+    }
+  }, [isAdmin, lineOpen, fetchConversations]);
+
+  useEffect(() => {
+    if (selectedUser && lineOpen) {
+      fetchMessages(selectedUser);
+      const interval = setInterval(() => fetchMessages(selectedUser), 5000);
+      return () => clearInterval(interval);
+    }
+  }, [selectedUser, lineOpen, fetchMessages]);
+
+  // 發送LINE回覆
+  const handleLineSend = async () => {
+    if (!lineInput.trim() || !selectedUser || lineSending) return;
+    setLineSending(true);
+    try {
+      const res = await apiCall(`/api/line-chat/conversations/${selectedUser}/send`, {
+        method: "POST",
+        body: JSON.stringify({ message: lineInput.trim() }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setLineMessages(prev => [...prev, data.message]);
+          setLineInput("");
+          lineInputRef.current?.focus();
+          setConversations(prev => prev.map(c =>
+            c.line_user_id === selectedUser
+              ? { ...c, last_message: lineInput.trim(), last_message_direction: "outgoing", last_message_at: new Date().toISOString() }
+              : c
+          ));
+        }
+      }
+    } catch { /* ignore */ }
+    setLineSending(false);
+  };
+
+  // 過濾對話
+  const filteredConvs = conversations.filter(c =>
+    c.display_name.toLowerCase().includes(lineSearch.toLowerCase()) ||
+    c.line_user_id.toLowerCase().includes(lineSearch.toLowerCase())
+  );
+
+  const totalUnread = conversations.reduce((acc, c) => acc + c.unread_count, 0);
+
   // 計算泡泡堆疊位置
   const lineBottom = 24;
   const assistantBottom = lineMode === "full" ? 24 + 56 + 12 : lineMode === "minimized" ? 24 + 28 + 12 : 24;
@@ -211,9 +383,9 @@ export function AIAssistant() {
   return (
     <>
       {/* ========================================== */}
-      {/* LINE 對話泡泡 */}
+      {/* LINE 泡泡 */}
       {/* ========================================== */}
-      {lineMode === "full" && (
+      {lineMode === "full" && !lineOpen && (
         <div style={{ position: "fixed", bottom: lineBottom, right: 24, zIndex: 9998 }}>
           {/* 關閉/最小化按鈕 */}
           <div style={{
@@ -244,24 +416,53 @@ export function AIAssistant() {
               <X size={10} color="white" />
             </button>
           </div>
-          <a
-            href="https://line.me/ti/p/@975ukpvt"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              width: 56, height: 56, borderRadius: "50%",
-              background: "#06C755",
-              border: "none", cursor: "pointer",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              boxShadow: "0 4px 12px rgba(6,199,85,0.4)",
-              transition: "transform 0.2s",
-              textDecoration: "none", color: "white",
-            }}
-            onMouseEnter={e => e.currentTarget.style.transform = "scale(1.1)"}
-            onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
-          >
-            <LineIcon size={28} />
-          </a>
+          {/* 管理員：打開對話框；一般用戶：連結外部 LINE */}
+          {isAdmin ? (
+            <button
+              onClick={() => { setLineOpen(true); }}
+              style={{
+                width: 56, height: 56, borderRadius: "50%",
+                background: "#06C755", border: "none", cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                boxShadow: "0 4px 12px rgba(6,199,85,0.4)",
+                transition: "transform 0.2s", position: "relative",
+              }}
+              onMouseEnter={e => e.currentTarget.style.transform = "scale(1.1)"}
+              onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+            >
+              <LineIcon size={28} />
+              {totalUnread > 0 && (
+                <span style={{
+                  position: "absolute", top: -4, right: -4,
+                  minWidth: 20, height: 20, borderRadius: 10,
+                  background: "#ef4444", color: "white",
+                  fontSize: 11, fontWeight: 700, display: "flex",
+                  alignItems: "center", justifyContent: "center",
+                  padding: "0 5px", border: "2px solid #0f172a",
+                }}>
+                  {totalUnread > 9 ? "9+" : totalUnread}
+                </span>
+              )}
+            </button>
+          ) : (
+            <a
+              href="https://line.me/ti/p/@975ukpvt"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                width: 56, height: 56, borderRadius: "50%",
+                background: "#06C755", border: "none", cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                boxShadow: "0 4px 12px rgba(6,199,85,0.4)",
+                transition: "transform 0.2s",
+                textDecoration: "none", color: "white",
+              }}
+              onMouseEnter={e => e.currentTarget.style.transform = "scale(1.1)"}
+              onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+            >
+              <LineIcon size={28} />
+            </a>
+          )}
           {/* Tooltip */}
           <div style={{
             position: "absolute", right: 64, bottom: 8,
@@ -274,9 +475,12 @@ export function AIAssistant() {
         </div>
       )}
 
-      {lineMode === "minimized" && (
+      {lineMode === "minimized" && !lineOpen && (
         <button
-          onClick={() => updateLineMode("full")}
+          onClick={() => {
+            if (isAdmin) { updateLineMode("full"); setLineOpen(true); }
+            else { updateLineMode("full"); }
+          }}
           style={{
             position: "fixed", bottom: lineBottom, right: 24, zIndex: 9998,
             display: "flex", alignItems: "center", gap: 6,
@@ -291,7 +495,298 @@ export function AIAssistant() {
         >
           <LineIcon size={16} />
           LINE
+          {totalUnread > 0 && (
+            <span style={{
+              minWidth: 16, height: 16, borderRadius: 8,
+              background: "#ef4444", color: "white",
+              fontSize: 10, fontWeight: 700, display: "flex",
+              alignItems: "center", justifyContent: "center",
+              padding: "0 4px", marginLeft: 2,
+            }}>
+              {totalUnread > 9 ? "9+" : totalUnread}
+            </span>
+          )}
         </button>
+      )}
+
+      {/* ========================================== */}
+      {/* LINE 對話框（管理員限定） */}
+      {/* ========================================== */}
+      {isAdmin && lineOpen && (
+        <div style={{
+          position: "fixed", bottom: 24, right: 24, zIndex: 10000,
+          width: 420, maxWidth: "calc(100vw - 48px)",
+          height: lineMini ? "auto" : 580,
+          background: "#0f172a", borderRadius: 16,
+          boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+          border: "1px solid #1e4620",
+          display: "flex", flexDirection: "column",
+          overflow: "hidden"
+        }}>
+          {/* 標題列 */}
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "12px 16px",
+            background: "linear-gradient(135deg, #06C755, #05a648)",
+            color: "white"
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {selectedUser && !lineMini ? (
+                <button onClick={() => { setSelectedUser(null); setLineMessages([]); }} style={{
+                  width: 32, height: 32, borderRadius: 8, background: "rgba(255,255,255,0.15)",
+                  border: "none", cursor: "pointer", color: "white",
+                  display: "flex", alignItems: "center", justifyContent: "center"
+                }}>
+                  <ArrowLeft size={16} />
+                </button>
+              ) : (
+                <div style={{
+                  width: 36, height: 36, borderRadius: "50%",
+                  background: "rgba(255,255,255,0.2)",
+                  display: "flex", alignItems: "center", justifyContent: "center"
+                }}>
+                  <LineIcon size={22} />
+                </div>
+              )}
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 15 }}>
+                  {selectedUser && !lineMini ? lineUserInfo.display_name : "LINE 客服對話"}
+                </div>
+                <div style={{ fontSize: 11, opacity: 0.8 }}>
+                  {selectedUser && !lineMini
+                    ? "LINE 用戶"
+                    : `${conversations.length} 個對話${totalUnread > 0 ? ` · ${totalUnread} 則未讀` : ""}`
+                  }
+                </div>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 4 }}>
+              {!selectedUser && (
+                <button onClick={fetchConversations} style={{
+                  width: 32, height: 32, background: "rgba(255,255,255,0.1)", border: "none",
+                  borderRadius: 6, cursor: "pointer", color: "white",
+                  display: "flex", alignItems: "center", justifyContent: "center"
+                }}>
+                  <RefreshCw size={14} />
+                </button>
+              )}
+              <button onClick={() => setLineMini(!lineMini)} style={{
+                width: 32, height: 32, background: "rgba(255,255,255,0.1)", border: "none",
+                borderRadius: 6, cursor: "pointer", color: "white",
+                display: "flex", alignItems: "center", justifyContent: "center"
+              }}>
+                {lineMini ? <Maximize2 size={16} /> : <Minimize2 size={16} />}
+              </button>
+              <button onClick={() => { updateLineMode("minimized"); setLineOpen(false); }} style={{
+                width: 32, height: 32, background: "rgba(255,255,255,0.1)", border: "none",
+                borderRadius: 6, cursor: "pointer", color: "white",
+                display: "flex", alignItems: "center", justifyContent: "center"
+              }} title="最小化到標籤">
+                <ChevronDown size={16} />
+              </button>
+              <button onClick={() => setLineOpen(false)} style={{
+                width: 32, height: 32, background: "rgba(255,255,255,0.1)", border: "none",
+                borderRadius: 6, cursor: "pointer", color: "white",
+                display: "flex", alignItems: "center", justifyContent: "center"
+              }}>
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+
+          {/* 內容 */}
+          {!lineMini && (
+            <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+              {selectedUser ? (
+                /* ====== 訊息視圖 ====== */
+                <>
+                  <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
+                    {lineLoadingMsgs ? (
+                      <div style={{ display: "flex", justifyContent: "center", padding: 32 }}>
+                        <Loader2 size={20} color="#94a3b8" className="animate-spin" />
+                      </div>
+                    ) : lineMessages.length === 0 ? (
+                      <div style={{ textAlign: "center", color: "#64748b", padding: 32 }}>
+                        <MessageCircle size={32} style={{ opacity: 0.3, margin: "0 auto 8px" }} />
+                        <div style={{ fontSize: 13 }}>尚無訊息</div>
+                      </div>
+                    ) : (
+                      lineMessages.map((m) => (
+                        <div key={m.id} style={{
+                          display: "flex",
+                          justifyContent: m.direction === "outgoing" ? "flex-end" : "flex-start",
+                          marginBottom: 10,
+                        }}>
+                          <div style={{
+                            maxWidth: "80%",
+                            padding: "10px 14px",
+                            borderRadius: 16,
+                            fontSize: 13,
+                            lineHeight: 1.6,
+                            whiteSpace: "pre-wrap",
+                            wordBreak: "break-word",
+                            background: m.direction === "outgoing"
+                              ? "linear-gradient(135deg, #06C755, #05a648)"
+                              : "#1e293b",
+                            color: "white",
+                            borderBottomRightRadius: m.direction === "outgoing" ? 4 : 16,
+                            borderBottomLeftRadius: m.direction === "outgoing" ? 16 : 4,
+                          }}>
+                            {m.content}
+                            <div style={{
+                              display: "flex", alignItems: "center", gap: 3,
+                              justifyContent: m.direction === "outgoing" ? "flex-end" : "flex-start",
+                              marginTop: 4,
+                            }}>
+                              <span style={{ fontSize: 10, opacity: 0.6 }}>
+                                {m.created_at ? formatMsgTime(m.created_at) : ""}
+                              </span>
+                              {m.direction === "outgoing" && (
+                                <CheckCheck size={12} style={{ opacity: 0.6 }} />
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                    <div ref={lineEndRef} />
+                  </div>
+                  {/* 輸入框 */}
+                  <div style={{ padding: 12, borderTop: "1px solid #334155", background: "#0f172a" }}>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <textarea
+                        ref={lineInputRef}
+                        value={lineInput}
+                        onChange={e => setLineInput(e.target.value)}
+                        onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleLineSend(); } }}
+                        placeholder="輸入訊息..."
+                        rows={1}
+                        style={{
+                          flex: 1, padding: "10px 14px", borderRadius: 12,
+                          background: "#1e293b", border: "1px solid #334155", outline: "none",
+                          color: "#e2e8f0", fontSize: 13, resize: "none",
+                          minHeight: 40, maxHeight: 80, fontFamily: "inherit",
+                        }}
+                      />
+                      <button
+                        onClick={handleLineSend}
+                        disabled={!lineInput.trim() || lineSending}
+                        style={{
+                          width: 40, height: 40, borderRadius: 10,
+                          background: lineInput.trim() && !lineSending ? "#06C755" : "#334155",
+                          border: "none",
+                          cursor: lineInput.trim() && !lineSending ? "pointer" : "not-allowed",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          transition: "background 0.2s", flexShrink: 0,
+                        }}
+                      >
+                        {lineSending ? <Loader2 size={16} color="white" className="animate-spin" /> : <Send size={16} color="white" />}
+                      </button>
+                    </div>
+                    <div style={{ fontSize: 10, color: "#64748b", marginTop: 4, textAlign: "center" }}>
+                      Enter 發送 · Shift+Enter 換行
+                    </div>
+                  </div>
+                </>
+              ) : (
+                /* ====== 對話列表視圖 ====== */
+                <>
+                  {/* 搜尋 */}
+                  <div style={{ padding: "8px 12px", borderBottom: "1px solid #1e293b" }}>
+                    <div style={{ position: "relative" }}>
+                      <Search size={14} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#64748b" }} />
+                      <input
+                        value={lineSearch}
+                        onChange={e => setLineSearch(e.target.value)}
+                        placeholder="搜尋對話..."
+                        style={{
+                          width: "100%", padding: "8px 12px 8px 32px", borderRadius: 10,
+                          background: "#1e293b", border: "1px solid #334155", outline: "none",
+                          color: "#e2e8f0", fontSize: 13,
+                        }}
+                      />
+                    </div>
+                  </div>
+                  {/* 對話列表 */}
+                  <div style={{ flex: 1, overflowY: "auto" }}>
+                    {filteredConvs.length === 0 ? (
+                      <div style={{ textAlign: "center", color: "#64748b", padding: 40 }}>
+                        <MessageCircle size={32} style={{ opacity: 0.3, margin: "0 auto 8px" }} />
+                        <div style={{ fontSize: 13 }}>尚無對話</div>
+                        <div style={{ fontSize: 11, marginTop: 4 }}>等待 LINE 用戶傳訊</div>
+                      </div>
+                    ) : (
+                      filteredConvs.map(conv => (
+                        <button
+                          key={conv.line_user_id}
+                          onClick={() => setSelectedUser(conv.line_user_id)}
+                          style={{
+                            width: "100%", display: "flex", alignItems: "center", gap: 10,
+                            padding: "10px 14px", textAlign: "left",
+                            background: "transparent", border: "none", borderBottom: "1px solid #1e293b",
+                            cursor: "pointer", color: "#e2e8f0",
+                            transition: "background 0.15s",
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = "#1e293b"}
+                          onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                        >
+                          {/* 頭像 */}
+                          <div style={{ position: "relative", flexShrink: 0 }}>
+                            <div style={{
+                              width: 40, height: 40, borderRadius: "50%",
+                              background: conv.avatar_url ? `url(${conv.avatar_url}) center/cover` : "linear-gradient(135deg, #06C755, #05a648)",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              color: "white", fontWeight: 600, fontSize: 16,
+                            }}>
+                              {!conv.avatar_url && conv.display_name.charAt(0)}
+                            </div>
+                            {conv.unread_count > 0 && (
+                              <span style={{
+                                position: "absolute", top: -3, right: -3,
+                                minWidth: 18, height: 18, borderRadius: 9,
+                                background: "#ef4444", color: "white",
+                                fontSize: 10, fontWeight: 700,
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                padding: "0 4px", border: "2px solid #0f172a",
+                              }}>
+                                {conv.unread_count > 9 ? "9+" : conv.unread_count}
+                              </span>
+                            )}
+                          </div>
+                          {/* 對話資訊 */}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <span style={{
+                                fontSize: 13,
+                                fontWeight: conv.unread_count > 0 ? 600 : 400,
+                                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                              }}>
+                                {conv.display_name}
+                              </span>
+                              <span style={{ fontSize: 10, color: "#64748b", flexShrink: 0, marginLeft: 8 }}>
+                                {conv.last_message_at ? formatTime(conv.last_message_at) : ""}
+                              </span>
+                            </div>
+                            <div style={{
+                              fontSize: 12, color: conv.unread_count > 0 ? "#cbd5e1" : "#64748b",
+                              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                              marginTop: 2,
+                            }}>
+                              {conv.last_message_direction === "outgoing" && (
+                                <span style={{ color: "#64748b", marginRight: 4 }}>你：</span>
+                              )}
+                              {conv.last_message || "..."}
+                            </div>
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {/* ========================================== */}
@@ -448,7 +943,7 @@ export function AIAssistant() {
                       display: "flex", alignItems: "center", justifyContent: "center"
                     }}>
                       {m.role === "user" ? <User size={16} color="white" /> :
-                       m.isAI ? <Wand2 size={16} color="white" /> : <Sparkles size={16} color="white" />}
+                        m.isAI ? <Wand2 size={16} color="white" /> : <Sparkles size={16} color="white" />}
                     </div>
                     <div style={{
                       maxWidth: "80%", padding: "10px 14px", borderRadius: 16,
@@ -492,8 +987,8 @@ export function AIAssistant() {
                         color: "#cbd5e1", fontSize: 12, cursor: "pointer",
                         transition: "all 0.2s"
                       }}
-                      onMouseEnter={e => { e.currentTarget.style.background = "#334155"; e.currentTarget.style.borderColor = "#6366f1"; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = "#1e293b"; e.currentTarget.style.borderColor = "#334155"; }}
+                        onMouseEnter={e => { e.currentTarget.style.background = "#334155"; e.currentTarget.style.borderColor = "#6366f1"; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = "#1e293b"; e.currentTarget.style.borderColor = "#334155"; }}
                       >
                         <b.icon size={14} />
                         {b.label}

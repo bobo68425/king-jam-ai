@@ -28,7 +28,6 @@ import {
   Wallet,
   Bell,
   Megaphone,
-  MessageCircle,
 } from "lucide-react";
 
 const navItems = [
@@ -86,7 +85,6 @@ const adminNavItems = [
       { href: "/dashboard/admin/withdrawals", icon: Wallet, label: "提領審核" },
       { href: "/dashboard/admin/fraud", icon: ShieldAlert, label: "詐騙偵測" },
       { href: "/dashboard/admin/prompts", icon: FileText, label: "Prompt 管理" },
-      { href: "/dashboard/chat", icon: MessageCircle, label: "LINE 客服", isNew: true },
     ]
   },
 ];
