@@ -190,7 +190,8 @@ export function AIAssistant() {
 
   // LINE 泡泡狀態
   const [lineMode, setLineMode] = useState<BubbleMode>("full");
-  // LINE 對話 — 管理員限定
+  // LINE 對話
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [lineOpen, setLineOpen] = useState(false);
   const [lineMini, setLineMini] = useState(false);
@@ -218,18 +219,23 @@ export function AIAssistant() {
     };
     window.addEventListener("bubble-mode-change", handler);
 
-    // 檢查管理員身份
+    // 檢查登入 + 管理員身份
     const checkAdmin = async () => {
       try {
         const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-        if (!token) return;
+        if (!token) { setIsLoggedIn(false); setIsAdmin(false); return; }
+        setIsLoggedIn(true);
         const API = process.env.NEXT_PUBLIC_API_URL || "https://api.kingjam.app";
         const res = await fetch(`${API}/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
         if (res.ok) {
           const data = await res.json();
+          setIsLoggedIn(true);
           setIsAdmin(data.is_admin === true);
+        } else {
+          setIsLoggedIn(false);
+          setIsAdmin(false);
         }
-      } catch { /* ignore */ }
+      } catch { setIsLoggedIn(false); setIsAdmin(false); }
     };
     checkAdmin();
 
@@ -416,53 +422,34 @@ export function AIAssistant() {
               <X size={10} color="white" />
             </button>
           </div>
-          {/* 管理員：打開對話框；一般用戶：連結外部 LINE */}
-          {isAdmin ? (
-            <button
-              onClick={() => { setLineOpen(true); }}
-              style={{
-                width: 56, height: 56, borderRadius: "50%",
-                background: "#06C755", border: "none", cursor: "pointer",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                boxShadow: "0 4px 12px rgba(6,199,85,0.4)",
-                transition: "transform 0.2s", position: "relative",
-              }}
-              onMouseEnter={e => e.currentTarget.style.transform = "scale(1.1)"}
-              onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
-            >
-              <LineIcon size={28} />
-              {totalUnread > 0 && (
-                <span style={{
-                  position: "absolute", top: -4, right: -4,
-                  minWidth: 20, height: 20, borderRadius: 10,
-                  background: "#ef4444", color: "white",
-                  fontSize: 11, fontWeight: 700, display: "flex",
-                  alignItems: "center", justifyContent: "center",
-                  padding: "0 5px", border: "2px solid #0f172a",
-                }}>
-                  {totalUnread > 9 ? "9+" : totalUnread}
-                </span>
-              )}
-            </button>
-          ) : (
-            <a
-              href="https://line.me/ti/p/@975ukpvt"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                width: 56, height: 56, borderRadius: "50%",
-                background: "#06C755", border: "none", cursor: "pointer",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                boxShadow: "0 4px 12px rgba(6,199,85,0.4)",
-                transition: "transform 0.2s",
-                textDecoration: "none", color: "white",
-              }}
-              onMouseEnter={e => e.currentTarget.style.transform = "scale(1.1)"}
-              onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
-            >
-              <LineIcon size={28} />
-            </a>
-          )}
+          {/* 所有用戶：打開對話框 */}
+          <button
+            onClick={() => { setLineOpen(true); }}
+            style={{
+              width: 56, height: 56, borderRadius: "50%",
+              background: "#06C755", border: "none", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: "0 4px 12px rgba(6,199,85,0.4)",
+              transition: "transform 0.2s", position: "relative",
+              color: "white",
+            }}
+            onMouseEnter={e => e.currentTarget.style.transform = "scale(1.1)"}
+            onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+          >
+            <LineIcon size={28} />
+            {isAdmin && totalUnread > 0 && (
+              <span style={{
+                position: "absolute", top: -4, right: -4,
+                minWidth: 20, height: 20, borderRadius: 10,
+                background: "#ef4444", color: "white",
+                fontSize: 11, fontWeight: 700, display: "flex",
+                alignItems: "center", justifyContent: "center",
+                padding: "0 5px", border: "2px solid #0f172a",
+              }}>
+                {totalUnread > 9 ? "9+" : totalUnread}
+              </span>
+            )}
+          </button>
           {/* Tooltip */}
           <div style={{
             position: "absolute", right: 64, bottom: 8,
@@ -477,10 +464,7 @@ export function AIAssistant() {
 
       {lineMode === "minimized" && !lineOpen && (
         <button
-          onClick={() => {
-            if (isAdmin) { updateLineMode("full"); setLineOpen(true); }
-            else { updateLineMode("full"); }
-          }}
+          onClick={() => { updateLineMode("full"); setLineOpen(true); }}
           style={{
             position: "fixed", bottom: lineBottom, right: 24, zIndex: 9998,
             display: "flex", alignItems: "center", gap: 6,
@@ -512,7 +496,7 @@ export function AIAssistant() {
       {/* ========================================== */}
       {/* LINE 對話框（管理員限定） */}
       {/* ========================================== */}
-      {isAdmin && lineOpen && (
+      {lineOpen && (
         <div style={{
           position: "fixed", bottom: 24, right: 24, zIndex: 10000,
           width: 420, maxWidth: "calc(100vw - 48px)",
@@ -555,7 +539,9 @@ export function AIAssistant() {
                 <div style={{ fontSize: 11, opacity: 0.8 }}>
                   {selectedUser && !lineMini
                     ? "LINE 用戶"
-                    : `${conversations.length} 個對話${totalUnread > 0 ? ` · ${totalUnread} 則未讀` : ""}`
+                    : isAdmin
+                      ? `${conversations.length} 個對話${totalUnread > 0 ? ` · ${totalUnread} 則未讀` : ""}`
+                      : "客服中心"
                   }
                 </div>
               </div>
@@ -597,7 +583,68 @@ export function AIAssistant() {
           {/* 內容 */}
           {!lineMini && (
             <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
-              {selectedUser ? (
+              {!isAdmin ? (
+                /* ====== 非管理員：登入提示 / 訪客對話 ====== */
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, gap: 16 }}>
+                  <div style={{
+                    width: 64, height: 64, borderRadius: "50%",
+                    background: "linear-gradient(135deg, #06C755, #05a648)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    <LineIcon size={36} />
+                  </div>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 16, fontWeight: 600, color: "#e2e8f0", marginBottom: 6 }}>
+                      LINE 客服中心
+                    </div>
+                    <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.6 }}>
+                      {isLoggedIn
+                        ? "此功能僅限管理員使用。\n如需客服協助，請透過 LINE 聯繫我們。"
+                        : "登入後即可使用 LINE 客服功能，\n或以訪客身份透過 LINE 聯繫我們。"
+                      }
+                    </div>
+                  </div>
+                  {!isLoggedIn && (
+                    <button
+                      onClick={() => { window.location.href = "/login"; }}
+                      style={{
+                        width: "100%", maxWidth: 240, padding: "12px 20px",
+                        borderRadius: 12,
+                        background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+                        border: "none", cursor: "pointer",
+                        color: "white", fontSize: 14, fontWeight: 600,
+                        transition: "transform 0.2s",
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.transform = "scale(1.02)"}
+                      onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+                    >
+                      登入帳號
+                    </button>
+                  )}
+                  <a
+                    href="https://line.me/ti/p/@975ukpvt"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      width: "100%", maxWidth: 240, padding: "12px 20px",
+                      borderRadius: 12, textAlign: "center",
+                      background: "#06C755",
+                      border: "none", cursor: "pointer",
+                      color: "white", fontSize: 14, fontWeight: 600,
+                      textDecoration: "none",
+                      display: "block",
+                      transition: "transform 0.2s",
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.transform = "scale(1.02)"}
+                    onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+                  >
+                    {isLoggedIn ? "透過 LINE 聯繫客服" : "訪客 LINE 對話"}
+                  </a>
+                  <div style={{ fontSize: 11, color: "#64748b", marginTop: 4, textAlign: "center" }}>
+                    客服時間：週一至週五 09:00-18:00
+                  </div>
+                </div>
+              ) : selectedUser ? (
                 /* ====== 訊息視圖 ====== */
                 <>
                   <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
