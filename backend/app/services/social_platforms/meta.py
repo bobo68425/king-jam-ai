@@ -216,7 +216,8 @@ class MetaPlatform(BasePlatform):
         """生成 Meta OAuth 授權 URL
         
         - Instagram Login：使用 scope，不需 META_CONFIG_ID
-        - Instagram/Facebook (Facebook Login)：需 META_CONFIG_ID
+        - Instagram (Facebook Login)：需 META_CONFIG_ID
+        - Facebook：直接使用 scope（不可用 config_id，因其含 IG 專用 scope）
         - Threads：使用 scope
         """
         params = {
@@ -227,7 +228,7 @@ class MetaPlatform(BasePlatform):
         }
         if getattr(self.config, "oauth_flow_type", "meta") == "instagram_login":
             params["scope"] = ",".join(self.config.scopes)
-        elif self.config.platform_id in ("instagram", "facebook"):
+        elif self.config.platform_id == "instagram":
             config_id = (os.getenv("META_CONFIG_ID") or os.getenv("FACEBOOK_LOGIN_CONFIG_ID") or "").strip()
             if not config_id:
                 raise ValueError(
@@ -236,6 +237,7 @@ class MetaPlatform(BasePlatform):
                 )
             params["config_id"] = config_id
         else:
+            # Facebook、Threads 等：直接使用 scope 參數
             params["scope"] = ",".join(self.config.scopes)
         return f"{self.config.auth_url}?{urlencode(params)}"
     
