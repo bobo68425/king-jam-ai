@@ -40,7 +40,7 @@ class YouTubePlatform(BasePlatform):
             name="YouTube",
             client_id=os.getenv("GOOGLE_CLIENT_ID", ""),
             client_secret=os.getenv("GOOGLE_CLIENT_SECRET", ""),
-            redirect_uri=os.getenv("YOUTUBE_REDIRECT_URI", "http://localhost:8000/oauth/youtube/callback"),
+            redirect_uri=os.getenv("YOUTUBE_REDIRECT_URI") or f"{os.getenv('BACKEND_URL', 'http://localhost:8000').rstrip('/')}/oauth/youtube/callback",
             scopes=[
                 "https://www.googleapis.com/auth/youtube",
                 "https://www.googleapis.com/auth/youtube.upload",
