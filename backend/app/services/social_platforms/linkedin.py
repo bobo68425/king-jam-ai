@@ -41,7 +41,7 @@ class LinkedInPlatform(BasePlatform):
             name="LinkedIn",
             client_id=os.getenv("LINKEDIN_CLIENT_ID", ""),
             client_secret=os.getenv("LINKEDIN_CLIENT_SECRET", ""),
-            redirect_uri=os.getenv("LINKEDIN_REDIRECT_URI", "http://localhost:8000/oauth/linkedin/callback"),
+            redirect_uri=os.getenv("LINKEDIN_REDIRECT_URI") or f"{os.getenv('BACKEND_URL', 'http://localhost:8000').rstrip('/')}/oauth/linkedin/callback",
             scopes=[
                 "openid",                       # OpenID Connect
                 "profile",                      # 基本個人檔案
