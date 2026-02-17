@@ -47,8 +47,6 @@ class LinkedInPlatform(BasePlatform):
                 "profile",                      # 基本個人檔案
                 "email",                        # 電子郵件
                 "w_member_social",              # 發布貼文
-                "r_liteprofile",                # 讀取精簡個人檔案
-                "r_1st_connections_size",       # 讀取一級連結數量
             ],
             auth_url="https://www.linkedin.com/oauth/v2/authorization",
             token_url="https://www.linkedin.com/oauth/v2/accessToken",
