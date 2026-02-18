@@ -584,63 +584,71 @@ export function AIAssistant() {
           {!lineMini && (
             <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
               {!isAdmin ? (
-                /* ====== 非管理員：登入提示 / 訪客對話 ====== */
-                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, gap: 16 }}>
+                /* ====== 非管理員：掃描 QR Code 開始對話 ====== */
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 20, gap: 12, overflowY: "auto" }}>
+                  <div style={{ textAlign: "center", marginBottom: 4 }}>
+                    <div style={{ fontSize: 16, fontWeight: 600, color: "#e2e8f0", marginBottom: 4 }}>
+                      掃描 QR Code 開始對話
+                    </div>
+                    <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.5 }}>
+                      使用 LINE 掃描下方 QR Code，即可與客服對話
+                    </div>
+                  </div>
+                  {/* QR Code */}
                   <div style={{
-                    width: 64, height: 64, borderRadius: "50%",
-                    background: "linear-gradient(135deg, #06C755, #05a648)",
+                    background: "white", borderRadius: 16, padding: 12,
                     display: "flex", alignItems: "center", justifyContent: "center",
+                    boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
                   }}>
-                    <LineIcon size={36} />
-                  </div>
-                  <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 16, fontWeight: 600, color: "#e2e8f0", marginBottom: 6 }}>
-                      LINE 客服中心
-                    </div>
-                    <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.6 }}>
-                      {isLoggedIn
-                        ? "此功能僅限管理員使用。\n如需客服協助，請透過 LINE 聯繫我們。"
-                        : "登入後即可使用 LINE 客服功能，\n或以訪客身份透過 LINE 聯繫我們。"
-                      }
-                    </div>
-                  </div>
-                  {!isLoggedIn && (
-                    <button
-                      onClick={() => { window.location.href = "/login"; }}
-                      style={{
-                        width: "100%", maxWidth: 240, padding: "12px 20px",
-                        borderRadius: 12,
-                        background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
-                        border: "none", cursor: "pointer",
-                        color: "white", fontSize: 14, fontWeight: 600,
-                        transition: "transform 0.2s",
+                    <img
+                      src="https://qr-official.line.me/gs/M_975ukpvt_GW.png"
+                      alt="LINE QR Code"
+                      width={180}
+                      height={180}
+                      style={{ borderRadius: 8, display: "block" }}
+                      onError={(e) => {
+                        // Fallback to QR code API if LINE QR fails
+                        (e.target as HTMLImageElement).src =
+                          "https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https://line.me/ti/p/@975ukpvt&bgcolor=FFFFFF&color=06C755";
                       }}
-                      onMouseEnter={e => e.currentTarget.style.transform = "scale(1.02)"}
-                      onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
-                    >
-                      登入帳號
-                    </button>
-                  )}
+                    />
+                  </div>
+                  {/* LINE ID */}
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 8,
+                    background: "rgba(6,199,85,0.1)", borderRadius: 10,
+                    padding: "8px 16px",
+                  }}>
+                    <LineIcon size={18} />
+                    <span style={{ fontSize: 14, color: "#06C755", fontWeight: 600, letterSpacing: 0.5 }}>
+                      @975ukpvt
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11, color: "#64748b", textAlign: "center", lineHeight: 1.5 }}>
+                    或在 LINE 搜尋 ID 加入好友
+                  </div>
+                  {/* 直接開啟 LINE */}
                   <a
                     href="https://line.me/ti/p/@975ukpvt"
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{
-                      width: "100%", maxWidth: 240, padding: "12px 20px",
-                      borderRadius: 12, textAlign: "center",
+                      width: "100%", maxWidth: 220, padding: "10px 16px",
+                      borderRadius: 10, textAlign: "center",
                       background: "#06C755",
                       border: "none", cursor: "pointer",
-                      color: "white", fontSize: 14, fontWeight: 600,
+                      color: "white", fontSize: 13, fontWeight: 600,
                       textDecoration: "none",
-                      display: "block",
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
                       transition: "transform 0.2s",
                     }}
                     onMouseEnter={e => e.currentTarget.style.transform = "scale(1.02)"}
                     onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
                   >
-                    {isLoggedIn ? "透過 LINE 聯繫客服" : "訪客 LINE 對話"}
+                    <LineIcon size={16} />
+                    直接開啟 LINE 對話
                   </a>
-                  <div style={{ fontSize: 11, color: "#64748b", marginTop: 4, textAlign: "center" }}>
+                  <div style={{ fontSize: 10, color: "#475569", textAlign: "center" }}>
                     客服時間：週一至週五 09:00-18:00
                   </div>
                 </div>
