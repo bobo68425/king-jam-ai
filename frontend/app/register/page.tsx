@@ -171,6 +171,7 @@ function RegisterContent() {
         <CardContent className="space-y-4">
           {/* 社交登入按鈕 */}
           <div className="space-y-3">
+            {/* Google 和 Facebook 註冊暫時隱藏
             <Button
               type="button"
               variant="outline"
@@ -219,6 +220,7 @@ function RegisterContent() {
               )}
               使用 Facebook 註冊
             </Button>
+            Google 和 Facebook 註冊暫時隱藏 */}
 
             <Button
               type="button"

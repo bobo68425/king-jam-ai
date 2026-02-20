@@ -211,7 +211,8 @@ export default function LoginPage() {
           )}
 
           {/* 社交登入按鈕 */}
-          <div className="space-y-3">
+            <div className="space-y-3">
+            {/* Google 和 Facebook 登入暫時隱藏
             <Button
               type="button"
               variant="outline"
@@ -248,6 +249,7 @@ export default function LoginPage() {
               )}
               使用 Facebook 登入
             </Button>
+            Google 和 Facebook 登入暫時隱藏 */}
 
             <Button
               type="button"
