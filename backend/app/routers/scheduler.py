@@ -879,7 +879,7 @@ async def publish_now(
         )
         db.add(log_err)
         db.commit()
-        raise HTTPException(status_code=500, detail=f"發布失敗: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"發布失敗: {str(e)}")
 
 
 # ============================================================
