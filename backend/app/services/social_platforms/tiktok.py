@@ -39,7 +39,7 @@ class TikTokPlatform(BasePlatform):
             name="TikTok",
             client_id=os.getenv("TIKTOK_CLIENT_KEY", ""),
             client_secret=os.getenv("TIKTOK_CLIENT_SECRET", ""),
-            redirect_uri=os.getenv("TIKTOK_REDIRECT_URI", "http://localhost:8000/oauth/tiktok/callback"),
+            redirect_uri=os.getenv("TIKTOK_REDIRECT_URI") or f"{os.getenv('BACKEND_URL', 'http://localhost:8000').rstrip('/')}/oauth/tiktok/callback",
             scopes=[
                 "user.info.basic",      # 基本用戶資訊
                 "user.info.profile",    # 用戶個人檔案
