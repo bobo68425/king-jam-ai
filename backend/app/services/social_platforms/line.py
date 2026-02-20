@@ -313,3 +313,12 @@ class LinePlatform(BasePlatform):
                         break
             
             return count
+
+
+# ============================================================
+# Publisher 別名（供 scheduler_tasks.get_platform_publisher 使用）
+# ============================================================
+
+class LinePublisher(LinePlatform):
+    """LINE 發布器 — 繼承 LinePlatform 的完整功能"""
+    pass

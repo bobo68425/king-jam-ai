@@ -563,3 +563,12 @@ class LinkedInPlatform(BasePlatform):
                             "engagement": stats.get("engagement", 0)
                         }
                 return {}
+
+
+# ============================================================
+# Publisher 別名（供 scheduler_tasks.get_platform_publisher 使用）
+# ============================================================
+
+class LinkedInPublisher(LinkedInPlatform):
+    """LinkedIn 發布器 — 繼承 LinkedInPlatform 的完整功能"""
+    pass
