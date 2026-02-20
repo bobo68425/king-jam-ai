@@ -198,9 +198,16 @@ def publish_scheduled_post(self, scheduled_post_id: int):
             logger.warning(f"[Publisher] 平台 {social_account.platform} 尚未實作自動發布")
             return {"success": True, "message": "已記錄（平台待實作）"}
         
-        # 準備發布內容
+        # 準備發布內容（根據目標平台智慧選擇 ContentType）
+        publish_content_type = _get_best_content_type(
+            platform=social_account.platform,
+            content_type=post.content_type,
+            has_media=bool(post.media_urls)
+        )
+        logger.info(f"[Publisher] 智慧匹配: platform={social_account.platform}, content_type={post.content_type} → {publish_content_type.value}")
+        
         content = PublishContent(
-            content_type=ContentType.IMAGE if post.content_type == "social_image" else ContentType.VIDEO,
+            content_type=publish_content_type,
             caption=post.caption or "",
             media_urls=post.media_urls or [],
             hashtags=post.hashtags or [],
@@ -368,6 +375,42 @@ def publish_to_wordpress(post: ScheduledPost, social_account: SocialAccount) -> 
     except Exception as e:
         logger.error(f"[WordPress] 發布錯誤: {e}")
         return {"success": False, "error": str(e)}
+
+
+def _get_best_content_type(platform: str, content_type: str, has_media: bool):
+    """
+    根據平台特性決定最適合的 ContentType
+    """
+    PLATFORM_CONTENT_MAP = {
+        "instagram": {
+            "social_image": ContentType.IMAGE,
+            "short_video": ContentType.REEL,
+            "blog_post": ContentType.IMAGE,
+        },
+        "facebook": {
+            "social_image": ContentType.IMAGE,
+            "short_video": ContentType.VIDEO,
+            "blog_post": ContentType.TEXT,
+        },
+        "threads": {
+            "social_image": ContentType.IMAGE,
+            "short_video": ContentType.VIDEO,
+            "blog_post": ContentType.TEXT,
+        },
+        "tiktok": {
+            "social_image": ContentType.IMAGE,
+            "short_video": ContentType.VIDEO,
+            "blog_post": ContentType.VIDEO,
+        },
+        "linkedin": {
+            "social_image": ContentType.IMAGE,
+            "short_video": ContentType.VIDEO,
+            "blog_post": ContentType.TEXT if not has_media else ContentType.IMAGE,
+        },
+    }
+    
+    platform_map = PLATFORM_CONTENT_MAP.get(platform, {})
+    return platform_map.get(content_type, ContentType.IMAGE)
 
 
 def get_platform_publisher(platform: str, account=None):
