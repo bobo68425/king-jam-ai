@@ -155,7 +155,7 @@ async def initiate_oauth(
         "tiktok": ("TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET"),
         "linkedin": ("LINKEDIN_CLIENT_ID", "LINKEDIN_CLIENT_SECRET"),
         "youtube": ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"),
-        "line": ("LINE_CHANNEL_ID", "LINE_CHANNEL_SECRET"),
+        "line": ("LINE_LOGIN_CHANNEL_ID", "LINE_LOGIN_CHANNEL_SECRET"),
     }
     
     # 檢查平台是否支援
@@ -186,6 +186,15 @@ async def initiate_oauth(
             raise HTTPException(
                 status_code=400,
                 detail="Threads 必須設定 THREADS_APP_ID 與 THREADS_APP_SECRET（不可用 FACEBOOK_APP_ID）。請在 Meta 後台 Use cases → Access the Threads API → Settings 取得 Threads app ID 與 app secret，並在 GitHub Secrets 新增。詳見 docs/Threads_串接步驟.md"
+            )
+    elif platform == "line":
+        # LINE OAuth 優先使用 LINE Login Channel，退回 Messaging API Channel
+        login_id = os.getenv("LINE_LOGIN_CHANNEL_ID") or os.getenv("LINE_CHANNEL_ID") or ""
+        login_sec = os.getenv("LINE_LOGIN_CHANNEL_SECRET") or os.getenv("LINE_CHANNEL_SECRET") or ""
+        if not login_id or not login_sec or login_id.startswith("your_") or login_sec.startswith("your_"):
+            raise HTTPException(
+                status_code=400,
+                detail="LINE 尚未設定 API 金鑰。請設定 LINE_LOGIN_CHANNEL_ID 與 LINE_LOGIN_CHANNEL_SECRET（LINE Login Channel），或 LINE_CHANNEL_ID 與 LINE_CHANNEL_SECRET"
             )
     else:
         env_keys = platform_env_keys[platform]

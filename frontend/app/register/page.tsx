@@ -134,7 +134,7 @@ function RegisterContent() {
     authUrl.searchParams.set("client_id", LINE_LOGIN_CHANNEL_ID);
     authUrl.searchParams.set("redirect_uri", redirectUri);
     authUrl.searchParams.set("state", crypto.randomUUID());
-    authUrl.searchParams.set("scope", "profile openid email");
+    authUrl.searchParams.set("scope", "profile openid");
     // 保存推薦碼
     if (referralCode) {
       sessionStorage.setItem("referral_code", referralCode);

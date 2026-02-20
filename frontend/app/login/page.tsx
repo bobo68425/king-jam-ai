@@ -95,7 +95,7 @@ export default function LoginPage() {
     authUrl.searchParams.set("client_id", LINE_LOGIN_CHANNEL_ID);
     authUrl.searchParams.set("redirect_uri", redirectUri);
     authUrl.searchParams.set("state", crypto.randomUUID());
-    authUrl.searchParams.set("scope", "profile openid email");
+    authUrl.searchParams.set("scope", "profile openid");
     window.location.href = authUrl.toString();
   };
 
@@ -211,7 +211,7 @@ export default function LoginPage() {
           )}
 
           {/* 社交登入按鈕 */}
-            <div className="space-y-3">
+          <div className="space-y-3">
             {/* Google 和 Facebook 登入暫時隱藏
             <Button
               type="button"

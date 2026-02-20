@@ -32,13 +32,22 @@ class LinePlatform(BasePlatform):
     
     @classmethod
     def create_config(cls) -> PlatformConfig:
-        """創建 LINE 配置"""
+        """創建 LINE 配置
+        
+        OAuth 需要使用 LINE Login Channel（不是 Messaging API Channel）
+        LINE_LOGIN_CHANNEL_ID / LINE_LOGIN_CHANNEL_SECRET 優先
+        若未設定則退回到 LINE_CHANNEL_ID / LINE_CHANNEL_SECRET
+        """
+        # OAuth 使用 LINE Login Channel
+        login_channel_id = os.getenv("LINE_LOGIN_CHANNEL_ID") or os.getenv("LINE_CHANNEL_ID", "")
+        login_channel_secret = os.getenv("LINE_LOGIN_CHANNEL_SECRET") or os.getenv("LINE_CHANNEL_SECRET", "")
+        
         return PlatformConfig(
             platform_id="line",
             name="LINE",
-            client_id=os.getenv("LINE_CHANNEL_ID", ""),
-            client_secret=os.getenv("LINE_CHANNEL_SECRET", ""),
-            redirect_uri=os.getenv("LINE_REDIRECT_URI", "http://localhost:8000/oauth/line/callback"),
+            client_id=login_channel_id,
+            client_secret=login_channel_secret,
+            redirect_uri=os.getenv("LINE_REDIRECT_URI") or f"{os.getenv('BACKEND_URL', 'http://localhost:8000').rstrip('/')}/oauth/line/callback",
             scopes=["profile", "openid"],
             auth_url="https://access.line.me/oauth2/v2.1/authorize",
             token_url="https://api.line.me/oauth2/v2.1/token",

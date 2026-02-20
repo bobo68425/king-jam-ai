@@ -201,9 +201,13 @@ async def line_login(request: SocialLoginRequest, req: Request, db: Session = De
 
     # 3. DB 處理
     email = user_info.get("email")
+    line_user_id = user_info.get("sub")
     # 注意：如果 LINE 後台沒開 email 權限，這裡會是 None
+    # 使用 LINE user ID 產生佔位 email，讓登入流程可以繼續
     if not email:
-        raise HTTPException(status_code=400, detail="Line account has no email permission")
+        if not line_user_id:
+            raise HTTPException(status_code=400, detail="LINE 帳號資訊不完整")
+        email = f"line_{line_user_id}@line.login"
 
     user = get_or_create_social_user(
         db,
