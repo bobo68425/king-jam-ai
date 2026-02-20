@@ -3,12 +3,15 @@ import axios from 'axios';
 // API 基礎網址（支援環境變數配置）
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-// AI 生成類的端點需要更長的超時時間（圖片/影片生成可能需要 60-120 秒）
+// AI 生成類的端點需要更長的超時時間（影片渲染可能需要 60-180 秒）
 const AI_GENERATE_PATHS = [
   '/social/generate',
   '/api/design-studio/generate-image',
   '/api/design-studio/remove-background',
   '/video/generate',
+  '/video/render',
+  '/video/preview',
+  '/video/render-preview',
   '/blog/generate',
 ];
 
@@ -29,18 +32,18 @@ api.interceptors.request.use((config) => {
       config.headers.Authorization = `Bearer ${token}`;
     }
   }
-  
+
   // 如果是 FormData，移除 Content-Type 讓瀏覽器自動設置（包含 boundary）
   if (config.data instanceof FormData) {
     delete config.headers['Content-Type'];
   }
-  
+
   // AI 生成端點使用更長的超時時間（120 秒）
   const url = config.url || '';
   if (AI_GENERATE_PATHS.some(path => url.includes(path))) {
-    config.timeout = 120000;
+    config.timeout = 180000;
   }
-  
+
   return config;
 });
 
