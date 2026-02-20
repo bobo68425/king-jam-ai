@@ -407,6 +407,11 @@ def _get_best_content_type(platform: str, content_type: str, has_media: bool):
             "short_video": ContentType.VIDEO,
             "blog_post": ContentType.TEXT if not has_media else ContentType.IMAGE,
         },
+        "youtube": {
+            "social_image": ContentType.VIDEO,
+            "short_video": ContentType.VIDEO,
+            "blog_post": ContentType.VIDEO,
+        },
     }
     
     platform_map = PLATFORM_CONTENT_MAP.get(platform, {})

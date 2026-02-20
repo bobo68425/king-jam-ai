@@ -272,3 +272,12 @@ def import_json_dumps(data):
     """Helper to import json.dumps"""
     import json
     return json.dumps(data)
+
+
+# ============================================================
+# Publisher 別名（供 scheduler_tasks.get_platform_publisher 使用）
+# ============================================================
+
+class YouTubePublisher(YouTubePlatform):
+    """YouTube 發布器 — 繼承 YouTubePlatform 的完整功能"""
+    pass
