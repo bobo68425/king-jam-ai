@@ -394,3 +394,12 @@ class TikTokPlatform(BasePlatform):
                         videos = result.get("data", {}).get("videos", [])
                         return {v["id"]: v for v in videos}
                 return {}
+
+
+# ============================================================
+# Publisher 別名（供 scheduler_tasks.get_platform_publisher 使用）
+# ============================================================
+
+class TikTokPublisher(TikTokPlatform):
+    """TikTok 發布器 — 繼承 TikTokPlatform 的完整功能"""
+    pass
