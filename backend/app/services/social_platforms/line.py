@@ -192,7 +192,7 @@ class LinePlatform(BasePlatform):
     async def _broadcast_message(self, content: PublishContent) -> PublishResult:
         """廣播訊息給所有追蹤者"""
         async with aiohttp.ClientSession() as session:
-            url = "https://api.line.me/v2/bot/message/broadcast"
+            broadcast_url = "https://api.line.me/v2/bot/message/broadcast"
             headers = {
                 "Authorization": f"Bearer {self._channel_access_token}",
                 "Content-Type": "application/json"
@@ -208,11 +208,11 @@ class LinePlatform(BasePlatform):
                 })
             elif content.content_type == ContentType.IMAGE:
                 # 圖片訊息
-                for url in content.media_urls[:5]:  # 最多 5 則訊息
+                for media_url in content.media_urls[:5]:  # 最多 5 則訊息
                     messages.append({
                         "type": "image",
-                        "originalContentUrl": url,
-                        "previewImageUrl": url
+                        "originalContentUrl": media_url,
+                        "previewImageUrl": media_url
                     })
                 # 加上文案
                 if content.caption:
@@ -222,10 +222,14 @@ class LinePlatform(BasePlatform):
                     })
             elif content.content_type == ContentType.VIDEO:
                 # 影片訊息需要提供預覽圖
+                preview_url = (
+                    content.extra_params.get("preview_url", content.media_urls[0])
+                    if content.extra_params else content.media_urls[0]
+                )
                 messages.append({
                     "type": "video",
                     "originalContentUrl": content.media_urls[0],
-                    "previewImageUrl": content.extra_params.get("preview_url", content.media_urls[0])
+                    "previewImageUrl": preview_url
                 })
                 if content.caption:
                     messages.insert(0, {
@@ -235,10 +239,10 @@ class LinePlatform(BasePlatform):
             
             data = {"messages": messages[:5]}  # LINE 一次最多 5 則訊息
             
-            async with session.post(url, headers=headers, json=data) as response:
+            async with session.post(broadcast_url, headers=headers, json=data) as response:
                 if response.status != 200:
-                    text = await response.text()
-                    return PublishResult(success=False, error_message=text)
+                    error_text = await response.text()
+                    return PublishResult(success=False, error_message=error_text)
                 
                 result = await response.json()
                 

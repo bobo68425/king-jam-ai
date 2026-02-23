@@ -192,17 +192,28 @@ class YouTubePlatform(BasePlatform):
             return PublishResult(success=False, error_message=str(e))
     
     async def _upload_video(self, access_token: str, content: PublishContent) -> PublishResult:
-        """上傳影片"""
+        """使用 Resumable Upload 上傳影片到 YouTube"""
+        import json
+        
         async with aiohttp.ClientSession() as session:
             # Step 1: 下載影片
             async with session.get(content.media_urls[0]) as resp:
+                if resp.status != 200:
+                    return PublishResult(
+                        success=False,
+                        error_message=f"無法下載影片: HTTP {resp.status}"
+                    )
                 video_data = await resp.read()
+                video_content_type = resp.content_type or "video/mp4"
             
             # Step 2: 準備 metadata
-            # 檢查是否為 Shorts (垂直影片且短於 60 秒)
             is_shorts = content.extra_params and content.extra_params.get("is_shorts", False)
             
-            title = content.caption[:100] if content.caption else "Untitled Video"
+            # title 與 description 分離：title 取 extra_params 或 caption 前 100 字
+            title = (
+                (content.extra_params or {}).get("title")
+                or (content.caption[:100] if content.caption else "Untitled Video")
+            )
             if is_shorts and not title.startswith("#Shorts"):
                 title = f"{title} #Shorts"
             
@@ -214,37 +225,58 @@ class YouTubePlatform(BasePlatform):
                     "categoryId": "22"  # People & Blogs
                 },
                 "status": {
-                    "privacyStatus": "public",  # public, private, unlisted
+                    "privacyStatus": "public",
                     "selfDeclaredMadeForKids": False
                 }
             }
             
-            # Step 3: 上傳影片
-            url = f"{self.UPLOAD_BASE}/videos?uploadType=multipart&part=snippet,status"
-            
-            # 使用 multipart upload
-            from aiohttp import FormData
-            form = FormData()
-            form.add_field(
-                "metadata",
-                import_json_dumps(metadata),
-                content_type="application/json"
+            # Step 3: 使用 Resumable Upload (官方推薦方式)
+            # 3a: 初始化 resumable upload session
+            init_url = (
+                f"{self.UPLOAD_BASE}/videos"
+                f"?uploadType=resumable&part=snippet,status"
             )
-            form.add_field(
-                "file",
-                video_data,
-                filename="video.mp4",
-                content_type="video/mp4"
-            )
+            init_headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json; charset=UTF-8",
+                "X-Upload-Content-Length": str(len(video_data)),
+                "X-Upload-Content-Type": video_content_type,
+            }
             
-            headers = {"Authorization": f"Bearer {access_token}"}
+            async with session.post(
+                init_url, headers=init_headers, data=json.dumps(metadata)
+            ) as init_resp:
+                if init_resp.status != 200:
+                    text = await init_resp.text()
+                    return PublishResult(
+                        success=False,
+                        error_message=f"YouTube resumable upload init 失敗: {text}"
+                    )
+                upload_url = init_resp.headers.get("Location")
+                if not upload_url:
+                    return PublishResult(
+                        success=False,
+                        error_message="YouTube 未回傳 upload URL"
+                    )
             
-            async with session.post(url, data=form, headers=headers) as response:
-                if response.status not in [200, 201]:
-                    text = await response.text()
-                    return PublishResult(success=False, error_message=text)
+            # 3b: 上傳影片 binary
+            upload_headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": video_content_type,
+                "Content-Length": str(len(video_data)),
+            }
+            
+            async with session.put(
+                upload_url, headers=upload_headers, data=video_data
+            ) as upload_resp:
+                if upload_resp.status not in [200, 201]:
+                    text = await upload_resp.text()
+                    return PublishResult(
+                        success=False,
+                        error_message=f"YouTube 影片上傳失敗: {text}"
+                    )
                 
-                result = await response.json()
+                result = await upload_resp.json()
                 video_id = result["id"]
                 
                 return PublishResult(
@@ -252,8 +284,8 @@ class YouTubePlatform(BasePlatform):
                     platform_post_id=video_id,
                     platform_post_url=f"https://youtube.com/watch?v={video_id}",
                     extra_data={
-                        "title": result["snippet"]["title"],
-                        "channel_id": result["snippet"]["channelId"]
+                        "title": result.get("snippet", {}).get("title", title),
+                        "channel_id": result.get("snippet", {}).get("channelId", ""),
                     }
                 )
     
@@ -266,12 +298,6 @@ class YouTubePlatform(BasePlatform):
             
             async with session.delete(url, params=params, headers=headers) as response:
                 return response.status == 204
-
-
-def import_json_dumps(data):
-    """Helper to import json.dumps"""
-    import json
-    return json.dumps(data)
 
 
 # ============================================================

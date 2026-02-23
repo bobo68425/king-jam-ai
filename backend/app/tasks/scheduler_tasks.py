@@ -380,6 +380,14 @@ def publish_to_wordpress(post: ScheduledPost, social_account: SocialAccount) -> 
 def _get_best_content_type(platform: str, content_type: str, has_media: bool):
     """
     根據平台特性決定最適合的 ContentType
+    
+    不同平台對同一內容有不同需求：
+    - Instagram: 短影片應用 REELS，不支援純文字
+    - TikTok: 只支援 VIDEO 和 IMAGE（照片模式）
+    - LinkedIn: 支援 TEXT, IMAGE, VIDEO, CAROUSEL
+    - Facebook: 支援 TEXT, IMAGE, VIDEO
+    - Threads: 支援 TEXT, IMAGE, VIDEO, CAROUSEL
+    - LINE: 支援 TEXT, IMAGE, VIDEO
     """
     PLATFORM_CONTENT_MAP = {
         "instagram": {
@@ -411,6 +419,11 @@ def _get_best_content_type(platform: str, content_type: str, has_media: bool):
             "social_image": ContentType.VIDEO,
             "short_video": ContentType.VIDEO,
             "blog_post": ContentType.VIDEO,
+        },
+        "line": {
+            "social_image": ContentType.IMAGE,
+            "short_video": ContentType.VIDEO,
+            "blog_post": ContentType.TEXT,
         },
     }
     

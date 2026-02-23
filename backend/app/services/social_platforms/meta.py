@@ -846,6 +846,13 @@ class MetaPlatform(BasePlatform):
                 await self._get_threads_profile(access_token)
             
             async with aiohttp.ClientSession() as session:
+                # ========== Carousel 特殊處理 ==========
+                if content.content_type == ContentType.CAROUSEL and content.media_urls:
+                    return await self._publish_threads_carousel(
+                        session, access_token, content
+                    )
+                
+                # ========== 單一媒體 / 純文字 ==========
                 # Step 1: 創建媒體容器
                 url = f"{self.config.api_base_url}/{self._threads_user_id}/threads"
                 params = {
@@ -859,9 +866,6 @@ class MetaPlatform(BasePlatform):
                 elif content.content_type == ContentType.VIDEO and content.media_urls:
                     params["media_type"] = "VIDEO"
                     params["video_url"] = content.media_urls[0]
-                elif content.content_type == ContentType.CAROUSEL and content.media_urls:
-                    params["media_type"] = "CAROUSEL"
-                    # Threads carousel 需要特殊處理
                 else:
                     params["media_type"] = "TEXT"
                 
@@ -900,6 +904,84 @@ class MetaPlatform(BasePlatform):
                     
         except Exception as e:
             return PublishResult(success=False, error_message=str(e))
+    
+    async def _publish_threads_carousel(
+        self, session: aiohttp.ClientSession,
+        access_token: str, content: PublishContent
+    ) -> PublishResult:
+        """
+        發布 Threads Carousel (輪播)
+        
+        Threads Carousel 流程:
+        1. 為每個媒體建立子項目容器 (is_carousel_item=true)
+        2. 建立 CAROUSEL 主容器，帶入所有子項目 ID
+        3. 發布主容器
+        """
+        children_ids = []
+        
+        # Step 1: 建立每個子項目容器 (最多 20 項)
+        for media_url in content.media_urls[:20]:
+            child_url = f"{self.config.api_base_url}/{self._threads_user_id}/threads"
+            child_params = {
+                "access_token": access_token,
+                "is_carousel_item": "true",
+            }
+            
+            # 根據副檔名判斷媒體類型
+            lower_url = media_url.lower().split("?")[0]
+            if lower_url.endswith(('.mp4', '.mov', '.avi', '.webm')):
+                child_params["media_type"] = "VIDEO"
+                child_params["video_url"] = media_url
+            else:
+                child_params["media_type"] = "IMAGE"
+                child_params["image_url"] = media_url
+            
+            async with session.post(child_url, params=child_params) as resp:
+                child_data = await resp.json()
+                if "error" in child_data:
+                    return PublishResult(
+                        success=False,
+                        error_message=f"Threads carousel 子項目建立失敗: {child_data['error']['message']}"
+                    )
+                children_ids.append(child_data["id"])
+        
+        # Step 2: 建立 CAROUSEL 主容器
+        carousel_url = f"{self.config.api_base_url}/{self._threads_user_id}/threads"
+        carousel_params = {
+            "access_token": access_token,
+            "media_type": "CAROUSEL",
+            "children": ",".join(children_ids),
+            "text": content.caption or "",
+        }
+        
+        async with session.post(carousel_url, params=carousel_params) as resp:
+            carousel_data = await resp.json()
+            if "error" in carousel_data:
+                return PublishResult(
+                    success=False,
+                    error_message=f"Threads carousel 主容器建立失敗: {carousel_data['error']['message']}"
+                )
+            container_id = carousel_data["id"]
+        
+        # Step 3: 發布
+        publish_url = f"{self.config.api_base_url}/{self._threads_user_id}/threads_publish"
+        publish_params = {
+            "creation_id": container_id,
+            "access_token": access_token,
+        }
+        
+        async with session.post(publish_url, params=publish_params) as resp:
+            publish_data = await resp.json()
+            if "error" in publish_data:
+                return PublishResult(
+                    success=False,
+                    error_message=f"Threads carousel 發布失敗: {publish_data['error']['message']}"
+                )
+            return PublishResult(
+                success=True,
+                platform_post_id=publish_data["id"],
+                platform_post_url=f"https://threads.net/t/{publish_data['id']}"
+            )
     
     async def delete_post(self, access_token: str, post_id: str) -> bool:
         """刪除貼文"""

@@ -631,53 +631,9 @@ async def retry_scheduled_post(
 
 
 def _get_best_content_type(platform: str, content_type: str, has_media: bool):
-    """
-    根據平台特性決定最適合的 ContentType
-    
-    不同平台對同一內容有不同需求：
-    - Instagram: 短影片應用 REELS，不支援純文字
-    - TikTok: 只支援 VIDEO 和 IMAGE（照片模式）
-    - LinkedIn: 支援 TEXT, IMAGE, VIDEO, CAROUSEL
-    - Facebook: 支援 TEXT, IMAGE, VIDEO
-    - Threads: 支援 TEXT, IMAGE, VIDEO, CAROUSEL
-    """
-    from app.services.social_platforms.base import ContentType
-    
-    PLATFORM_CONTENT_MAP = {
-        "instagram": {
-            "social_image": ContentType.IMAGE,
-            "short_video": ContentType.REEL,      # IG 用 Reels
-            "blog_post": ContentType.IMAGE,        # IG 不支援純文字
-        },
-        "facebook": {
-            "social_image": ContentType.IMAGE,
-            "short_video": ContentType.VIDEO,
-            "blog_post": ContentType.TEXT,
-        },
-        "threads": {
-            "social_image": ContentType.IMAGE,
-            "short_video": ContentType.VIDEO,
-            "blog_post": ContentType.TEXT,
-        },
-        "tiktok": {
-            "social_image": ContentType.IMAGE,     # TikTok 照片模式
-            "short_video": ContentType.VIDEO,
-            "blog_post": ContentType.VIDEO,        # TikTok 不支援純文字
-        },
-        "linkedin": {
-            "social_image": ContentType.IMAGE,
-            "short_video": ContentType.VIDEO,
-            "blog_post": ContentType.TEXT if not has_media else ContentType.IMAGE,
-        },
-        "youtube": {
-            "social_image": ContentType.VIDEO,     # YouTube 只支援影片
-            "short_video": ContentType.VIDEO,
-            "blog_post": ContentType.VIDEO,
-        },
-    }
-    
-    platform_map = PLATFORM_CONTENT_MAP.get(platform, {})
-    return platform_map.get(content_type, ContentType.IMAGE)
+    """根據平台特性決定最適合的 ContentType — 委派給 scheduler_tasks"""
+    from app.tasks.scheduler_tasks import _get_best_content_type as _best_ct
+    return _best_ct(platform, content_type, has_media)
 
 
 @router.post("/posts/{post_id}/publish-now")

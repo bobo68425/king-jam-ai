@@ -1,9 +1,10 @@
 """
 LinkedIn 平台整合
-使用 LinkedIn Marketing API
+使用 LinkedIn Community Management API
 """
 
 import os
+import logging
 import aiohttp
 from urllib.parse import urlencode
 from typing import Optional, Dict, Any, List
@@ -14,15 +15,19 @@ from .base import (
     PublishContent, PublishResult, ContentType
 )
 
+logger = logging.getLogger(__name__)
+
+# LinkedIn API 版本 — 定期更新以使用最新功能
+LINKEDIN_API_VERSION = "202501"
+
 
 class LinkedInPlatform(BasePlatform):
     """
-    LinkedIn 平台整合
+    LinkedIn 平台整合 (Community Management API)
     
     LinkedIn API 需求:
     - 創建 LinkedIn Developer Application
-    - 需要 Marketing Developer Platform 權限
-    - 需要申請以下產品: Share on LinkedIn, Sign In with LinkedIn
+    - 需要申請以下產品: Share on LinkedIn, Sign In with LinkedIn using OpenID Connect
     
     支援功能:
     - 文字貼文
@@ -31,7 +36,7 @@ class LinkedInPlatform(BasePlatform):
     - 多圖貼文
     """
     
-    API_BASE = "https://api.linkedin.com/v2"
+    API_BASE = "https://api.linkedin.com"
     
     @classmethod
     def create_config(cls) -> PlatformConfig:
@@ -50,7 +55,7 @@ class LinkedInPlatform(BasePlatform):
             ],
             auth_url="https://www.linkedin.com/oauth/v2/authorization",
             token_url="https://www.linkedin.com/oauth/v2/accessToken",
-            api_base_url="https://api.linkedin.com/v2",
+            api_base_url="https://api.linkedin.com",
             supported_content_types=[
                 ContentType.TEXT,
                 ContentType.IMAGE,
@@ -64,6 +69,15 @@ class LinkedInPlatform(BasePlatform):
     def __init__(self, config: PlatformConfig = None):
         super().__init__(config or self.create_config())
         self._person_urn = None
+    
+    def _api_headers(self, access_token: str, content_type: str = "application/json") -> dict:
+        """取得 Community Management API 標準 header"""
+        return {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": content_type,
+            "LinkedIn-Version": LINKEDIN_API_VERSION,
+            "X-Restli-Protocol-Version": "2.0.0",
+        }
     
     # ==================== OAuth 授權流程 ====================
     
@@ -141,8 +155,8 @@ class LinkedInPlatform(BasePlatform):
     async def get_user_profile(self, access_token: str) -> UserProfile:
         """獲取用戶資料"""
         async with aiohttp.ClientSession() as session:
-            # 獲取基本資料
-            url = f"{self.API_BASE}/userinfo"
+            # 使用 OpenID Connect userinfo 端點
+            url = f"{self.API_BASE}/v2/userinfo"
             headers = {"Authorization": f"Bearer {access_token}"}
             
             async with session.get(url, headers=headers) as response:
@@ -168,7 +182,7 @@ class LinkedInPlatform(BasePlatform):
                     }
                 )
     
-    # ==================== 內容發布 ====================
+    # ==================== 內容發布 (Community Management API) ====================
     
     async def publish(self, access_token: str, content: PublishContent) -> PublishResult:
         """發布內容到 LinkedIn"""
@@ -190,256 +204,289 @@ class LinkedInPlatform(BasePlatform):
                     error_message=f"LinkedIn 不支援 {content.content_type.value} 類型內容"
                 )
         except Exception as e:
+            logger.error(f"[LinkedIn] 發布錯誤: {e}")
             return PublishResult(success=False, error_message=str(e))
     
     async def _publish_text(self, access_token: str, content: PublishContent) -> PublishResult:
-        """發布純文字貼文"""
+        """發布純文字貼文 (Community Management API)"""
         async with aiohttp.ClientSession() as session:
-            url = f"{self.API_BASE}/ugcPosts"
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
-                "X-Restli-Protocol-Version": "2.0.0"
-            }
+            url = f"{self.API_BASE}/rest/posts"
+            headers = self._api_headers(access_token)
             
             data = {
                 "author": self._person_urn,
-                "lifecycleState": "PUBLISHED",
-                "specificContent": {
-                    "com.linkedin.ugc.ShareContent": {
-                        "shareCommentary": {
-                            "text": content.caption
-                        },
-                        "shareMediaCategory": "NONE"
-                    }
+                "commentary": content.caption or "",
+                "visibility": "PUBLIC",
+                "distribution": {
+                    "feedDistribution": "MAIN_FEED",
+                    "targetEntities": [],
+                    "thirdPartyDistributionChannels": []
                 },
-                "visibility": {
-                    "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
-                }
+                "lifecycleState": "PUBLISHED",
+                "isReshareDisabledByAuthor": False
             }
             
             async with session.post(url, headers=headers, json=data) as response:
                 if response.status not in [200, 201]:
                     text = await response.text()
+                    logger.error(f"[LinkedIn] 文字發布失敗: {response.status} {text}")
                     return PublishResult(success=False, error_message=text)
                 
-                result = await response.json()
-                post_id = result.get("id", "")
+                # Community Management API 回傳 post URN 在 x-restli-id header
+                post_urn = response.headers.get("x-restli-id", "")
                 
                 return PublishResult(
                     success=True,
-                    platform_post_id=post_id,
-                    platform_post_url=f"https://linkedin.com/feed/update/{post_id}"
+                    platform_post_id=post_urn,
+                    platform_post_url=f"https://linkedin.com/feed/update/{post_urn}"
                 )
     
     async def _publish_image(self, access_token: str, content: PublishContent) -> PublishResult:
-        """發布圖片貼文"""
-        # Step 1: 註冊上傳
-        asset = await self._register_upload(access_token, "image")
+        """發布圖片貼文 (Community Management API)"""
+        # Step 1: 初始化圖片上傳
+        image_urn = await self._initialize_image_upload(access_token)
+        if not image_urn:
+            return PublishResult(success=False, error_message="LinkedIn 圖片上傳初始化失敗")
+        
+        upload_url = image_urn["uploadUrl"]
+        image_id = image_urn["image"]
         
         # Step 2: 上傳圖片
-        await self._upload_media(access_token, asset["uploadUrl"], content.media_urls[0])
+        await self._upload_binary(access_token, upload_url, content.media_urls[0])
         
-        # Step 3: 創建貼文
+        # Step 3: 創建帶圖片的貼文
         async with aiohttp.ClientSession() as session:
-            url = f"{self.API_BASE}/ugcPosts"
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
-                "X-Restli-Protocol-Version": "2.0.0"
-            }
+            url = f"{self.API_BASE}/rest/posts"
+            headers = self._api_headers(access_token)
             
             data = {
                 "author": self._person_urn,
-                "lifecycleState": "PUBLISHED",
-                "specificContent": {
-                    "com.linkedin.ugc.ShareContent": {
-                        "shareCommentary": {
-                            "text": content.caption
-                        },
-                        "shareMediaCategory": "IMAGE",
-                        "media": [{
-                            "status": "READY",
-                            "media": asset["asset"]
-                        }]
+                "commentary": content.caption or "",
+                "visibility": "PUBLIC",
+                "distribution": {
+                    "feedDistribution": "MAIN_FEED",
+                    "targetEntities": [],
+                    "thirdPartyDistributionChannels": []
+                },
+                "content": {
+                    "media": {
+                        "title": (content.caption or "")[:200],
+                        "id": image_id
                     }
                 },
-                "visibility": {
-                    "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
-                }
+                "lifecycleState": "PUBLISHED",
+                "isReshareDisabledByAuthor": False
             }
             
             async with session.post(url, headers=headers, json=data) as response:
                 if response.status not in [200, 201]:
                     text = await response.text()
+                    logger.error(f"[LinkedIn] 圖片發布失敗: {response.status} {text}")
                     return PublishResult(success=False, error_message=text)
                 
-                result = await response.json()
-                post_id = result.get("id", "")
+                post_urn = response.headers.get("x-restli-id", "")
                 
                 return PublishResult(
                     success=True,
-                    platform_post_id=post_id,
-                    platform_post_url=f"https://linkedin.com/feed/update/{post_id}"
+                    platform_post_id=post_urn,
+                    platform_post_url=f"https://linkedin.com/feed/update/{post_urn}"
                 )
     
     async def _publish_video(self, access_token: str, content: PublishContent) -> PublishResult:
-        """發布影片貼文"""
-        # Step 1: 註冊影片上傳
-        asset = await self._register_upload(access_token, "video")
-        
-        # Step 2: 上傳影片
-        await self._upload_media(access_token, asset["uploadUrl"], content.media_urls[0])
-        
-        # Step 3: 創建貼文
+        """發布影片貼文 (Community Management API)"""
+        # Step 1: 下載影片取得大小
         async with aiohttp.ClientSession() as session:
-            url = f"{self.API_BASE}/ugcPosts"
+            async with session.get(content.media_urls[0]) as resp:
+                if resp.status != 200:
+                    return PublishResult(success=False, error_message=f"無法下載影片: HTTP {resp.status}")
+                video_data = await resp.read()
+        
+        # Step 2: 初始化影片上傳
+        video_urn = await self._initialize_video_upload(access_token, len(video_data))
+        if not video_urn:
+            return PublishResult(success=False, error_message="LinkedIn 影片上傳初始化失敗")
+        
+        upload_url = video_urn["uploadUrl"]
+        video_id = video_urn["video"]
+        
+        # Step 3: 上傳影片 binary
+        async with aiohttp.ClientSession() as session:
             headers = {
                 "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
-                "X-Restli-Protocol-Version": "2.0.0"
+                "Content-Type": "application/octet-stream",
             }
+            async with session.put(upload_url, headers=headers, data=video_data) as response:
+                if response.status not in [200, 201, 202]:
+                    text = await response.text()
+                    raise Exception(f"LinkedIn 影片上傳失敗: {response.status} {text}")
+        
+        # Step 4: 創建帶影片的貼文
+        async with aiohttp.ClientSession() as session:
+            url = f"{self.API_BASE}/rest/posts"
+            headers = self._api_headers(access_token)
             
             data = {
                 "author": self._person_urn,
-                "lifecycleState": "PUBLISHED",
-                "specificContent": {
-                    "com.linkedin.ugc.ShareContent": {
-                        "shareCommentary": {
-                            "text": content.caption
-                        },
-                        "shareMediaCategory": "VIDEO",
-                        "media": [{
-                            "status": "READY",
-                            "media": asset["asset"]
-                        }]
+                "commentary": content.caption or "",
+                "visibility": "PUBLIC",
+                "distribution": {
+                    "feedDistribution": "MAIN_FEED",
+                    "targetEntities": [],
+                    "thirdPartyDistributionChannels": []
+                },
+                "content": {
+                    "media": {
+                        "title": (content.caption or "")[:200],
+                        "id": video_id
                     }
                 },
-                "visibility": {
-                    "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
-                }
+                "lifecycleState": "PUBLISHED",
+                "isReshareDisabledByAuthor": False
             }
             
             async with session.post(url, headers=headers, json=data) as response:
                 if response.status not in [200, 201]:
                     text = await response.text()
+                    logger.error(f"[LinkedIn] 影片發布失敗: {response.status} {text}")
                     return PublishResult(success=False, error_message=text)
                 
-                result = await response.json()
-                post_id = result.get("id", "")
+                post_urn = response.headers.get("x-restli-id", "")
                 
                 return PublishResult(
                     success=True,
-                    platform_post_id=post_id,
-                    platform_post_url=f"https://linkedin.com/feed/update/{post_id}"
+                    platform_post_id=post_urn,
+                    platform_post_url=f"https://linkedin.com/feed/update/{post_urn}"
                 )
     
     async def _publish_multi_image(self, access_token: str, content: PublishContent) -> PublishResult:
-        """發布多圖貼文"""
+        """發布多圖貼文 (Community Management API)"""
         # 上傳所有圖片
-        media_list = []
-        for url in content.media_urls[:9]:  # LinkedIn 最多 9 張
-            asset = await self._register_upload(access_token, "image")
-            await self._upload_media(access_token, asset["uploadUrl"], url)
-            media_list.append({
-                "status": "READY",
-                "media": asset["asset"]
-            })
+        image_ids = []
+        for img_url in content.media_urls[:20]:  # LinkedIn 多圖最多 20 張
+            image_urn = await self._initialize_image_upload(access_token)
+            if not image_urn:
+                return PublishResult(success=False, error_message="LinkedIn 圖片上傳初始化失敗")
+            await self._upload_binary(access_token, image_urn["uploadUrl"], img_url)
+            image_ids.append({"id": image_urn["image"]})
         
-        # 創建貼文
+        # 創建多圖貼文
         async with aiohttp.ClientSession() as session:
-            url = f"{self.API_BASE}/ugcPosts"
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
-                "X-Restli-Protocol-Version": "2.0.0"
-            }
+            url = f"{self.API_BASE}/rest/posts"
+            headers = self._api_headers(access_token)
             
             data = {
                 "author": self._person_urn,
-                "lifecycleState": "PUBLISHED",
-                "specificContent": {
-                    "com.linkedin.ugc.ShareContent": {
-                        "shareCommentary": {
-                            "text": content.caption
-                        },
-                        "shareMediaCategory": "IMAGE",
-                        "media": media_list
+                "commentary": content.caption or "",
+                "visibility": "PUBLIC",
+                "distribution": {
+                    "feedDistribution": "MAIN_FEED",
+                    "targetEntities": [],
+                    "thirdPartyDistributionChannels": []
+                },
+                "content": {
+                    "multiImage": {
+                        "images": image_ids
                     }
                 },
-                "visibility": {
-                    "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
+                "lifecycleState": "PUBLISHED",
+                "isReshareDisabledByAuthor": False
+            }
+            
+            async with session.post(url, headers=headers, json=data) as response:
+                if response.status not in [200, 201]:
+                    text = await response.text()
+                    logger.error(f"[LinkedIn] 多圖發布失敗: {response.status} {text}")
+                    return PublishResult(success=False, error_message=text)
+                
+                post_urn = response.headers.get("x-restli-id", "")
+                
+                return PublishResult(
+                    success=True,
+                    platform_post_id=post_urn,
+                    platform_post_url=f"https://linkedin.com/feed/update/{post_urn}"
+                )
+    
+    # ==================== 媒體上傳 (Community Management API) ====================
+    
+    async def _initialize_image_upload(self, access_token: str) -> Optional[Dict[str, str]]:
+        """初始化圖片上傳 (POST /rest/images?action=initializeUpload)"""
+        async with aiohttp.ClientSession() as session:
+            url = f"{self.API_BASE}/rest/images?action=initializeUpload"
+            headers = self._api_headers(access_token)
+            data = {
+                "initializeUploadRequest": {
+                    "owner": self._person_urn
                 }
             }
             
             async with session.post(url, headers=headers, json=data) as response:
                 if response.status not in [200, 201]:
                     text = await response.text()
-                    return PublishResult(success=False, error_message=text)
+                    logger.error(f"[LinkedIn] 圖片初始化失敗: {response.status} {text}")
+                    return None
                 
                 result = await response.json()
-                post_id = result.get("id", "")
-                
-                return PublishResult(
-                    success=True,
-                    platform_post_id=post_id,
-                    platform_post_url=f"https://linkedin.com/feed/update/{post_id}"
-                )
+                value = result.get("value", {})
+                return {
+                    "uploadUrl": value.get("uploadUrl", ""),
+                    "image": value.get("image", "")
+                }
     
-    async def _register_upload(self, access_token: str, media_type: str) -> Dict[str, str]:
-        """註冊媒體上傳"""
+    async def _initialize_video_upload(self, access_token: str, file_size: int) -> Optional[Dict[str, str]]:
+        """初始化影片上傳 (POST /rest/videos?action=initializeUpload)"""
         async with aiohttp.ClientSession() as session:
-            url = f"{self.API_BASE}/assets?action=registerUpload"
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
-                "X-Restli-Protocol-Version": "2.0.0"
-            }
-            
-            recipe = "urn:li:digitalmediaRecipe:feedshare-image" if media_type == "image" else "urn:li:digitalmediaRecipe:feedshare-video"
-            
+            url = f"{self.API_BASE}/rest/videos?action=initializeUpload"
+            headers = self._api_headers(access_token)
             data = {
-                "registerUploadRequest": {
-                    "recipes": [recipe],
+                "initializeUploadRequest": {
                     "owner": self._person_urn,
-                    "serviceRelationships": [{
-                        "relationshipType": "OWNER",
-                        "identifier": "urn:li:userGeneratedContent"
-                    }]
+                    "fileSizeBytes": file_size,
+                    "uploadCausalIGUser": True,
+                    "uploadRichMediaOnly": False
                 }
             }
             
             async with session.post(url, headers=headers, json=data) as response:
+                if response.status not in [200, 201]:
+                    text = await response.text()
+                    logger.error(f"[LinkedIn] 影片初始化失敗: {response.status} {text}")
+                    return None
+                
                 result = await response.json()
-                
-                upload_mechanism = result["value"]["uploadMechanism"]
-                upload_url = upload_mechanism["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"]["uploadUrl"]
-                asset = result["value"]["asset"]
-                
-                return {"uploadUrl": upload_url, "asset": asset}
+                value = result.get("value", {})
+                # 影片可能有多個 upload instructions (分段上傳)，取第一個
+                upload_instructions = value.get("uploadInstructions", [])
+                upload_url = upload_instructions[0]["uploadUrl"] if upload_instructions else value.get("uploadUrl", "")
+                return {
+                    "uploadUrl": upload_url,
+                    "video": value.get("video", "")
+                }
     
-    async def _upload_media(self, access_token: str, upload_url: str, media_url: str):
-        """上傳媒體文件"""
+    async def _upload_binary(self, access_token: str, upload_url: str, media_url: str):
+        """下載媒體並上傳到 LinkedIn"""
         async with aiohttp.ClientSession() as session:
             # 下載媒體
             async with session.get(media_url) as resp:
+                if resp.status != 200:
+                    raise Exception(f"無法下載媒體: HTTP {resp.status}")
                 media_data = await resp.read()
             
             # 上傳到 LinkedIn
             headers = {
                 "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/octet-stream"
+                "Content-Type": "application/octet-stream",
             }
             
             async with session.put(upload_url, headers=headers, data=media_data) as response:
                 if response.status not in [200, 201]:
-                    raise Exception(f"Failed to upload media: {response.status}")
+                    text = await response.text()
+                    raise Exception(f"LinkedIn 媒體上傳失敗: {response.status} {text}")
     
     async def delete_post(self, access_token: str, post_id: str) -> bool:
-        """刪除貼文"""
+        """刪除貼文 (Community Management API)"""
         async with aiohttp.ClientSession() as session:
-            url = f"{self.API_BASE}/ugcPosts/{post_id}"
-            headers = {"Authorization": f"Bearer {access_token}"}
+            url = f"{self.API_BASE}/rest/posts/{post_id}"
+            headers = self._api_headers(access_token)
             
             async with session.delete(url, headers=headers) as response:
                 return response.status == 204
@@ -457,7 +504,7 @@ class LinkedInPlatform(BasePlatform):
             await self.get_user_profile(access_token)
         
         async with aiohttp.ClientSession() as session:
-            url = f"{self.API_BASE}/networkSizes/{self._person_urn}"
+            url = f"{self.API_BASE}/v2/networkSizes/{self._person_urn}"
             headers = {"Authorization": f"Bearer {access_token}"}
             params = {"edgeType": "FIRST_DEGREE"}
             
@@ -469,7 +516,7 @@ class LinkedInPlatform(BasePlatform):
     
     async def get_posts(self, access_token: str, count: int = 50) -> List[Dict[str, Any]]:
         """
-        獲取用戶的貼文列表
+        獲取用戶的貼文列表 (Community Management API)
         
         Args:
             access_token: 訪問令牌
@@ -482,14 +529,11 @@ class LinkedInPlatform(BasePlatform):
             await self.get_user_profile(access_token)
         
         async with aiohttp.ClientSession() as session:
-            url = f"{self.API_BASE}/ugcPosts"
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "X-Restli-Protocol-Version": "2.0.0"
-            }
+            url = f"{self.API_BASE}/rest/posts"
+            headers = self._api_headers(access_token)
             params = {
-                "q": "authors",
-                "authors": f"List({self._person_urn})",
+                "q": "author",
+                "author": self._person_urn,
                 "count": count
             }
             
@@ -505,17 +549,14 @@ class LinkedInPlatform(BasePlatform):
         
         Args:
             access_token: 訪問令牌
-            post_id: 貼文 ID
+            post_id: 貼文 ID 或 URN
             
         Returns:
             貼文統計數據
         """
         async with aiohttp.ClientSession() as session:
-            url = f"{self.API_BASE}/socialActions/{post_id}"
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "X-Restli-Protocol-Version": "2.0.0"
-            }
+            url = f"{self.API_BASE}/v2/socialActions/{post_id}"
+            headers = {"Authorization": f"Bearer {access_token}"}
             
             async with session.get(url, headers=headers) as response:
                 if response.status == 200:
@@ -538,11 +579,8 @@ class LinkedInPlatform(BasePlatform):
             分享統計數據
         """
         async with aiohttp.ClientSession() as session:
-            url = f"{self.API_BASE}/organizationalEntityShareStatistics"
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "X-Restli-Protocol-Version": "2.0.0"
-            }
+            url = f"{self.API_BASE}/v2/organizationalEntityShareStatistics"
+            headers = {"Authorization": f"Bearer {access_token}"}
             params = {
                 "q": "organizationalEntity",
                 "organizationalEntity": share_id
