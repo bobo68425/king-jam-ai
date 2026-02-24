@@ -246,36 +246,55 @@ class TikTokPlatform(BasePlatform):
             init_url = f"{self.API_BASE}/post/publish/content/init/"
             headers = {
                 "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json"
+                "Content-Type": "application/json; charset=UTF-8"
             }
             
-            # TikTok Photo Mode
+            # TikTok Photo Mode — 過濾有效圖片 URL
             photo_images = []
             for url in content.media_urls[:35]:  # 最多 35 張
-                photo_images.append({"image_url": url})
+                if url and isinstance(url, str) and url.startswith("http"):
+                    photo_images.append({"image_url": url})
+            
+            if not photo_images:
+                return PublishResult(
+                    success=False,
+                    error_message="沒有有效的圖片 URL 可供發布"
+                )
+            
+            # TikTok photo post 使用 description 而非 title
+            caption_text = content.caption[:150] if content.caption else ""
             
             init_data = {
                 "post_info": {
-                    "title": content.caption[:150] if content.caption else "",
+                    "title": caption_text,
+                    "description": caption_text,
                     "privacy_level": "PUBLIC_TO_EVERYONE",
-                    "disable_comment": False
+                    "disable_comment": False,
                 },
                 "source_info": {
                     "source": "PULL_FROM_URL",
-                    "photo_images": photo_images
+                    "photo_images": photo_images,
+                    "photo_cover_index": 0
                 },
                 "post_mode": "DIRECT_POST",
                 "media_type": "PHOTO"
             }
             
+            print(f"[TikTok] 📸 Photo publish request: {len(photo_images)} images, caption={caption_text[:50]}")
+            
             async with session.post(init_url, headers=headers, json=init_data) as response:
                 result = await response.json()
                 
+                print(f"[TikTok] 📸 Photo publish response: {result}")
+                
                 if result.get("error", {}).get("code") != "ok":
+                    error_msg = result.get("error", {}).get("message", "Unknown error")
+                    error_code = result.get("error", {}).get("code", "unknown")
+                    print(f"[TikTok] ❌ Photo publish failed: code={error_code}, msg={error_msg}")
                     return PublishResult(
                         success=False,
-                        error_message=result.get("error", {}).get("message", "Unknown error"),
-                        error_code=result.get("error", {}).get("code")
+                        error_message=f"TikTok: {error_msg}",
+                        error_code=error_code
                     )
                 
                 publish_id = result.get("data", {}).get("publish_id")

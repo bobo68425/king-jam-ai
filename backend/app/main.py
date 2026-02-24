@@ -627,3 +627,146 @@ def health_check_db():
         return {"status": "error", "db": "failed", "database_url": safe_url, "error": str(e)}
 
 # Redeployed on Wed Feb  4 00:14:11 CST 2026
+
+
+# ============================================================
+# 內建排程掃描器（不依賴 Celery — 直接在 FastAPI process 內執行）
+# ============================================================
+import asyncio
+
+async def _scan_and_publish_pending():
+    """掃描並發布待排程的貼文（每 5 分鐘一次）"""
+    import pytz
+    from datetime import datetime, timedelta
+    from app.database import SessionLocal
+    from app.models import ScheduledPost, PublishLog, SocialAccount
+    from sqlalchemy import and_
+
+    while True:
+        try:
+            await asyncio.sleep(300)  # 每 5 分鐘
+            print("[InProcessScheduler] 🔍 掃描待發布排程...")
+
+            db = SessionLocal()
+            try:
+                now = datetime.now(pytz.UTC)
+                buffer_time = now + timedelta(minutes=5)
+
+                pending_posts = db.query(ScheduledPost).filter(
+                    ScheduledPost.status.in_(["pending", "queued"]),
+                    ScheduledPost.scheduled_at <= buffer_time
+                ).all()
+
+                if not pending_posts:
+                    print("[InProcessScheduler] ✅ 無待發布排程")
+                    continue
+
+                print(f"[InProcessScheduler] 📋 找到 {len(pending_posts)} 個待發布排程")
+
+                for post in pending_posts:
+                    try:
+                        # 取得社群帳號
+                        if not post.social_account_id:
+                            print(f"[InProcessScheduler] ⚠️ 排程 #{post.id} 無綁定社群帳號，跳過")
+                            post.status = "failed"
+                            post.error_message = "未綁定社群帳號"
+                            db.commit()
+                            continue
+
+                        social_account = db.query(SocialAccount).filter(
+                            SocialAccount.id == post.social_account_id
+                        ).first()
+
+                        if not social_account or not social_account.is_active:
+                            post.status = "failed"
+                            post.error_message = "社群帳號不存在或已停用"
+                            db.commit()
+                            continue
+
+                        # 更新狀態
+                        post.status = "publishing"
+                        db.commit()
+
+                        # 取得發布器
+                        from app.tasks.scheduler_tasks import get_platform_publisher, _get_best_content_type
+                        from app.services.social_platforms.base import PublishContent, ContentType
+
+                        platform_publisher = get_platform_publisher(social_account.platform, account=social_account)
+                        if not platform_publisher:
+                            post.status = "published"
+                            post.published_at = datetime.utcnow()
+                            log = PublishLog(
+                                scheduled_post_id=post.id, action="published",
+                                message=f"已記錄（{social_account.platform} 自動發布尚未實作）"
+                            )
+                            db.add(log)
+                            db.commit()
+                            print(f"[InProcessScheduler] ⚠️ 排程 #{post.id}: {social_account.platform} 無發布器")
+                            continue
+
+                        # 準備內容
+                        publish_content_type = _get_best_content_type(
+                            platform=social_account.platform,
+                            content_type=post.content_type,
+                            has_media=bool(post.media_urls)
+                        )
+                        content = PublishContent(
+                            content_type=publish_content_type,
+                            caption=post.caption or "",
+                            media_urls=post.media_urls or [],
+                            hashtags=post.hashtags or [],
+                        )
+
+                        # 執行發布
+                        print(f"[InProcessScheduler] 🚀 發布排程 #{post.id}: platform={social_account.platform}")
+                        result = await platform_publisher.publish(
+                            access_token=social_account.access_token,
+                            content=content
+                        )
+
+                        if result.success:
+                            post.status = "published"
+                            post.published_at = datetime.utcnow()
+                            post.platform_post_id = result.platform_post_id
+                            post.platform_post_url = result.platform_post_url
+                            log = PublishLog(
+                                scheduled_post_id=post.id, action="published",
+                                message=f"發布成功 → {social_account.platform}",
+                                details={"platform": social_account.platform}
+                            )
+                            db.add(log)
+                            print(f"[InProcessScheduler] ✅ 排程 #{post.id} 發布成功")
+                        else:
+                            post.status = "failed"
+                            post.error_message = result.error_message
+                            log = PublishLog(
+                                scheduled_post_id=post.id, action="error",
+                                message=f"發布失敗: {result.error_message[:200]}"
+                            )
+                            db.add(log)
+                            print(f"[InProcessScheduler] ❌ 排程 #{post.id} 發布失敗: {result.error_message}")
+
+                        db.commit()
+
+                    except Exception as post_err:
+                        print(f"[InProcessScheduler] ❌ 排程 #{post.id} 例外: {post_err}")
+                        try:
+                            post.status = "failed"
+                            post.error_message = str(post_err)[:500]
+                            db.commit()
+                        except Exception:
+                            db.rollback()
+
+            finally:
+                db.close()
+
+        except Exception as e:
+            print(f"[InProcessScheduler] ❌ 掃描迴圈例外: {e}")
+            await asyncio.sleep(60)  # 出錯後等 1 分鐘再試
+
+
+@app.on_event("startup")
+async def _start_in_process_scheduler():
+    """啟動內建排程掃描器"""
+    print("[InProcessScheduler] 🟢 啟動內建排程掃描器（每 5 分鐘）")
+    asyncio.create_task(_scan_and_publish_pending())
