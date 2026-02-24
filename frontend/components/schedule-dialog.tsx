@@ -118,15 +118,80 @@ export function ScheduleDialog({ open, onClose, content, onSuccess }: ScheduleDi
     }
   }, [content, open]);
 
-  // 載入適用平台
+  // 內容類型 → 適用平台映射（前端 fallback）
+  const CONTENT_TYPE_PLATFORM_MAP: Record<string, string[]> = {
+    social_image: ["instagram", "facebook", "threads", "linkedin", "line", "tiktok"],
+    short_video: ["instagram", "facebook", "tiktok", "youtube", "linkedin", "line", "threads"],
+    blog_post: ["wordpress", "facebook", "linkedin", "threads", "line"],
+  };
+
+  const PLATFORM_DISPLAY: Record<string, { name: string; icon: string }> = {
+    instagram: { name: "Instagram", icon: "📸" },
+    facebook: { name: "Facebook", icon: "📘" },
+    threads: { name: "Threads", icon: "🧵" },
+    tiktok: { name: "TikTok", icon: "🎵" },
+    youtube: { name: "YouTube", icon: "📺" },
+    linkedin: { name: "LinkedIn", icon: "💼" },
+    line: { name: "LINE", icon: "💬" },
+    wordpress: { name: "WordPress", icon: "📝" },
+  };
+
+  // 載入適用平台（優先用新 API，fallback 用 /accounts + 本地映射）
   const fetchCompatiblePlatforms = useCallback(async (contentType: string) => {
     setLoadingPlatforms(true);
     try {
+      // 嘗試新 API
       const res = await api.get(`/scheduler/compatible-platforms?content_type=${contentType}`);
       const platformList: PlatformInfo[] = res.data.platforms || [];
-      setPlatforms(platformList);
+      if (platformList.length > 0) {
+        setPlatforms(platformList);
+        const defaultSelected = platformList
+          .filter(p => p.compatible && p.connected && p.account_id)
+          .map(p => p.account_id as number);
+        setSelectedAccountIds(defaultSelected);
+        return;
+      }
+    } catch {
+      // 新 API 不可用，使用 fallback
+    }
 
-      // 預設勾選所有已連結且適用的平台
+    // Fallback: 用 /scheduler/accounts + 本地映射
+    try {
+      const res = await api.get("/scheduler/accounts");
+      const accounts: any[] = res.data || [];
+      const compatiblePlatforms = CONTENT_TYPE_PLATFORM_MAP[contentType] || [];
+
+      // 建立 platform → account 映射
+      const accountMap: Record<string, any> = {};
+      for (const acc of accounts) {
+        if (!accountMap[acc.platform]) {
+          accountMap[acc.platform] = acc;
+        }
+      }
+
+      // 組合平台列表
+      const platformList: PlatformInfo[] = Object.entries(PLATFORM_DISPLAY).map(([id, display]) => {
+        const account = accountMap[id];
+        return {
+          platform: id,
+          name: display.name,
+          icon: display.icon,
+          compatible: compatiblePlatforms.includes(id),
+          connected: !!account,
+          account_id: account?.id || null,
+          account_username: account?.platform_username || null,
+          account_avatar: account?.platform_avatar || null,
+        };
+      });
+
+      // 排序：適用 + 已連結排前面
+      platformList.sort((a, b) => {
+        if (a.compatible !== b.compatible) return a.compatible ? -1 : 1;
+        if (a.connected !== b.connected) return a.connected ? -1 : 1;
+        return 0;
+      });
+
+      setPlatforms(platformList);
       const defaultSelected = platformList
         .filter(p => p.compatible && p.connected && p.account_id)
         .map(p => p.account_id as number);
@@ -189,40 +254,97 @@ export function ScheduleDialog({ open, onClose, content, onSuccess }: ScheduleDi
 
     setCreating(true);
     try {
-      const payload: any = {
-        social_account_ids: selectedAccountIds,
-        content_type: editedContent.type,
-        title: editedContent.title,
-        caption: editedContent.caption,
-        media_urls: editedContent.media_urls,
-        hashtags: editedContent.hashtags,
-        mode: publishMode,
-        timezone: "Asia/Taipei",
-      };
+      // 嘗試新的批次 API
+      try {
+        const payload: any = {
+          social_account_ids: selectedAccountIds,
+          content_type: editedContent.type,
+          title: editedContent.title,
+          caption: editedContent.caption,
+          media_urls: editedContent.media_urls,
+          hashtags: editedContent.hashtags,
+          mode: publishMode,
+          timezone: "Asia/Taipei",
+        };
 
-      if (publishMode === "schedule") {
-        payload.scheduled_at = new Date(scheduledAt).toISOString();
+        if (publishMode === "schedule") {
+          payload.scheduled_at = new Date(scheduledAt).toISOString();
+        }
+
+        const res = await api.post("/scheduler/posts/batch", payload);
+        const data = res.data;
+
+        if (publishMode === "publish_now") {
+          const successCount = data.results?.filter((r: any) => r.status === "published").length || 0;
+          const failedCount = data.results?.filter((r: any) => r.status === "failed").length || 0;
+
+          if (failedCount > 0) {
+            toast.warning(`已發布 ${successCount} 個平台，${failedCount} 個失敗`, {
+              description: data.results
+                ?.filter((r: any) => r.status === "failed")
+                .map((r: any) => `${r.platform}: ${r.message}`)
+                .join("；"),
+            });
+          } else {
+            toast.success(`已成功發布到 ${successCount} 個平台！`);
+          }
+        } else {
+          toast.success(`排程已建立（${selectedAccountIds.length} 個平台）`, {
+            description: `將於 ${new Date(scheduledAt).toLocaleString("zh-TW")} 發布`,
+          });
+        }
+
+        onSuccess?.();
+        onClose();
+        return;
+      } catch (batchError: any) {
+        // 批次 API 不可用（404），使用舊版逐筆建立
+        if (batchError.response?.status !== 404) throw batchError;
       }
 
-      const res = await api.post("/scheduler/posts/batch", payload);
-      const data = res.data;
+      // Fallback: 逐筆建立排程
+      let successCount = 0;
+      let failedCount = 0;
+
+      for (const accountId of selectedAccountIds) {
+        try {
+          const scheduledTime = publishMode === "schedule"
+            ? new Date(scheduledAt).toISOString()
+            : new Date(Date.now() + 60000).toISOString(); // 立即發布時設 1 分鐘後
+
+          const postRes = await api.post("/scheduler/posts", {
+            social_account_id: accountId,
+            content_type: editedContent.type,
+            title: editedContent.title,
+            caption: editedContent.caption,
+            media_urls: editedContent.media_urls,
+            hashtags: editedContent.hashtags,
+            scheduled_at: scheduledTime,
+            timezone: "Asia/Taipei",
+          });
+
+          // 若為立即發布，呼叫 publish-now
+          if (publishMode === "publish_now" && postRes.data?.id) {
+            try {
+              await api.post(`/scheduler/posts/${postRes.data.id}/publish-now`);
+            } catch {
+              // 發布失敗不影響流程
+            }
+          }
+          successCount++;
+        } catch {
+          failedCount++;
+        }
+      }
 
       if (publishMode === "publish_now") {
-        const successCount = data.results?.filter((r: any) => r.status === "published").length || 0;
-        const failedCount = data.results?.filter((r: any) => r.status === "failed").length || 0;
-
         if (failedCount > 0) {
-          toast.warning(`已發布 ${successCount} 個平台，${failedCount} 個失敗`, {
-            description: data.results
-              ?.filter((r: any) => r.status === "failed")
-              .map((r: any) => `${r.platform}: ${r.message}`)
-              .join("；"),
-          });
+          toast.warning(`已處理 ${successCount} 個平台，${failedCount} 個失敗`);
         } else {
           toast.success(`已成功發布到 ${successCount} 個平台！`);
         }
       } else {
-        toast.success(`排程已建立（${selectedAccountIds.length} 個平台）`, {
+        toast.success(`排程已建立（${successCount} 個平台）`, {
           description: `將於 ${new Date(scheduledAt).toLocaleString("zh-TW")} 發布`,
         });
       }
