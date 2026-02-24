@@ -172,7 +172,7 @@ export default function HistoryPage() {
         page: pageNum.toString(),
         page_size: "20",
       });
-      
+
       if (typeFilter !== "all") {
         params.append("generation_type", typeFilter);
       }
@@ -181,13 +181,13 @@ export default function HistoryPage() {
       }
 
       const res = await api.get<HistoryResponse>(`/history?${params.toString()}`);
-      
+
       if (reset) {
         setHistory(res.data.items);
       } else {
         setHistory(prev => [...prev, ...res.data.items]);
       }
-      
+
       setTotal(res.data.total);
       setPage(res.data.page);
       setHasMore(res.data.has_more);
@@ -260,7 +260,7 @@ export default function HistoryPage() {
         if (child.id !== item.id) {
           api.get(`/history/${child.id}`).then(res => {
             setGroupDetailData(prev => ({ ...prev, [child.id]: res.data }));
-          }).catch(() => {});
+          }).catch(() => { });
         }
       }
     }
@@ -312,7 +312,7 @@ export default function HistoryPage() {
         // 1. 建立排程
         const contentType = selectedItem.generation_type === "short_video" ? "short_video" : "social_image";
         const fullCaption = caption + (hashtags.length > 0 ? "\n\n" + hashtags.map((t: string) => `#${t}`).join(" ") : "");
-        
+
         const schedRes = await api.post("/scheduler/posts", {
           content_type: contentType,
           title: selectedItem.input_params?.topic || selectedItem.input_params?.title || "",
@@ -372,6 +372,7 @@ export default function HistoryPage() {
       caption: caption + (hashtags.length > 0 ? "\n\n" + hashtags.map((t: string) => `#${t}`).join(" ") : ""),
       media_urls: mediaUrl ? [mediaUrl] : [],
       hashtags: hashtags,
+      platform: selectedItem.input_params?.platform || undefined,
     });
     setShowScheduleDialog(true);
   };
@@ -491,8 +492,8 @@ export default function HistoryPage() {
   };
 
   // 計算剩餘保存時間（只在客戶端計算，避免 hydration 錯誤）
-  const getExpirationInfo = (item: GenerationHistoryItem): { 
-    expiresAt: Date | null; 
+  const getExpirationInfo = (item: GenerationHistoryItem): {
+    expiresAt: Date | null;
     daysRemaining: number | null;
     isExpired: boolean;
     text: string;
@@ -575,7 +576,7 @@ export default function HistoryPage() {
     try {
       const isVideo = item.generation_type === "short_video";
       const topic = item.input_params?.topic || item.input_params?.prompt || item.generation_type;
-      
+
       // 如果是 base64 格式
       if (url.startsWith("data:")) {
         const link = document.createElement("a");
@@ -633,7 +634,7 @@ export default function HistoryPage() {
   // 預覽處理
   const handlePreview = (item: GenerationHistoryItem) => {
     const title = item.input_params?.topic || item.input_params?.title || item.output_data?.title || "預覽";
-    
+
     // 部落格文章特殊處理
     if (item.generation_type === "blog_post") {
       const postId = item.output_data?.post_id;
@@ -679,7 +680,7 @@ export default function HistoryPage() {
     }
 
     const url = getMediaUrl(item);
-    
+
     // 如果沒有媒體 URL
     if (!url) {
       // 媒體檔案沒有 URL 時顯示過期提醒（短影片或社群圖文）
@@ -690,7 +691,7 @@ export default function HistoryPage() {
         });
         return;
       }
-      
+
       // 其他類型顯示生成資訊
       const newWindow = window.open("", "_blank");
       if (newWindow) {
@@ -734,7 +735,7 @@ export default function HistoryPage() {
     const newWindow = window.open("", "_blank");
     if (newWindow) {
       const isVideo = item.generation_type === "short_video" || url.includes("video");
-      
+
       newWindow.document.write(`
         <!DOCTYPE html>
         <html>
@@ -746,10 +747,10 @@ export default function HistoryPage() {
           </style>
         </head>
         <body>
-          ${isVideo 
-            ? `<video src="${url}" controls autoplay style="max-width: 100%;"></video>`
-            : `<img src="${url}" alt="${title}" />`
-          }
+          ${isVideo
+          ? `<video src="${url}" controls autoplay style="max-width: 100%;"></video>`
+          : `<img src="${url}" alt="${title}" />`
+        }
         </body>
         </html>
       `);
@@ -824,11 +825,10 @@ export default function HistoryPage() {
               variant="ghost"
               size="sm"
               onClick={() => handleViewModeChange("grid")}
-              className={`h-8 px-3 ${
-                viewMode === "grid"
+              className={`h-8 px-3 ${viewMode === "grid"
                   ? "bg-indigo-600 text-white hover:bg-indigo-500"
                   : "text-slate-400 hover:text-white hover:bg-slate-700"
-              }`}
+                }`}
               title="格狀檢視"
             >
               <LayoutGrid className="h-4 w-4" />
@@ -837,17 +837,16 @@ export default function HistoryPage() {
               variant="ghost"
               size="sm"
               onClick={() => handleViewModeChange("list")}
-              className={`h-8 px-3 ${
-                viewMode === "list"
+              className={`h-8 px-3 ${viewMode === "list"
                   ? "bg-indigo-600 text-white hover:bg-indigo-500"
                   : "text-slate-400 hover:text-white hover:bg-slate-700"
-              }`}
+                }`}
               title="列表檢視"
             >
               <List className="h-4 w-4" />
             </Button>
           </div>
-          
+
           <Button
             variant="outline"
             size="sm"
@@ -874,7 +873,7 @@ export default function HistoryPage() {
                 className="pl-10 bg-slate-700/50 border-slate-600 text-white"
               />
             </div>
-            
+
             {/* 類型篩選 */}
             <Select value={typeFilter} onValueChange={setTypeFilter}>
               <SelectTrigger className="w-full md:w-[180px] bg-slate-700/50 border-slate-600 text-white">
@@ -970,7 +969,7 @@ export default function HistoryPage() {
                         const mediaUrl = getMediaUrl(mediaItem);
                         const isMediaType = mediaItem.generation_type === "short_video" || mediaItem.generation_type === "social_image";
                         const isExpired = isMediaType && !mediaUrl;
-                        
+
                         if (isExpired) {
                           return (
                             <div className="w-full h-full flex flex-col items-center justify-center bg-red-500/10">
@@ -979,7 +978,7 @@ export default function HistoryPage() {
                             </div>
                           );
                         }
-                        
+
                         if (mediaUrl) {
                           if (mediaItem.generation_type === "short_video") {
                             return (
@@ -1003,7 +1002,7 @@ export default function HistoryPage() {
                           </div>
                         );
                       })()}
-                      
+
                       {/* 類型標籤 */}
                       <div className="absolute top-2 left-2 flex flex-wrap gap-1">
                         {group.types.map(t => (
@@ -1025,9 +1024,9 @@ export default function HistoryPage() {
                       {/* 操作按鈕 */}
                       <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
                         {hasMedia(mediaItem) && (
-                          <Button 
-                            size="icon" 
-                            variant="secondary" 
+                          <Button
+                            size="icon"
+                            variant="secondary"
                             className="h-8 w-8"
                             onClick={(e) => { e.stopPropagation(); handleDownload(mediaItem); }}
                             title="下載"
@@ -1089,7 +1088,7 @@ export default function HistoryPage() {
                 <div className="col-span-1 text-right">點數</div>
                 <div className="col-span-1 text-right">操作</div>
               </div>
-              
+
               {/* 列表項目 */}
               <div className="divide-y divide-slate-700">
                 {groupedHistory.map((group) => {
@@ -1167,9 +1166,9 @@ export default function HistoryPage() {
 
                         {/* 操作 */}
                         <div className="col-span-1 flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button 
-                            size="icon" 
-                            variant="ghost" 
+                          <Button
+                            size="icon"
+                            variant="ghost"
                             className="h-8 w-8 text-slate-400 hover:text-white"
                             onClick={(e) => { e.stopPropagation(); handleOpenDetail(item); }}
                             title="查看詳情"
@@ -1495,11 +1494,10 @@ export default function HistoryPage() {
                                           : [...prev, acc.id]
                                       );
                                     }}
-                                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all border ${
-                                      isSelected
+                                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all border ${isSelected
                                         ? "bg-indigo-500/20 border-indigo-500/50 text-indigo-300"
                                         : "bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600"
-                                    }`}
+                                      }`}
                                   >
                                     {getPlatformIcon(acc.platform)}
                                     <span>{acc.platform_display_name || acc.platform_username}</span>

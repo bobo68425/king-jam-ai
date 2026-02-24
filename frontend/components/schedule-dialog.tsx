@@ -22,6 +22,8 @@ export interface ScheduleContent {
   caption: string;
   media_urls: string[];
   hashtags: string[];
+  // 生成時選擇的平台（用於預設勾選）
+  platform?: string;
   // 原始內容（用於預覽）
   originalData?: any;
 }
@@ -114,7 +116,7 @@ export function ScheduleDialog({ open, onClose, content, onSuccess }: ScheduleDi
       setPublishMode("schedule");
       setSelectedAccountIds([]);
       fetchSmartSuggestions();
-      fetchCompatiblePlatforms(content.type);
+      fetchCompatiblePlatforms(content.type, content.platform);
     }
   }, [content, open]);
 
@@ -137,7 +139,7 @@ export function ScheduleDialog({ open, onClose, content, onSuccess }: ScheduleDi
   };
 
   // 載入適用平台（優先用新 API，fallback 用 /accounts + 本地映射）
-  const fetchCompatiblePlatforms = useCallback(async (contentType: string) => {
+  const fetchCompatiblePlatforms = useCallback(async (contentType: string, defaultPlatform?: string) => {
     setLoadingPlatforms(true);
     try {
       // 嘗試新 API
@@ -145,9 +147,14 @@ export function ScheduleDialog({ open, onClose, content, onSuccess }: ScheduleDi
       const platformList: PlatformInfo[] = res.data.platforms || [];
       if (platformList.length > 0) {
         setPlatforms(platformList);
-        const defaultSelected = platformList
-          .filter(p => p.compatible && p.connected && p.account_id)
-          .map(p => p.account_id as number);
+        // 只預設勾選原始生成平台（若有指定），否則勾選所有適用的
+        const defaultSelected = defaultPlatform
+          ? platformList
+            .filter(p => p.platform === defaultPlatform && p.compatible && p.connected && p.account_id)
+            .map(p => p.account_id as number)
+          : platformList
+            .filter(p => p.compatible && p.connected && p.account_id)
+            .map(p => p.account_id as number);
         setSelectedAccountIds(defaultSelected);
         return;
       }
@@ -192,9 +199,14 @@ export function ScheduleDialog({ open, onClose, content, onSuccess }: ScheduleDi
       });
 
       setPlatforms(platformList);
-      const defaultSelected = platformList
-        .filter(p => p.compatible && p.connected && p.account_id)
-        .map(p => p.account_id as number);
+      // 只預設勾選原始生成平台（若有指定），否則勾選所有適用的
+      const defaultSelected = defaultPlatform
+        ? platformList
+          .filter(p => p.platform === defaultPlatform && p.compatible && p.connected && p.account_id)
+          .map(p => p.account_id as number)
+        : platformList
+          .filter(p => p.compatible && p.connected && p.account_id)
+          .map(p => p.account_id as number);
       setSelectedAccountIds(defaultSelected);
     } catch (error) {
       console.error("載入平台失敗:", error);
