@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import {
   Calendar, Clock, X, Loader2, CheckCircle2, AlertCircle,
   Image as ImageIcon, Video, FileText, Lightbulb, Zap, TrendingUp,
-  Hash, Edit3, Eye, Save
+  Hash, Edit3, Eye, Save, Send, Globe, Link2, Check
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -39,12 +39,25 @@ interface SmartScheduleResponse {
   next_available_slots: string[];
 }
 
+interface PlatformInfo {
+  platform: string;
+  name: string;
+  icon: string;
+  compatible: boolean;
+  connected: boolean;
+  account_id: number | null;
+  account_username: string | null;
+  account_avatar: string | null;
+}
+
 interface ScheduleDialogProps {
   open: boolean;
   onClose: () => void;
   content: ScheduleContent | null;
   onSuccess?: () => void;
 }
+
+type PublishMode = "schedule" | "publish_now";
 
 // 內容類型配置
 const CONTENT_TYPE_CONFIG = {
@@ -78,23 +91,52 @@ export function ScheduleDialog({ open, onClose, content, onSuccess }: ScheduleDi
   // 編輯狀態
   const [editMode, setEditMode] = useState(false);
   const [editedContent, setEditedContent] = useState<ScheduleContent | null>(null);
-  
+
   // 排程狀態
   const [scheduledAt, setScheduledAt] = useState("");
   const [creating, setCreating] = useState(false);
-  
+  const [publishMode, setPublishMode] = useState<PublishMode>("schedule");
+
+  // 平台選擇
+  const [platforms, setPlatforms] = useState<PlatformInfo[]>([]);
+  const [selectedAccountIds, setSelectedAccountIds] = useState<number[]>([]);
+  const [loadingPlatforms, setLoadingPlatforms] = useState(false);
+
   // 智慧排程建議
   const [smartSuggestions, setSmartSuggestions] = useState<SmartScheduleResponse | null>(null);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
-  // 初始化編輯內容
+  // 初始化編輯內容 & 載入平台
   useEffect(() => {
-    if (content) {
+    if (content && open) {
       setEditedContent({ ...content });
       setEditMode(false);
+      setPublishMode("schedule");
+      setSelectedAccountIds([]);
       fetchSmartSuggestions();
+      fetchCompatiblePlatforms(content.type);
     }
-  }, [content]);
+  }, [content, open]);
+
+  // 載入適用平台
+  const fetchCompatiblePlatforms = useCallback(async (contentType: string) => {
+    setLoadingPlatforms(true);
+    try {
+      const res = await api.get(`/scheduler/compatible-platforms?content_type=${contentType}`);
+      const platformList: PlatformInfo[] = res.data.platforms || [];
+      setPlatforms(platformList);
+
+      // 預設勾選所有已連結且適用的平台
+      const defaultSelected = platformList
+        .filter(p => p.compatible && p.connected && p.account_id)
+        .map(p => p.account_id as number);
+      setSelectedAccountIds(defaultSelected);
+    } catch (error) {
+      console.error("載入平台失敗:", error);
+    } finally {
+      setLoadingPlatforms(false);
+    }
+  }, []);
 
   // 載入智慧排程建議
   const fetchSmartSuggestions = useCallback(async () => {
@@ -117,40 +159,78 @@ export function ScheduleDialog({ open, onClose, content, onSuccess }: ScheduleDi
     toast.success("已套用建議時段");
   };
 
-  // 建立排程
-  const handleCreateSchedule = async () => {
+  // 切換平台選擇
+  const togglePlatform = (accountId: number) => {
+    setSelectedAccountIds(prev =>
+      prev.includes(accountId)
+        ? prev.filter(id => id !== accountId)
+        : [...prev, accountId]
+    );
+  };
+
+  // 建立排程 / 立即發布
+  const handleSubmit = async () => {
     if (!editedContent) return;
-    
-    if (!scheduledAt) {
-      toast.error("請選擇排程時間");
-      return;
-    }
 
     if (!editedContent.caption && !editedContent.title) {
       toast.error("請輸入內容");
       return;
     }
 
+    if (publishMode === "schedule" && !scheduledAt) {
+      toast.error("請選擇排程時間");
+      return;
+    }
+
+    if (selectedAccountIds.length === 0) {
+      toast.error("請至少選擇一個發布平台");
+      return;
+    }
+
     setCreating(true);
     try {
-      await api.post("/scheduler/posts", {
+      const payload: any = {
+        social_account_ids: selectedAccountIds,
         content_type: editedContent.type,
         title: editedContent.title,
         caption: editedContent.caption,
         media_urls: editedContent.media_urls,
         hashtags: editedContent.hashtags,
-        scheduled_at: new Date(scheduledAt).toISOString(),
+        mode: publishMode,
         timezone: "Asia/Taipei",
-      });
-      
-      toast.success("排程已建立！", {
-        description: `將於 ${new Date(scheduledAt).toLocaleString("zh-TW")} 發布`,
-      });
-      
+      };
+
+      if (publishMode === "schedule") {
+        payload.scheduled_at = new Date(scheduledAt).toISOString();
+      }
+
+      const res = await api.post("/scheduler/posts/batch", payload);
+      const data = res.data;
+
+      if (publishMode === "publish_now") {
+        const successCount = data.results?.filter((r: any) => r.status === "published").length || 0;
+        const failedCount = data.results?.filter((r: any) => r.status === "failed").length || 0;
+
+        if (failedCount > 0) {
+          toast.warning(`已發布 ${successCount} 個平台，${failedCount} 個失敗`, {
+            description: data.results
+              ?.filter((r: any) => r.status === "failed")
+              .map((r: any) => `${r.platform}: ${r.message}`)
+              .join("；"),
+          });
+        } else {
+          toast.success(`已成功發布到 ${successCount} 個平台！`);
+        }
+      } else {
+        toast.success(`排程已建立（${selectedAccountIds.length} 個平台）`, {
+          description: `將於 ${new Date(scheduledAt).toLocaleString("zh-TW")} 發布`,
+        });
+      }
+
       onSuccess?.();
       onClose();
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || "建立排程失敗");
+      toast.error(error.response?.data?.detail || "操作失敗");
     } finally {
       setCreating(false);
     }
@@ -175,9 +255,13 @@ export function ScheduleDialog({ open, onClose, content, onSuccess }: ScheduleDi
           <div className="flex items-center justify-between">
             <CardTitle className="text-white flex items-center gap-3">
               <div className={cn("p-2 rounded-xl bg-gradient-to-br", typeConfig.color)}>
-                <Calendar className="w-5 h-5 text-white" />
+                {publishMode === "publish_now" ? (
+                  <Send className="w-5 h-5 text-white" />
+                ) : (
+                  <Calendar className="w-5 h-5 text-white" />
+                )}
               </div>
-              排程上架確認
+              {publishMode === "publish_now" ? "立即發布" : "排程上架確認"}
             </CardTitle>
             <Button
               variant="ghost"
@@ -189,11 +273,41 @@ export function ScheduleDialog({ open, onClose, content, onSuccess }: ScheduleDi
             </Button>
           </div>
           <CardDescription className="text-slate-400">
-            確認內容後設定發布時間，排程將自動執行
+            確認內容後選擇平台，{publishMode === "publish_now" ? "立即" : "排程"}發布到多個社群
           </CardDescription>
         </CardHeader>
 
-        <CardContent className="p-6 space-y-6">
+        <CardContent className="p-6 space-y-5">
+          {/* 發布模式切換 */}
+          <div className="flex rounded-xl bg-slate-800 p-1 gap-1">
+            <button
+              type="button"
+              onClick={() => setPublishMode("schedule")}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all",
+                publishMode === "schedule"
+                  ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg"
+                  : "text-slate-400 hover:text-white"
+              )}
+            >
+              <Clock className="w-4 h-4" />
+              排程發布
+            </button>
+            <button
+              type="button"
+              onClick={() => setPublishMode("publish_now")}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all",
+                publishMode === "publish_now"
+                  ? "bg-gradient-to-r from-emerald-500 to-green-500 text-white shadow-lg"
+                  : "text-slate-400 hover:text-white"
+              )}
+            >
+              <Zap className="w-4 h-4" />
+              立即發布
+            </button>
+          </div>
+
           {/* 內容類型標籤 */}
           <div className="flex items-center gap-2">
             <Badge className={cn("px-3 py-1", typeConfig.bgColor, typeConfig.textColor, typeConfig.borderColor, "border")}>
@@ -289,7 +403,7 @@ export function ScheduleDialog({ open, onClose, content, onSuccess }: ScheduleDi
                     <h4 className="text-white font-medium mb-2">{editedContent.title}</h4>
                   )}
                   <p className="text-slate-300 text-sm line-clamp-3">{editedContent.caption}</p>
-                  
+
                   {editedContent.hashtags.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mt-3">
                       {editedContent.hashtags.slice(0, 5).map((tag, i) => (
@@ -315,102 +429,179 @@ export function ScheduleDialog({ open, onClose, content, onSuccess }: ScheduleDi
             )}
           </div>
 
-          {/* 排程時間設定 */}
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm text-slate-300 mb-2 block flex items-center gap-2">
-                <Clock className="w-4 h-4" />
-                排程發布時間
-              </label>
-              <Input
-                type="datetime-local"
-                value={scheduledAt}
-                onChange={(e) => setScheduledAt(e.target.value)}
-                className="bg-slate-800 border-slate-600 text-white"
-                min={new Date().toISOString().slice(0, 16)}
-              />
-            </div>
-
-            {/* 智慧排程建議 */}
-            <div className="p-4 bg-gradient-to-r from-yellow-900/20 to-amber-900/20 rounded-xl border border-yellow-500/30">
-              <div className="flex items-center gap-2 mb-3">
-                <Lightbulb className="w-4 h-4 text-yellow-400" />
-                <span className="text-yellow-400 font-medium text-sm">智慧時段建議</span>
-                {loadingSuggestions && (
-                  <Loader2 className="w-3 h-3 animate-spin text-yellow-400 ml-auto" />
-                )}
-              </div>
-
-              {smartSuggestions ? (
-                <div className="space-y-2">
-                  <p className="text-xs text-slate-400 mb-2">
-                    {smartSuggestions.platform_tips?.content_tip || "點選下方時段自動填入"}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {smartSuggestions.next_available_slots.slice(0, 4).map((slot, idx) => {
-                      const date = new Date(slot);
-                      const isSelected = scheduledAt === date.toISOString().slice(0, 16);
-                      return (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => applySmartSlot(slot)}
-                          className={cn(
-                            "px-3 py-2 rounded-lg text-xs transition-all flex items-center gap-2",
-                            isSelected
-                              ? "bg-yellow-500 text-black"
-                              : "bg-slate-800 text-slate-300 hover:bg-yellow-500/20 hover:text-yellow-300 border border-slate-700"
-                          )}
-                        >
-                          <TrendingUp className="w-3 h-3" />
-                          <span>
-                            {date.toLocaleDateString("zh-TW", { weekday: "short", month: "short", day: "numeric" })}
-                            {" "}
-                            {date.toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" })}
-                          </span>
-                          {smartSuggestions.suggested_slots[idx] && (
-                            <Badge className="bg-green-500/20 text-green-400 text-[10px]">
-                              {smartSuggestions.suggested_slots[idx].score}分
-                            </Badge>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {smartSuggestions.suggested_slots[0]?.reason && (
-                    <p className="text-[10px] text-slate-500 mt-2 flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3" />
-                      {smartSuggestions.suggested_slots[0].reason}
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={fetchSmartSuggestions}
-                    disabled={loadingSuggestions}
-                    className="border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/10"
-                  >
-                    {loadingSuggestions ? (
-                      <>
-                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                        分析中...
-                      </>
-                    ) : (
-                      <>
-                        <Zap className="w-3 h-3 mr-1" />
-                        取得建議時段
-                      </>
-                    )}
-                  </Button>
-                  <span className="text-xs text-slate-500">根據最佳發文時段推薦</span>
-                </div>
+          {/* 平台選擇區塊 */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Globe className="w-4 h-4 text-slate-300" />
+              <span className="text-sm text-slate-300 font-medium">選擇發布平台</span>
+              {loadingPlatforms && <Loader2 className="w-3 h-3 animate-spin text-slate-400" />}
+              {selectedAccountIds.length > 0 && (
+                <Badge className="bg-emerald-500/20 text-emerald-400 text-xs ml-auto">
+                  已選 {selectedAccountIds.length} 個
+                </Badge>
               )}
             </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {platforms.map((p) => {
+                const isSelected = p.account_id ? selectedAccountIds.includes(p.account_id) : false;
+                const canSelect = p.compatible && p.connected && p.account_id;
+
+                return (
+                  <button
+                    key={p.platform}
+                    type="button"
+                    disabled={!canSelect}
+                    onClick={() => canSelect && p.account_id && togglePlatform(p.account_id)}
+                    className={cn(
+                      "flex items-center gap-3 p-3 rounded-xl border text-left transition-all",
+                      canSelect && isSelected
+                        ? "border-emerald-500/50 bg-emerald-500/10 ring-1 ring-emerald-500/30"
+                        : canSelect
+                          ? "border-slate-700 bg-slate-800/50 hover:border-slate-600 hover:bg-slate-800"
+                          : "border-slate-800 bg-slate-900/50 opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    {/* 勾選框 */}
+                    <div className={cn(
+                      "w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all",
+                      canSelect && isSelected
+                        ? "border-emerald-500 bg-emerald-500"
+                        : canSelect
+                          ? "border-slate-600"
+                          : "border-slate-700"
+                    )}>
+                      {isSelected && <Check className="w-3 h-3 text-white" />}
+                    </div>
+
+                    {/* 平台圖示+名稱 */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-base">{p.icon}</span>
+                        <span className={cn(
+                          "text-sm font-medium",
+                          canSelect ? "text-white" : "text-slate-500"
+                        )}>
+                          {p.name}
+                        </span>
+                      </div>
+                      {p.connected && p.account_username ? (
+                        <p className="text-xs text-slate-400 truncate mt-0.5">
+                          @{p.account_username}
+                        </p>
+                      ) : !p.compatible ? (
+                        <p className="text-xs text-slate-600 mt-0.5">不支援此格式</p>
+                      ) : (
+                        <p className="text-xs text-amber-500/70 mt-0.5 flex items-center gap-1">
+                          <Link2 className="w-3 h-3" />
+                          未連結
+                        </p>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
+
+          {/* 排程時間設定（僅排程模式） */}
+          {publishMode === "schedule" && (
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm text-slate-300 mb-2 block flex items-center gap-2">
+                  <Clock className="w-4 h-4" />
+                  排程發布時間
+                </label>
+                <Input
+                  type="datetime-local"
+                  value={scheduledAt}
+                  onChange={(e) => setScheduledAt(e.target.value)}
+                  className="bg-slate-800 border-slate-600 text-white"
+                  min={new Date().toISOString().slice(0, 16)}
+                />
+              </div>
+
+              {/* 智慧排程建議 */}
+              <div className="p-4 bg-gradient-to-r from-yellow-900/20 to-amber-900/20 rounded-xl border border-yellow-500/30">
+                <div className="flex items-center gap-2 mb-3">
+                  <Lightbulb className="w-4 h-4 text-yellow-400" />
+                  <span className="text-yellow-400 font-medium text-sm">智慧時段建議</span>
+                  {loadingSuggestions && (
+                    <Loader2 className="w-3 h-3 animate-spin text-yellow-400 ml-auto" />
+                  )}
+                </div>
+
+                {smartSuggestions ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-slate-400 mb-2">
+                      {smartSuggestions.platform_tips?.content_tip || "點選下方時段自動填入"}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {smartSuggestions.next_available_slots.slice(0, 4).map((slot, idx) => {
+                        const date = new Date(slot);
+                        const isSelected = scheduledAt === date.toISOString().slice(0, 16);
+                        return (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => applySmartSlot(slot)}
+                            className={cn(
+                              "px-3 py-2 rounded-lg text-xs transition-all flex items-center gap-2",
+                              isSelected
+                                ? "bg-yellow-500 text-black"
+                                : "bg-slate-800 text-slate-300 hover:bg-yellow-500/20 hover:text-yellow-300 border border-slate-700"
+                            )}
+                          >
+                            <TrendingUp className="w-3 h-3" />
+                            <span>
+                              {date.toLocaleDateString("zh-TW", { weekday: "short", month: "short", day: "numeric" })}
+                              {" "}
+                              {date.toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" })}
+                            </span>
+                            {smartSuggestions.suggested_slots[idx] && (
+                              <Badge className="bg-green-500/20 text-green-400 text-[10px]">
+                                {smartSuggestions.suggested_slots[idx].score}分
+                              </Badge>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {smartSuggestions.suggested_slots[0]?.reason && (
+                      <p className="text-[10px] text-slate-500 mt-2 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        {smartSuggestions.suggested_slots[0].reason}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={fetchSmartSuggestions}
+                      disabled={loadingSuggestions}
+                      className="border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/10"
+                    >
+                      {loadingSuggestions ? (
+                        <>
+                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                          分析中...
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="w-3 h-3 mr-1" />
+                          取得建議時段
+                        </>
+                      )}
+                    </Button>
+                    <span className="text-xs text-slate-500">根據最佳發文時段推薦</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* 按鈕 */}
           <div className="flex justify-end gap-3 pt-2">
@@ -422,19 +613,34 @@ export function ScheduleDialog({ open, onClose, content, onSuccess }: ScheduleDi
               取消
             </Button>
             <Button
-              onClick={handleCreateSchedule}
-              disabled={creating || !scheduledAt || (!editedContent.caption && !editedContent.title)}
-              className={cn("bg-gradient-to-r", typeConfig.color, "hover:opacity-90")}
+              onClick={handleSubmit}
+              disabled={
+                creating ||
+                selectedAccountIds.length === 0 ||
+                (publishMode === "schedule" && !scheduledAt) ||
+                (!editedContent.caption && !editedContent.title)
+              }
+              className={cn(
+                "bg-gradient-to-r hover:opacity-90 min-w-[160px]",
+                publishMode === "publish_now"
+                  ? "from-emerald-500 to-green-500"
+                  : typeConfig.color
+              )}
             >
               {creating ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  建立中...
+                  處理中...
+                </>
+              ) : publishMode === "publish_now" ? (
+                <>
+                  <Zap className="w-4 h-4 mr-2" />
+                  立即發布（{selectedAccountIds.length} 個平台）
                 </>
               ) : (
                 <>
                   <CheckCircle2 className="w-4 h-4 mr-2" />
-                  確認排程
+                  確認排程（{selectedAccountIds.length} 個平台）
                 </>
               )}
             </Button>

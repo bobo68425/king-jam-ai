@@ -839,6 +839,212 @@ async def publish_now(
 
 
 # ============================================================
+# 多平台批次發布 API
+# ============================================================
+
+# 內容類型 → 適用平台映射
+CONTENT_TYPE_PLATFORM_MAP = {
+    "social_image": ["instagram", "facebook", "threads", "linkedin", "line", "tiktok"],
+    "short_video": ["instagram", "facebook", "tiktok", "youtube", "linkedin", "line", "threads"],
+    "blog_post": ["wordpress", "facebook", "linkedin", "threads", "line"],
+}
+
+# 平台顯示資訊
+PLATFORM_DISPLAY = {
+    "instagram": {"name": "Instagram", "icon": "📸"},
+    "facebook": {"name": "Facebook", "icon": "📘"},
+    "threads": {"name": "Threads", "icon": "🧵"},
+    "tiktok": {"name": "TikTok", "icon": "🎵"},
+    "youtube": {"name": "YouTube", "icon": "📺"},
+    "linkedin": {"name": "LinkedIn", "icon": "💼"},
+    "line": {"name": "LINE", "icon": "💬"},
+    "wordpress": {"name": "WordPress", "icon": "📝"},
+}
+
+
+@router.get("/compatible-platforms")
+async def get_compatible_platforms(
+    content_type: str = Query(..., description="內容類型: social_image, short_video, blog_post"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    取得用戶已連結且支援指定內容類型的平台帳號
+
+    根據內容格式自動判斷哪些平台可發布，並標記：
+    - compatible: 是否支援該內容格式
+    - connected: 是否已連結帳號
+    - account_id: 若已連結，帳號 ID
+    """
+    compatible_platforms = CONTENT_TYPE_PLATFORM_MAP.get(content_type, [])
+
+    # 取得用戶所有已連結帳號
+    user_accounts = db.query(SocialAccount).filter(
+        SocialAccount.user_id == current_user.id,
+        SocialAccount.is_active == True
+    ).all()
+
+    # 建立 platform → account 映射
+    account_map = {}
+    for acc in user_accounts:
+        if acc.platform not in account_map:
+            account_map[acc.platform] = acc
+
+    # 組合結果
+    result = []
+    for platform_id, display in PLATFORM_DISPLAY.items():
+        is_compatible = platform_id in compatible_platforms
+        account = account_map.get(platform_id)
+        result.append({
+            "platform": platform_id,
+            "name": display["name"],
+            "icon": display["icon"],
+            "compatible": is_compatible,
+            "connected": account is not None,
+            "account_id": account.id if account else None,
+            "account_username": account.platform_username if account else None,
+            "account_avatar": account.platform_avatar if account else None,
+        })
+
+    # 適用的排前面，已連結的排更前面
+    result.sort(key=lambda x: (not x["compatible"], not x["connected"]))
+
+    return {"platforms": result, "content_type": content_type}
+
+
+class BatchPublishRequest(BaseModel):
+    """多平台批次發布請求"""
+    social_account_ids: List[int] = Field(..., description="勾選的平台帳號 ID")
+    content_type: Literal["social_image", "blog_post", "short_video"]
+    title: Optional[str] = None
+    caption: Optional[str] = None
+    media_urls: List[str] = []
+    hashtags: List[str] = []
+    mode: Literal["schedule", "publish_now"] = "schedule"
+    scheduled_at: Optional[datetime] = None
+    timezone: str = "Asia/Taipei"
+    generation_id: Optional[int] = None
+    prompt_rating: Optional[int] = Field(None, ge=1, le=5)
+
+
+@router.post("/posts/batch")
+async def batch_create_posts(
+    request: BatchPublishRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    多平台批次建立排程或立即發布
+
+    為每個勾選的平台帳號建立一個 ScheduledPost，
+    若 mode=publish_now 則立即執行發布。
+    """
+    if not request.social_account_ids:
+        raise HTTPException(status_code=400, detail="請至少選擇一個平台")
+
+    if request.mode == "schedule" and not request.scheduled_at:
+        raise HTTPException(status_code=400, detail="排程模式需指定發布時間")
+
+    # 驗證排程時間
+    if request.mode == "schedule":
+        now = datetime.now(pytz.UTC)
+        scheduled_utc = (
+            request.scheduled_at.astimezone(pytz.UTC)
+            if request.scheduled_at.tzinfo
+            else pytz.timezone(request.timezone).localize(request.scheduled_at).astimezone(pytz.UTC)
+        )
+        if scheduled_utc <= now:
+            raise HTTPException(status_code=400, detail="排程時間必須是未來時間")
+
+    # 驗證所有帳號都屬於當前用戶
+    accounts = db.query(SocialAccount).filter(
+        SocialAccount.id.in_(request.social_account_ids),
+        SocialAccount.user_id == current_user.id,
+        SocialAccount.is_active == True
+    ).all()
+
+    if len(accounts) != len(request.social_account_ids):
+        raise HTTPException(status_code=400, detail="部分帳號不存在或已停用")
+
+    results = []
+
+    for account in accounts:
+        # 為每個平台建立 ScheduledPost
+        scheduled_at = request.scheduled_at or datetime.now(pytz.UTC)
+
+        new_post = ScheduledPost(
+            user_id=current_user.id,
+            social_account_id=account.id,
+            content_type=request.content_type,
+            title=request.title,
+            caption=request.caption,
+            media_urls=request.media_urls,
+            hashtags=request.hashtags,
+            scheduled_at=scheduled_at,
+            timezone=request.timezone,
+            status="pending"
+        )
+        db.add(new_post)
+        db.commit()
+        db.refresh(new_post)
+
+        log = PublishLog(
+            scheduled_post_id=new_post.id,
+            action="created",
+            message=f"批次建立 → {account.platform}"
+        )
+        db.add(log)
+        db.commit()
+
+        post_result = {
+            "post_id": new_post.id,
+            "platform": account.platform,
+            "account_username": account.platform_username,
+            "status": "pending",
+        }
+
+        # 若為立即發布模式，直接呼叫 publish_now 邏輯
+        if request.mode == "publish_now":
+            try:
+                publish_result = await publish_now(
+                    post_id=new_post.id,
+                    db=db,
+                    current_user=current_user
+                )
+                post_result["status"] = "published"
+                post_result["url"] = publish_result.get("platform_post_url", "")
+                post_result["message"] = "發布成功"
+            except HTTPException as e:
+                post_result["status"] = "failed"
+                post_result["message"] = e.detail
+            except Exception as e:
+                post_result["status"] = "failed"
+                post_result["message"] = str(e)
+
+        results.append(post_result)
+
+    # 記錄 Prompt 評分（只記一次）
+    rating = request.prompt_rating or 4
+    await _record_prompt_usage_from_schedule(
+        db=db,
+        user_id=current_user.id,
+        content_type=request.content_type,
+        generation_id=request.generation_id,
+        rating=rating
+    )
+    db.commit()
+
+    success_count = sum(1 for r in results if r["status"] in ("pending", "published"))
+    failed_count = sum(1 for r in results if r["status"] == "failed")
+
+    return {
+        "message": f"已處理 {len(results)} 個平台（成功 {success_count}，失敗 {failed_count}）",
+        "mode": request.mode,
+        "results": results,
+    }
+
+
+# ============================================================
 # Prompt 評分 API
 # ============================================================
 
