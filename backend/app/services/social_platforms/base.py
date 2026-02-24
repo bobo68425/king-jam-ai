@@ -232,6 +232,16 @@ class BasePlatform(ABC):
         if content.caption and len(content.caption) > self.config.max_caption_length:
             errors.append(f"文案長度超過 {self.config.max_caption_length} 字元限制")
         
+        # 媒體必需性檢查（圖片/影片/Reel 至少要有一個媒體檔案）
+        media_required_types = {ContentType.IMAGE, ContentType.VIDEO, ContentType.REEL, ContentType.CAROUSEL, ContentType.STORY}
+        if content.content_type in media_required_types:
+            if not content.media_urls:
+                errors.append(f"{content.content_type.value} 類型內容需要至少一個媒體檔案")
+        
+        # Hashtag 數量上限（各平台通用上限 30，Instagram 嚴格執行）
+        if content.hashtags and len(content.hashtags) > 30:
+            errors.append("Hashtag 數量超過 30 個上限")
+        
         return errors
     
     def format_hashtags(self, hashtags: List[str]) -> str:

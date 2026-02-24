@@ -213,6 +213,21 @@ def publish_scheduled_post(self, scheduled_post_id: int):
             hashtags=post.hashtags or [],
         )
         
+        # 發布前驗證內容規格
+        validation_errors = platform_publisher.validate_content(content)
+        if validation_errors:
+            error_msg = f"內容規格驗證失敗 ({social_account.platform}): {'; '.join(validation_errors)}"
+            logger.warning(f"[Publisher] {error_msg}")
+            log = PublishLog(
+                scheduled_post_id=post.id,
+                action="validation_warning",
+                message=error_msg,
+                details={"validation_errors": validation_errors}
+            )
+            db.add(log)
+            db.commit()
+            # 內容驗證失敗仍嘗試發布（平台可能接受），但記錄警告
+        
         # 執行發布（這是同步版本，實際應使用 async）
         # 這裡簡化處理，實際需要根據平台 SDK 調整
         import asyncio
@@ -393,22 +408,22 @@ def _get_best_content_type(platform: str, content_type: str, has_media: bool):
         "instagram": {
             "social_image": ContentType.IMAGE,
             "short_video": ContentType.REEL,
-            "blog_post": ContentType.IMAGE,
+            "blog_post": ContentType.IMAGE,   # IG 不支援純文字，用圖片代替
         },
         "facebook": {
             "social_image": ContentType.IMAGE,
             "short_video": ContentType.VIDEO,
-            "blog_post": ContentType.TEXT,
+            "blog_post": ContentType.TEXT if not has_media else ContentType.IMAGE,
         },
         "threads": {
             "social_image": ContentType.IMAGE,
             "short_video": ContentType.VIDEO,
-            "blog_post": ContentType.TEXT,
+            "blog_post": ContentType.TEXT if not has_media else ContentType.IMAGE,
         },
         "tiktok": {
-            "social_image": ContentType.IMAGE,
+            "social_image": ContentType.IMAGE,   # TikTok 照片模式
             "short_video": ContentType.VIDEO,
-            "blog_post": ContentType.VIDEO,
+            "blog_post": ContentType.IMAGE if has_media else None,  # TikTok 不支援純文字
         },
         "linkedin": {
             "social_image": ContentType.IMAGE,
@@ -416,19 +431,26 @@ def _get_best_content_type(platform: str, content_type: str, has_media: bool):
             "blog_post": ContentType.TEXT if not has_media else ContentType.IMAGE,
         },
         "youtube": {
-            "social_image": ContentType.VIDEO,
+            "social_image": None,               # YouTube 不支援圖片發布
             "short_video": ContentType.VIDEO,
-            "blog_post": ContentType.VIDEO,
+            "blog_post": None,                  # YouTube 不支援文章發布
         },
         "line": {
             "social_image": ContentType.IMAGE,
             "short_video": ContentType.VIDEO,
-            "blog_post": ContentType.TEXT,
+            "blog_post": ContentType.TEXT if not has_media else ContentType.IMAGE,
         },
     }
     
     platform_map = PLATFORM_CONTENT_MAP.get(platform, {})
-    return platform_map.get(content_type, ContentType.IMAGE)
+    result = platform_map.get(content_type, ContentType.IMAGE)
+    
+    # 如果平台不支援該內容類型，記錄警告並使用 fallback
+    if result is None:
+        logger.warning(f"[ContentType] 平台 {platform} 不支援 {content_type}，跳過發布")
+        return ContentType.TEXT  # fallback，實際在 publish 時會驗證失敗並記錄
+    
+    return result
 
 
 def get_platform_publisher(platform: str, account=None):

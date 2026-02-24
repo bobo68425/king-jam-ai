@@ -16,6 +16,10 @@ export function CreditsProvider({ children, initialCredits = 0 }: { children: Re
   const [credits, setCredits] = useState(initialCredits);
 
   const refreshCredits = useCallback(async () => {
+    // 未登入時不發送需要 Token 的請求，避免 console 出現 401 錯誤
+    if (typeof window !== 'undefined' && !localStorage.getItem('token')) {
+      return;
+    }
     try {
       const res = await api.get("/credits/balance");
       setCredits(res.data.balance || 0);

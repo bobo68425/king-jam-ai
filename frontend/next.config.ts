@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // 啟用 standalone 輸出模式（用於 Docker 部署）
   output: "standalone",
-  
+
   // 暫時禁用 ESLint 和 TypeScript 錯誤檢查（建置時）
   eslint: {
     ignoreDuringBuilds: true,
@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  
+
   // 圖片優化設定（已開啟自動壓縮 / WebP 轉換 / 尺寸調整）
   images: {
     remotePatterns: [
@@ -29,13 +29,13 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  
+
   // 環境變數
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || "https://api.kingjam.app",
     NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL || "https://kingjam.app",
   },
-  
+
   // 靜態資源快取 Headers
   async headers() {
     return [
@@ -88,6 +88,17 @@ const nextConfig: NextConfig = {
             value: "no-store, no-cache, must-revalidate",
           },
         ],
+      },
+    ];
+  },
+
+  // 重定向設定
+  async redirects() {
+    return [
+      {
+        source: "/pricing",
+        destination: "/#pricing",
+        permanent: false,
       },
     ];
   },
