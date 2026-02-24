@@ -574,6 +574,51 @@ async def generate_social_post(
     
     generation_duration = int((time.time() - start_time) * 1000)
     
+    # === 將 base64 圖片上傳到 GCS，取得永久 URL ===
+    cloud_image_url = image_url  # 預設使用原始 URL
+    thumbnail_cloud_url = None
+    
+    if image_url and image_url.startswith("data:image/"):
+        try:
+            from app.services.cloud_storage import cloud_storage
+            
+            if cloud_storage.is_configured():
+                # 解析 base64 data URL
+                # 格式: data:image/png;base64,{base64_data}
+                header, b64_data = image_url.split(",", 1)
+                image_bytes = base64.b64decode(b64_data)
+                
+                # 判斷圖片格式
+                ext = "png"
+                content_type_img = "image/png"
+                if "image/jpeg" in header or "image/jpg" in header:
+                    ext = "jpg"
+                    content_type_img = "image/jpeg"
+                elif "image/webp" in header:
+                    ext = "webp"
+                    content_type_img = "image/webp"
+                
+                filename = f"social_{uuid.uuid4().hex[:12]}.{ext}"
+                
+                upload_result = cloud_storage.upload_bytes(
+                    data=image_bytes,
+                    user_id=current_user.id,
+                    file_type="images",
+                    filename=filename,
+                    content_type=content_type_img
+                )
+                
+                if upload_result.get("success"):
+                    cloud_image_url = upload_result["url"]
+                    thumbnail_cloud_url = cloud_image_url  # 圖片本身也當縮圖
+                    print(f"[Social] ✅ 圖片已上傳 GCS: {cloud_image_url} ({upload_result.get('size', 0)} bytes)")
+                else:
+                    print(f"[Social] ⚠️ GCS 上傳失敗，保留 base64: {upload_result.get('error')}")
+            else:
+                print("[Social] ⚠️ 雲端儲存未配置，圖片保留 base64 (將在容器重啟後遺失)")
+        except Exception as e:
+            print(f"[Social] ⚠️ 圖片上傳 GCS 失敗: {e}")
+    
     # 記錄生成歷史
     history = GenerationHistory(
         user_id=current_user.id,
@@ -589,11 +634,12 @@ async def generate_social_post(
             "image_style_type": image_style_type,
         },
         output_data={
-            "image_url": image_url,
+            "image_url": cloud_image_url,
             "caption": caption or "",
             "caption_length": len(caption) if caption else 0,
         },
-        media_cloud_url=image_url,
+        media_cloud_url=cloud_image_url,
+        thumbnail_url=thumbnail_cloud_url,
         credits_used=cost,
         generation_duration_ms=generation_duration,
         error_message=error_msg,
@@ -601,7 +647,7 @@ async def generate_social_post(
     db.add(history)
     db.commit()
 
-    return SocialResponse(image_url=image_url, caption=caption, reference_analysis=reference_image_analysis if reference_image_base64 else None)
+    return SocialResponse(image_url=cloud_image_url, caption=caption, reference_analysis=reference_image_analysis if reference_image_base64 else None)
 
 
 @router.post("/suggest", response_model=SuggestResponse)
