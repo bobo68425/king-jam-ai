@@ -310,8 +310,8 @@ export function ScheduleDialog({ open, onClose, content, onSuccess }: ScheduleDi
         onClose();
         return;
       } catch (batchError: any) {
-        // 批次 API 不可用（404），使用舊版逐筆建立
-        if (batchError.response?.status !== 404) throw batchError;
+        // 批次 API 不可用（404）或參數不符（422），使用舊版逐筆建立
+        if (batchError.response?.status !== 404 && batchError.response?.status !== 422) throw batchError;
       }
 
       // Fallback: 逐筆建立排程
@@ -364,7 +364,14 @@ export function ScheduleDialog({ open, onClose, content, onSuccess }: ScheduleDi
       onSuccess?.();
       onClose();
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || "操作失敗");
+      const detail = error.response?.data?.detail;
+      // detail 可能是字串或 Pydantic 驗證錯誤陣列 [{type, loc, msg, input}]
+      const errorMsg = typeof detail === "string"
+        ? detail
+        : Array.isArray(detail)
+          ? detail.map((d: any) => d.msg || JSON.stringify(d)).join("；")
+          : "操作失敗";
+      toast.error(errorMsg);
     } finally {
       setCreating(false);
     }
