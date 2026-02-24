@@ -390,7 +390,7 @@ export function ScheduleDialog({ open, onClose, content, onSuccess }: ScheduleDi
   const TypeIcon = typeConfig.icon;
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-start justify-center z-50 p-4 overflow-y-auto">
       <Card className="w-full max-w-2xl bg-slate-900 border-slate-700 my-8 animate-in zoom-in-95 duration-300">
         <CardHeader className="border-b border-slate-700">
           <div className="flex items-center justify-between">
