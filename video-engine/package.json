@@ -1,0 +1,32 @@
+{
+    "name": "kingjam-video-engine",
+    "version": "3.0.0",
+    "description": "King Jam AI - Short Video Engine v3.0 (Remotion)",
+    "private": true,
+    "scripts": {
+        "dev": "remotion studio",
+        "build": "remotion bundle",
+        "render": "remotion render ShortVideo out/video.mp4",
+        "render-server": "ts-node src/render-server.ts",
+        "test": "jest",
+        "typecheck": "tsc --noEmit"
+    },
+    "dependencies": {
+        "remotion": "^4.0.0",
+        "@remotion/player": "^4.0.0",
+        "@remotion/renderer": "^4.0.0",
+        "@remotion/cli": "^4.0.0",
+        "@remotion/media-utils": "^4.0.0",
+        "react": "^18.3.0",
+        "react-dom": "^18.3.0",
+        "express": "^4.21.0",
+        "zod": "^3.23.0"
+    },
+    "devDependencies": {
+        "@types/react": "^18.3.0",
+        "@types/express": "^5.0.0",
+        "@types/node": "^22.0.0",
+        "typescript": "^5.7.0",
+        "ts-node": "^10.9.0"
+    }
+}

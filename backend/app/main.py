@@ -8,7 +8,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 import logging
 import os
 
-from app.routers import auth, social_auth, blog, social, video, scheduler, upload, oauth, history, tasks, credits, referral, verification, users, notifications, wordpress, admin, insights, analytics, queue_monitor, brand_kit, prompts, design_studio, payment, account, campaigns, admin_notifications, assistant, phone_verification, line_webhook, line_chat, funding
+from app.routers import auth, social_auth, blog, social, video, video_v3, scheduler, upload, oauth, history, tasks, credits, referral, verification, users, notifications, wordpress, admin, insights, analytics, queue_monitor, brand_kit, prompts, design_studio, payment, account, campaigns, admin_notifications, assistant, phone_verification, line_webhook, line_chat, funding
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +113,7 @@ app.include_router(social_auth.router)
 app.include_router(blog.router)
 app.include_router(social.router)
 app.include_router(video.router)
+app.include_router(video_v3.router)
 app.include_router(scheduler.router)
 app.include_router(upload.router)
 app.include_router(oauth.router)
