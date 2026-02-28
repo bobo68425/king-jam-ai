@@ -42,7 +42,7 @@ const navItems = [
     items: [
       { href: "/dashboard/blog", icon: PenTool, label: "部落格文章" },
       { href: "/dashboard/social", icon: ImageIcon, label: "社群圖文" },
-      { href: "/dashboard/video", icon: Video, label: "短影音 3.0", isDev: true },
+      { href: "/dashboard/video", icon: Video, label: "短影音引擎", isNew: true },
       { href: "/dashboard/design-studio", icon: Layers, label: "圖片編輯室", isNew: true, isPro: true },
     ]
   },
