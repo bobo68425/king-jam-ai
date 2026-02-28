@@ -115,36 +115,10 @@ app.include_router(social.router)
 app.include_router(video.router)
 try:
     app.include_router(video_v3.router)
-    print("[main] ✅ video_v3 router loaded successfully")
-    logger.info("[main] ✅ video_v3 router loaded successfully")
 except Exception as e:
     import traceback
-    print(f"[main] ❌ video_v3 router failed to load: {e}")
+    print(f"[main] ❌ video_v3 router failed: {e}")
     traceback.print_exc()
-    logger.error(f"[main] ❌ video_v3 router failed to load: {e}", exc_info=True)
-    _v3_load_error = str(e) + "\n" + traceback.format_exc()
-
-@app.get("/debug/v3")
-async def debug_v3():
-    """臨時偵錯端點 — 確認 v3 路由載入狀態"""
-    import sys
-    result = {"v3_routes": [], "error": None}
-    # Check if video_v3 router was loaded
-    for route in app.routes:
-        path = getattr(route, 'path', '')
-        if 'v3' in path:
-            result["v3_routes"].append(path)
-    if not result["v3_routes"]:
-        result["error"] = locals().get('_v3_load_error', 'Router registered but no v3 routes found')
-        # Try to import now and capture error
-        try:
-            from app.routers import video_v3 as v3_test
-            result["router_obj"] = str(v3_test.router.routes)
-        except Exception as ex:
-            result["import_error"] = str(ex)
-    result["total_routes"] = len(list(app.routes))
-    return result
-
 app.include_router(scheduler.router)
 app.include_router(upload.router)
 app.include_router(oauth.router)
