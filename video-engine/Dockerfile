@@ -26,7 +26,7 @@ RUN apt-get update && \
 
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --production
+RUN npm install --omit=dev
 
 # Stage 2: Build
 FROM deps AS builder
