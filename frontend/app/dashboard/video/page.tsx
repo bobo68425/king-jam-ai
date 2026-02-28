@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import api from "@/lib/api";
+import { Player } from "@remotion/player";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -3694,73 +3695,111 @@ export default function VideoPage() {
       )}
 
       {activeVersion === "3.0" && (
-        /* ===== v3.0 引擎開發中佔位 ===== */
-        <div className="max-w-4xl mx-auto px-6 py-16">
-          {/* 開發中主畫面 */}
-          <div className="relative group">
-            <div className="absolute -inset-1 bg-gradient-to-r from-cyan-600/30 via-blue-600/30 to-violet-600/30 rounded-3xl blur-xl opacity-50" />
-            <div className="relative bg-slate-900/95 backdrop-blur-xl rounded-3xl border border-slate-700/50 p-12 text-center">
-
-              {/* 動態圖示 */}
-              <div className="relative w-24 h-24 mx-auto mb-8">
-                <div className="absolute inset-0 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-2xl rotate-6 opacity-20 animate-pulse" />
-                <div className="absolute inset-0 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-2xl -rotate-6 opacity-20 animate-pulse" style={{ animationDelay: '0.5s' }} />
-                <div className="relative w-full h-full bg-gradient-to-br from-cyan-500/20 to-blue-600/20 rounded-2xl border border-cyan-500/30 flex items-center justify-center">
-                  <Zap className="w-10 h-10 text-cyan-400" />
-                </div>
+        <div className="max-w-6xl mx-auto px-6 py-10">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* 左側：控制面板 */}
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 space-y-6">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-2xl font-bold text-white flex items-center">
+                  <Zap className="w-6 h-6 mr-3 text-cyan-400" />
+                  v3.0 引擎 <span className="ml-3 px-2.5 py-1 rounded-full bg-cyan-500/20 text-cyan-400 text-xs font-medium">BETA</span>
+                </h2>
+                <Button variant="ghost" size="sm" onClick={() => setActiveVersion("2.0")} className="text-slate-400 hover:text-white">
+                  返回 2.0
+                </Button>
               </div>
-
-              <h2 className="text-3xl font-bold text-white mb-3">
-                v3.0 引擎
-                <span className="ml-3 inline-flex items-center px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-300 text-sm font-medium animate-pulse">
-                  🚧 開發中
-                </span>
-              </h2>
-              <p className="text-slate-400 text-lg mb-10 max-w-lg mx-auto">
-                我們正在打造全新一代的 AI 短影音引擎，帶來革命性的創作體驗
+              <p className="text-slate-400 text-sm">
+                全新架構：支援 fal.ai 極速生成、專業級轉場與 OpenAI TTS 即時預覽配音。
               </p>
 
-              {/* 功能預告卡片 */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
-                {[
-                  { icon: "⚡", title: "極速生成", desc: "渲染速度提升 3x，支援即時預覽" },
-                  { icon: "🎭", title: "AI 角色", desc: "自訂虛擬角色，一致性角色生成" },
-                  { icon: "🎬", title: "多場景串接", desc: "智慧場景切換，電影級轉場效果" },
-                  { icon: "🎙️", title: "AI 配音 2.0", desc: "更自然的多語言語音合成" },
-                  { icon: "📐", title: "智慧模板", desc: "行業專屬模板，一鍵套用風格" },
-                  { icon: "🔗", title: "API 開放", desc: "開放 API 串接，自動化工作流程" },
-                ].map((feature, idx) => (
-                  <div
-                    key={idx}
-                    className="group/card relative bg-slate-800/50 rounded-2xl border border-slate-700/50 p-5 hover:border-cyan-500/30 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/5"
-                  >
-                    <div className="text-3xl mb-3">{feature.icon}</div>
-                    <h3 className="text-white font-semibold mb-1">{feature.title}</h3>
-                    <p className="text-slate-400 text-sm">{feature.desc}</p>
+              {/* 這裡之後可加入真正的 V3 腳本編輯輸入框 */}
+              <div className="bg-slate-800/50 rounded-2xl p-6 border border-slate-700/50">
+                <h3 className="text-white font-medium mb-4 flex items-center gap-2">
+                  <Wand2 className="w-4 h-4 text-purple-400" />
+                  智能腳本編輯
+                </h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs text-slate-400 block mb-1.5">影片主題 (Prompt)</label>
+                    <textarea
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-cyan-500 transition-colors resize-none h-24"
+                      placeholder="例如：科技新創公司的形象宣傳短片，色彩鮮明，節奏輕快..."
+                      defaultValue="科技領域的前瞻創新，將重新定義未來的可能。"
+                    />
                   </div>
-                ))}
-              </div>
-
-              {/* 預計上線時間 */}
-              <div className="inline-flex items-center gap-3 px-6 py-3 rounded-full bg-slate-800/80 border border-slate-700/50">
-                <Clock className="w-4 h-4 text-cyan-400" />
-                <span className="text-slate-300 text-sm">預計上線：<span className="text-cyan-400 font-semibold">2026 Q2</span></span>
+                  <div className="flex gap-4">
+                    <div className="flex-1">
+                      <label className="text-xs text-slate-400 block mb-1.5">風格模板</label>
+                      <select className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-cyan-500">
+                        <option value="tech_startup">科技新創 (Tech Startup)</option>
+                        <option value="corporate">企業形象 (Corporate)</option>
+                        <option value="cyberpunk">霓虹賽博 (Cyberpunk)</option>
+                      </select>
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-xs text-slate-400 block mb-1.5">AI 配音</label>
+                      <select className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-cyan-500">
+                        <option value="alloy">Alloy (中性)</option>
+                        <option value="nova">Nova (女性活力)</option>
+                        <option value="echo">Echo (男性穩重)</option>
+                      </select>
+                    </div>
+                  </div>
+                  <Button className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-xl py-6 font-medium shadow-lg shadow-cyan-500/20">
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    開始產生腳本與運鏡
+                  </Button>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* 底部提示 */}
-          <div className="text-center mt-8 pb-12">
-            <p className="text-slate-500 text-sm">
-              想搶先體驗？切換至 v2.0 引擎繼續創作 🎬
-            </p>
-            <button
-              onClick={() => setActiveVersion("2.0")}
-              className="mt-3 inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-pink-600 to-rose-500 text-white text-sm font-medium hover:shadow-lg hover:shadow-pink-500/25 transition-all"
-            >
-              <ArrowRight className="w-4 h-4" />
-              前往 v2.0 引擎
-            </button>
+            {/* 右側：Remotion 預覽窗格 */}
+            <div className="flex flex-col items-center justify-center bg-black/40 rounded-3xl border border-slate-800/80 p-8">
+              <div className="w-full max-w-[320px] aspect-[9/16] relative group rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10">
+                <div className="absolute inset-0 z-10 pointer-events-none rounded-2xl ring-inset ring-1 ring-white/10" />
+
+                {/* 由於目前無法直接跨目錄 import ShortVideo (需設定 Monorepo)，此處先用 Placeholder */}
+                {/* 未來部署時將透過 component={ShortVideo} 載入組件 */}
+                <div className="w-full h-full bg-slate-900 flex flex-col items-center justify-center relative shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+                  <div className="absolute inset-0 bg-gradient-to-b from-slate-900/50 via-slate-900 to-black/80" />
+
+                  {/* Mock Player UI */}
+                  <div className="relative z-20 flex flex-col items-center group-hover:scale-105 transition-transform duration-500">
+                    <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center backdrop-blur-md border border-white/20 mb-4 cursor-pointer hover:bg-white/20 hover:scale-110 transition-all">
+                      <Play className="w-6 h-6 text-white ml-1" />
+                    </div>
+                    <span className="text-sm font-medium text-white tracking-widest uppercase opacity-80">Real-time Preview</span>
+                    <span className="text-xs text-slate-400 mt-2 bg-black/40 px-3 py-1 rounded-full">Powered by Remotion</span>
+                  </div>
+
+                  {/* 下方播放條 Placeholder */}
+                  <div className="absolute bottom-6 left-6 right-6 z-20">
+                    <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden mb-3">
+                      <div className="h-full bg-cyan-500 w-1/3 rounded-full relative">
+                        <div className="absolute top-0 bottom-0 right-0 w-8 bg-gradient-to-l from-white/40 to-transparent" />
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center text-xs text-white/60">
+                      <span>00:05</span>
+                      <span>00:15</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 實際整合時的程式碼範例：
+                <Player
+                  component={ShortVideo}
+                  durationInFrames={450}
+                  compositionWidth={1080}
+                  compositionHeight={1920}
+                  fps={30}
+                  style={{ width: "100%", height: "100%" }}
+                  controls
+                  inputProps={{ ...mockProps }}
+                />
+                */}
+              </div>
+            </div>
           </div>
         </div>
       )}
