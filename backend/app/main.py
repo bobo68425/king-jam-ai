@@ -115,8 +115,12 @@ app.include_router(social.router)
 app.include_router(video.router)
 try:
     app.include_router(video_v3.router)
+    print("[main] ✅ video_v3 router loaded successfully")
     logger.info("[main] ✅ video_v3 router loaded successfully")
 except Exception as e:
+    import traceback
+    print(f"[main] ❌ video_v3 router failed to load: {e}")
+    traceback.print_exc()
     logger.error(f"[main] ❌ video_v3 router failed to load: {e}", exc_info=True)
 app.include_router(scheduler.router)
 app.include_router(upload.router)
