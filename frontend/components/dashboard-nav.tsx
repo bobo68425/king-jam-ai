@@ -42,7 +42,7 @@ const navItems = [
     items: [
       { href: "/dashboard/blog", icon: PenTool, label: "部落格文章" },
       { href: "/dashboard/social", icon: ImageIcon, label: "社群圖文" },
-      { href: "/dashboard/video", icon: Video, label: "短影音生成", isNew: true },
+      { href: "/dashboard/video", icon: Video, label: "短影音 3.0", isDev: true },
       { href: "/dashboard/design-studio", icon: Layers, label: "圖片編輯室", isNew: true, isPro: true },
     ]
   },
@@ -165,7 +165,12 @@ export function DashboardNav() {
                       PRO
                     </span>
                   )}
-                  {(item as any).isNew && !(item as any).isPro && (
+                  {(item as any).isDev && (
+                    <span className="ml-auto flex h-5 items-center rounded-full bg-cyan-500/20 px-2 text-[10px] font-semibold text-cyan-400 animate-pulse">
+                      開發中
+                    </span>
+                  )}
+                  {(item as any).isNew && !(item as any).isPro && !(item as any).isDev && (
                     <span className="ml-auto flex h-5 items-center rounded-full bg-amber-500/20 px-2 text-[10px] font-semibold text-amber-400">
                       NEW
                     </span>
