@@ -417,6 +417,41 @@ export default function VideoPage() {
   // 版本切換
   const [activeVersion, setActiveVersion] = useState<"2.0" | "3.0">("2.0");
 
+  // v3.0 引擎狀態
+  const [v3Prompt, setV3Prompt] = useState("科技領域的前瞻創新，將重新定義未來的可能。");
+  const [v3Style, setV3Style] = useState("tech_startup");
+  const [v3Voice, setV3Voice] = useState("alloy");
+  const [v3Loading, setV3Loading] = useState(false);
+  const [v3Result, setV3Result] = useState<any>(null);
+  const [v3Error, setV3Error] = useState<string | null>(null);
+
+  const handleV3Generate = async () => {
+    if (!v3Prompt.trim()) {
+      toast.error("請輸入影片主題");
+      return;
+    }
+    setV3Loading(true);
+    setV3Error(null);
+    setV3Result(null);
+    try {
+      const res = await api.post("/video/v3/api/generate-video", {
+        script: v3Prompt,
+        style_id: v3Style,
+        voice: v3Voice,
+        duration: 30,
+        scenes_count: 3,
+      });
+      setV3Result(res.data);
+      toast.success(`🎬 影片生成任務已提交！Job ID: ${res.data.job_id?.slice(0, 8)}...`);
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || err.message || "生成失敗";
+      setV3Error(msg);
+      toast.error(`生成失敗: ${msg}`);
+    } finally {
+      setV3Loading(false);
+    }
+  };
+
   // 下拉選單
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
@@ -3712,7 +3747,6 @@ export default function VideoPage() {
                 全新架構：支援 fal.ai 極速生成、專業級轉場與 OpenAI TTS 即時預覽配音。
               </p>
 
-              {/* 這裡之後可加入真正的 V3 腳本編輯輸入框 */}
               <div className="bg-slate-800/50 rounded-2xl p-6 border border-slate-700/50">
                 <h3 className="text-white font-medium mb-4 flex items-center gap-2">
                   <Wand2 className="w-4 h-4 text-purple-400" />
@@ -3724,31 +3758,81 @@ export default function VideoPage() {
                     <textarea
                       className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-cyan-500 transition-colors resize-none h-24"
                       placeholder="例如：科技新創公司的形象宣傳短片，色彩鮮明，節奏輕快..."
-                      defaultValue="科技領域的前瞻創新，將重新定義未來的可能。"
+                      value={v3Prompt}
+                      onChange={(e) => setV3Prompt(e.target.value)}
                     />
                   </div>
                   <div className="flex gap-4">
                     <div className="flex-1">
                       <label className="text-xs text-slate-400 block mb-1.5">風格模板</label>
-                      <select className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-cyan-500">
+                      <select
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-cyan-500"
+                        value={v3Style}
+                        onChange={(e) => setV3Style(e.target.value)}
+                      >
                         <option value="tech_startup">科技新創 (Tech Startup)</option>
                         <option value="corporate">企業形象 (Corporate)</option>
                         <option value="cyberpunk">霓虹賽博 (Cyberpunk)</option>
+                        <option value="food">美食饗宴 (Food)</option>
+                        <option value="travel">旅行探索 (Travel)</option>
+                        <option value="fitness">健身動感 (Fitness)</option>
+                        <option value="fashion">時尚潮流 (Fashion)</option>
+                        <option value="knowledge">知識解說 (Knowledge)</option>
+                        <option value="retro_film">復古膠片 (Retro Film)</option>
+                        <option value="minimal_bw">極簡黑白 (Minimal B&W)</option>
                       </select>
                     </div>
                     <div className="flex-1">
                       <label className="text-xs text-slate-400 block mb-1.5">AI 配音</label>
-                      <select className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-cyan-500">
+                      <select
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-cyan-500"
+                        value={v3Voice}
+                        onChange={(e) => setV3Voice(e.target.value)}
+                      >
                         <option value="alloy">Alloy (中性)</option>
                         <option value="nova">Nova (女性活力)</option>
                         <option value="echo">Echo (男性穩重)</option>
+                        <option value="onyx">Onyx (男性深沉)</option>
+                        <option value="shimmer">Shimmer (女性溫柔)</option>
+                        <option value="fable">Fable (敘事風)</option>
                       </select>
                     </div>
                   </div>
-                  <Button className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-xl py-6 font-medium shadow-lg shadow-cyan-500/20">
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    開始產生腳本與運鏡
+                  <Button
+                    className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-xl py-6 font-medium shadow-lg shadow-cyan-500/20 disabled:opacity-50"
+                    onClick={handleV3Generate}
+                    disabled={v3Loading || !v3Prompt.trim()}
+                  >
+                    {v3Loading ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> 生成中...</>
+                    ) : (
+                      <><Sparkles className="w-4 h-4 mr-2" /> 開始產生腳本與運鏡</>
+                    )}
                   </Button>
+
+                  {/* 錯誤訊息 */}
+                  {v3Error && (
+                    <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-red-400 text-sm flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                      {v3Error}
+                    </div>
+                  )}
+
+                  {/* 成功結果 */}
+                  {v3Result && (
+                    <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 space-y-2">
+                      <div className="flex items-center gap-2 text-emerald-400 font-medium text-sm">
+                        <CheckCircle2 className="w-4 h-4" />
+                        任務已提交
+                      </div>
+                      <div className="text-xs text-slate-400 space-y-1">
+                        <p>Job ID: <span className="text-white font-mono">{v3Result.job_id?.slice(0, 8)}...</span></p>
+                        <p>狀態: <span className="text-cyan-400">{v3Result.status}</span></p>
+                        <p>預估時間: <span className="text-white">{v3Result.estimated_time}秒</span></p>
+                        <p className="text-slate-500 mt-1">{v3Result.message}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
