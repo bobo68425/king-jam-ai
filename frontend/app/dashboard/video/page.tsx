@@ -3818,8 +3818,35 @@ export default function VideoPage() {
                     </div>
                   )}
 
-                  {/* 成功結果 */}
-                  {v3Result && (
+                  {/* 成功結果 — 顯示 AI 生成的場景 */}
+                  {v3Result && v3Result.scenes && (
+                    <div className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-emerald-400 font-medium text-sm">
+                          <CheckCircle2 className="w-4 h-4" />
+                          腳本生成完成 · {v3Result.scenes.length} 場景
+                        </div>
+                        <span className="text-xs text-slate-500 font-mono">{v3Result.job_id?.slice(0, 8)}</span>
+                      </div>
+                      <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                        {v3Result.scenes.map((scene: any, i: number) => (
+                          <div key={i} className="bg-slate-900/60 border border-slate-700/30 rounded-lg p-3 space-y-1.5">
+                            <div className="flex items-center gap-2 text-xs">
+                              <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 font-medium uppercase">{scene.type}</span>
+                              <span className="text-slate-500">場景 {i + 1}</span>
+                              <span className="ml-auto text-slate-600">🎬 {scene.cameraMove}</span>
+                              <span className="text-slate-600">↔ {scene.transition}</span>
+                            </div>
+                            <p className="text-white text-sm leading-relaxed">🎙️ {scene.narration}</p>
+                            <p className="text-slate-500 text-xs italic">📹 {scene.visualPrompt}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 舊格式相容 (非 scenes 回應) */}
+                  {v3Result && !v3Result.scenes && (
                     <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 space-y-2">
                       <div className="flex items-center gap-2 text-emerald-400 font-medium text-sm">
                         <CheckCircle2 className="w-4 h-4" />
@@ -3828,8 +3855,6 @@ export default function VideoPage() {
                       <div className="text-xs text-slate-400 space-y-1">
                         <p>Job ID: <span className="text-white font-mono">{v3Result.job_id?.slice(0, 8)}...</span></p>
                         <p>狀態: <span className="text-cyan-400">{v3Result.status}</span></p>
-                        <p>預估時間: <span className="text-white">{v3Result.estimated_time}秒</span></p>
-                        <p className="text-slate-500 mt-1">{v3Result.message}</p>
                       </div>
                     </div>
                   )}

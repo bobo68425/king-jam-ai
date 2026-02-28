@@ -237,40 +237,139 @@ async def fal_webhook(request: Request):
 @router.post("/api/generate-video")
 async def generate_video_api(request: FullGenerateRequest):
     """
-    全自動影片生成 API
+    全自動影片生成 API — 使用 Gemini AI 生成腳本與運鏡
     
     流程:
-    1. 使用 AI 將文字腳本拆分為場景
-    2. 對每個場景調用 fal.ai 生成 AI 影片
-    3. 生成 OpenAI TTS 配音 + 時間戳
-    4. 組合為 Remotion Props
-    5. 提交渲染任務
-    6. 返回 job_id (輪詢 /render/status 取得結果)
+    1. 使用 Gemini AI 將文字腳本拆分為場景 (含旁白、運鏡、視覺提示)
+    2. 返回結構化 scenes 資料供前端預覽
     
     Request:
         { "script": "...", "style_id": "tech_startup", "voice": "alloy" }
     
     Response:
-        { "job_id": "...", "status": "processing", "estimated_time": 60 }
+        { "job_id": "...", "status": "completed", "scenes": [...], "subtitles": [...] }
     """
+    import os
+    import json
+    
     job_id = str(uuid.uuid4())
     
-    # 估計處理時間
-    estimated_time = request.scenes_count * 15 + 10  # 每場景 ~15 秒 + 渲染 10 秒
+    GEMINI_KEY = os.getenv("GOOGLE_GEMINI_KEY", "")
+    if not GEMINI_KEY:
+        raise HTTPException(status_code=500, detail="GOOGLE_GEMINI_KEY 未設定")
     
-    # TODO: 啟動 Celery 後台任務處理完整流程
-    # 目前返回佔位回應
+    # ====== 使用 Gemini AI 生成場景腳本 ======
+    system_prompt = f"""你是一位專業的短影音導演與編劇。
+用戶會給你一段文字主題，請將它轉化為 {request.scenes_count} 個場景的短影音腳本。
+
+每個場景需要包含：
+- narration: 旁白文字 (中文，15-30字，適合配音朗讀)
+- visualPrompt: 英文的 AI 影片生成提示詞 (描述畫面，含鏡頭運動)
+- cameraMove: 運鏡方式 (pan-left / pan-right / zoom-in / zoom-out / dolly-forward / static / tilt-up / orbit)
+- transition: 轉場效果 (fade / slide-left / slide-right / zoom-in / dissolve)
+- type: 場景類型 (hook / problem / solution / benefit / cta / story / demo)
+
+風格模板: {request.style_id}
+影片總長: {request.duration} 秒
+比例: {request.aspect_ratio}
+
+嚴格以 JSON 陣列格式回覆，不要加其他文字。範例：
+[
+  {{
+    "narration": "你是否也曾為此困擾？",
+    "visualPrompt": "Cinematic close-up of a person looking frustrated at a computer screen, warm lighting, shallow depth of field, dolly forward",
+    "cameraMove": "dolly-forward", 
+    "transition": "fade",
+    "type": "hook"
+  }}
+]"""
+    
+    user_prompt = f"主題文字：{request.script}"
+    
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=GEMINI_KEY)
+        model = genai.GenerativeModel('gemini-2.0-flash')
+        
+        response = model.generate_content(
+            [system_prompt, user_prompt],
+            generation_config=genai.GenerationConfig(
+                temperature=0.8,
+                max_output_tokens=2000,
+            ),
+        )
+        
+        raw_text = response.text.strip()
+        # 清理 markdown code block
+        if raw_text.startswith("```"):
+            raw_text = raw_text.split("\n", 1)[1] if "\n" in raw_text else raw_text[3:]
+        if raw_text.endswith("```"):
+            raw_text = raw_text[:-3].strip()
+        if raw_text.startswith("json"):
+            raw_text = raw_text[4:].strip()
+        
+        ai_scenes = json.loads(raw_text)
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"[v3] Gemini JSON 解析失敗: {e}, raw: {raw_text[:200]}")
+        raise HTTPException(status_code=500, detail=f"AI 回應格式錯誤: {str(e)}")
+    except Exception as e:
+        logger.error(f"[v3] Gemini 生成失敗: {e}")
+        raise HTTPException(status_code=500, detail=f"AI 生成失敗: {str(e)}")
+    
+    # ====== 將 AI 生成結果轉換為標準格式 ======
+    fps = 30
+    per_scene_frames = int((request.duration / request.scenes_count) * fps)
+    
+    scenes = []
+    subtitles = []
+    frame_offset = 0
+    
+    for i, ai_scene in enumerate(ai_scenes[:request.scenes_count]):
+        scene = {
+            "index": i,
+            "type": ai_scene.get("type", "story"),
+            "durationInFrames": per_scene_frames,
+            "narration": ai_scene.get("narration", ""),
+            "visualPrompt": ai_scene.get("visualPrompt", ""),
+            "cameraMove": ai_scene.get("cameraMove", "static"),
+            "transition": ai_scene.get("transition", "fade"),
+        }
+        scenes.append(scene)
+        
+        # 生成字幕 cue
+        narration = ai_scene.get("narration", "")
+        if narration:
+            subtitles.append({
+                "text": narration,
+                "startFrame": frame_offset + int(fps * 0.5),
+                "endFrame": frame_offset + per_scene_frames - int(fps * 0.3),
+            })
+        
+        frame_offset += per_scene_frames
+    
+    # ====== 組合完整回應 ======
     return {
         "job_id": job_id,
-        "status": "processing",
-        "estimated_time": estimated_time,
-        "message": f"v3.0 引擎正在處理: {request.scenes_count} 場景, "
-                   f"模板: {request.style_id}, 語音: {request.voice}",
+        "status": "completed",
+        "scenes": scenes,
+        "subtitles": subtitles,
+        "script": {
+            "projectId": job_id,
+            "title": request.script[:50],
+            "description": request.script,
+            "totalDurationInFrames": frame_offset,
+            "fps": fps,
+            "width": 1080,
+            "height": 1920 if request.aspect_ratio == "9:16" else 1080,
+            "aspectRatio": request.aspect_ratio,
+        },
         "config": {
             "style_id": request.style_id,
             "duration": request.duration,
             "aspect_ratio": request.aspect_ratio,
             "voice": request.voice,
-            "scenes_count": request.scenes_count,
+            "scenes_count": len(scenes),
         },
     }
+
