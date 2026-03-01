@@ -2290,7 +2290,6 @@ export default function VideoPage() {
                     )}
                   </div>
 
-                  {/* 輸入框 */}
                   <textarea
                     ref={inputRef}
                     value={prompt}
@@ -2298,12 +2297,6 @@ export default function VideoPage() {
                     placeholder="描述你想要的影片內容，例如：咖啡店新品上市，營造溫暖療癒的氛圍，突出拿鐵的細膩奶泡..."
                     rows={4}
                     className="w-full px-6 py-5 bg-transparent text-white text-lg placeholder:text-slate-500 focus:outline-none resize-none"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey && e.metaKey) {
-                        e.preventDefault();
-                        handleGenerate();
-                      }
-                    }}
                   />
 
                   {/* 工具欄 */}

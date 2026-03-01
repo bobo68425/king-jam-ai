@@ -965,12 +965,9 @@ export default function BlogPage() {
     }
   };
 
-  // Enter 鍵生成
+  // 移除自動 Enter 鍵生成
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey && !loading && !autoGenerating && topic.trim()) {
-      e.preventDefault();
-      handleGenerate();
-    }
+    // 根據用戶要求，禁止點擊 Enter 送出生成
   };
 
   // 複製文章內容
