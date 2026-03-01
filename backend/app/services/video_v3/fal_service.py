@@ -155,8 +155,15 @@ async def check_scene_status(request_id: str, model_id: str) -> Dict[str, Any]:
     """
     import httpx
     
+    # fal.ai queue polling url 需要的是基礎 app 名稱 (如 fal-ai/wan)，而不是完整路徑
+    base_app_id = model_id
+    if "fal-ai/wan" in model_id:
+        base_app_id = "fal-ai/wan"
+    elif "fal-ai/kling" in model_id:
+        base_app_id = "fal-ai/kling-video"
+        
     # Step 1: 查詢狀態
-    status_url = f"https://queue.fal.run/{model_id}/requests/{request_id}/status"
+    status_url = f"https://queue.fal.run/{base_app_id}/requests/{request_id}/status"
     headers = {"Authorization": f"Key {FAL_KEY}"}
     
     async with httpx.AsyncClient(timeout=15.0) as client:
@@ -172,7 +179,7 @@ async def check_scene_status(request_id: str, model_id: str) -> Dict[str, Any]:
         
         # 使用 REST GET 取得結果
         # fal.ai docs: GET /requests/{id} 返回 { status, response: { video: { url } } }
-        result_url = f"https://queue.fal.run/{model_id}/requests/{request_id}"
+        result_url = f"https://queue.fal.run/{base_app_id}/requests/{request_id}"
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.get(result_url, headers=headers)
