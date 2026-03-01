@@ -51,21 +51,11 @@ def select_best_model(prompt: str, preference: str = "auto") -> str:
         logger.info(f"[fal] 使用指定模型: {preference}")
         return FAL_MODELS[preference]
     
-    prompt_lower = prompt.lower()
+    # 由於 fal.ai 近期對 Luma 棄用以及 Minimax 下游服務不穩定 (Downstream unavailable)
+    # 我們在此強制所有請求都退回到最穩定的 Wan 2.1 模型，以確保管線能成功產出影片
+    best = "wan21" 
     
-    # 基於關鍵字匹配
-    scores = {model: 0 for model in FAL_MODELS}
-    for model_key, keywords in MODEL_SELECTION_RULES.items():
-        for kw in keywords:
-            if kw in prompt_lower:
-                scores[model_key] += 1
-    
-    # 選擇得分最高的，預設 Wan 2.1
-    best = max(scores, key=scores.get)
-    if scores[best] == 0:
-        best = "wan21"  # 預設選擇
-    
-    logger.info(f"[fal] 自動選擇模型: {best} (scores: {scores})")
+    logger.info(f"[fal] Prompt 分析: '{prompt[:30]}...' → 因穩定性考量，強制回退使用模型 {best}")
     return FAL_MODELS[best]
 
 
