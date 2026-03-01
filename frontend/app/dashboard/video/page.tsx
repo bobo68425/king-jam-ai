@@ -638,6 +638,7 @@ export default function VideoPage() {
       const clipRes = await api.post("/video/v3/api/generate-clips", {
         scenes: v3Scenes,
         aspect_ratio: v3AspectRatio,
+        model_preference: v3Mode === "sadtalker" ? "sadtalker" : "auto",
       });
       const jobs = clipRes.data.jobs || [];
       setV3VideoJobs(jobs);
@@ -4173,10 +4174,10 @@ export default function VideoPage() {
                           onClick={() => setV3AspectRatio(r)}
                           disabled={v3Mode === "sadtalker"}
                           className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${v3Mode === "sadtalker"
-                              ? "bg-slate-800 text-slate-600 cursor-not-allowed border border-slate-700/50"
-                              : v3AspectRatio === r
-                                ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
-                                : "bg-slate-900 text-slate-500 border border-slate-700 hover:text-slate-300"
+                            ? "bg-slate-800 text-slate-600 cursor-not-allowed border border-slate-700/50"
+                            : v3AspectRatio === r
+                              ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
+                              : "bg-slate-900 text-slate-500 border border-slate-700 hover:text-slate-300"
                             }`}
                         >
                           {r === "9:16" ? "竪屏" : r === "16:9" ? "橫屏" : "方形"}
