@@ -108,25 +108,27 @@ async def generate_scene_clip(
     if reference_image_url and "wan" in model_id:
         model_id = FAL_MODELS["wan21_img2vid"]
     
-    # 構建請求
+    # 構建模型特定請求參數 (fal.ai 各模型 schema 不同)
     input_data: Dict[str, Any] = {
         "prompt": prompt,
-        "num_frames": duration * 24,  # 假設 24fps
     }
     
-    # 模型特定參數
     if "wan" in model_id:
-        input_data["resolution"] = "720p" if aspect_ratio == "9:16" else "720p"
+        # Wan 2.1: 支持 num_frames, resolution, aspect_ratio
+        input_data["num_frames"] = min(duration * 24, 81)  # Wan 2.1 1.3b 最多 81 frames
+        input_data["resolution"] = "480p"
         input_data["aspect_ratio"] = aspect_ratio
         if reference_image_url:
             input_data["image_url"] = reference_image_url
     elif "luma" in model_id:
+        # Luma: 只接受 prompt, aspect_ratio, loop
         input_data["aspect_ratio"] = aspect_ratio
     elif "kling" in model_id:
-        input_data["duration"] = str(duration)
+        # Kling: 接受 duration, aspect_ratio
+        input_data["duration"] = str(min(duration, 5))
         input_data["aspect_ratio"] = aspect_ratio
     
-    # 使用 Queue API 異步提交
+    # 使用 Queue API 異步提交 — 直接傳入 input_data (不要包在 "input" key 裡)
     api_url = f"https://queue.fal.run/{model_id}"
     
     headers = {
@@ -134,7 +136,8 @@ async def generate_scene_clip(
         "Content-Type": "application/json",
     }
     
-    payload: Dict[str, Any] = {"input": input_data}
+    # fal.ai Queue API: 直接在 body 傳入參數
+    payload = dict(input_data)
     
     # 設定 Webhook (如果有提供)
     if webhook_url:
