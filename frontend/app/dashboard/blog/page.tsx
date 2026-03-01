@@ -9,8 +9,8 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { 
-  Loader2, Wand2, History, FileText, Trash2, Copy, Check, X, 
+import {
+  Loader2, Wand2, History, FileText, Trash2, Copy, Check, X,
   Image as ImageIcon, Sparkles, Download, ChevronDown, ChevronUp,
   RefreshCw, Zap, CheckCircle2, Circle, ArrowRight, Upload, ImagePlus,
   Code, Clock, Eye, Edit3, Save, RotateCcw, Maximize2, Minimize2,
@@ -63,14 +63,14 @@ const TONE_OPTIONS = [
   { value: "friendly", label: "🤝 親切友善", desc: "社群互動、品牌故事" },
   { value: "humorous", label: "😄 幽默風趣", desc: "趣味內容、輕鬆話題" },
   { value: "educational", label: "📚 教育科普", desc: "知識分享、教學指南" },
-  
+
   // 進階風格
   { value: "storytelling", label: "📖 故事敘述", desc: "品牌故事、人物專訪" },
   { value: "inspiring", label: "✨ 激勵人心", desc: "勵志文章、成功案例" },
   { value: "analytical", label: "📊 分析評論", desc: "市場分析、產業觀察" },
   { value: "conversational", label: "💬 對話式", desc: "問答形式、讀者互動" },
   { value: "luxury", label: "👑 高端奢華", desc: "精品品牌、頂級服務" },
-  
+
   // 特殊風格
   { value: "minimalist", label: "🎯 極簡精煉", desc: "重點摘要、快速閱讀" },
   { value: "emotional", label: "💝 感性動人", desc: "情感連結、暖心故事" },
@@ -182,13 +182,13 @@ const QUICK_PROMPT_CATEGORIES = [
 const QUICK_PROMPTS = QUICK_PROMPT_CATEGORIES.flatMap(cat => cat.prompts);
 
 // 步驟指示器組件
-function StepIndicator({ 
-  currentStep, 
-  hasArticle, 
-  hasImage 
-}: { 
-  currentStep: number; 
-  hasArticle: boolean; 
+function StepIndicator({
+  currentStep,
+  hasArticle,
+  hasImage
+}: {
+  currentStep: number;
+  hasArticle: boolean;
   hasImage: boolean;
 }) {
   const steps = [
@@ -203,8 +203,8 @@ function StepIndicator({
         <div key={index} className="flex items-center">
           <div className={cn(
             "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all",
-            step.completed 
-              ? "bg-green-500/20 text-green-400" 
+            step.completed
+              ? "bg-green-500/20 text-green-400"
               : currentStep === index + 1
                 ? "bg-indigo-500/20 text-indigo-400 ring-1 ring-indigo-500/50"
                 : "bg-slate-700/50 text-slate-500"
@@ -231,10 +231,10 @@ function StepIndicator({
 export default function BlogPage() {
   const router = useRouter();
   const { refreshCredits } = useCredits();
-  
+
   // 客戶端掛載狀態（防止 Hydration 錯誤）
   const [isMounted, setIsMounted] = useState(false);
-  
+
   // 文章生成狀態
   const [topic, setTopic] = useState("");
   const [tone, setTone] = useState("professional");
@@ -259,7 +259,7 @@ export default function BlogPage() {
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
   const [referenceImagePreview, setReferenceImagePreview] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  
+
   // 直接上傳封面圖狀態
   const [uploadedCover, setUploadedCover] = useState<File | null>(null);
   const [uploadedCoverPreview, setUploadedCoverPreview] = useState<string | null>(null);
@@ -268,11 +268,11 @@ export default function BlogPage() {
   // 一鍵生成狀態
   const [autoGenerating, setAutoGenerating] = useState(false);
   const [autoStep, setAutoStep] = useState<"article" | "image" | null>(null);
-  
+
   // 排程上架狀態
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
   const [scheduleContent, setScheduleContent] = useState<ScheduleContent | null>(null);
-  
+
   // 圖片標題編輯器
   const [showImageEditor, setShowImageEditor] = useState(false);
 
@@ -305,18 +305,18 @@ export default function BlogPage() {
   // 檢查是否有從圖片編輯室導入的圖片
   useEffect(() => {
     if (!isMounted) return;
-    
+
     const checkPendingImage = async () => {
       const pendingImage = await getPendingImageForEngine('blog');
       if (!pendingImage) return;
-      
+
       // 檢查是否有保存的文章狀態（從同一篇文章跳轉到編輯室再返回）
       const savedStateStr = localStorage.getItem('blogPostStateForReturn');
-      
+
       if (savedStateStr) {
         try {
           const savedState = JSON.parse(savedStateStr);
-          
+
           // 檢查是否過期（10 分鐘內有效）
           if (Date.now() - savedState.timestamp < 10 * 60 * 1000) {
             // 恢復文章狀態，並更新封面圖
@@ -331,11 +331,11 @@ export default function BlogPage() {
             if (savedState.tone) setTone(savedState.tone);
             if (savedState.imageQuality) setImageQuality(savedState.imageQuality);
             if (savedState.customPrompt) setCustomPrompt(savedState.customPrompt);
-            
+
             toast.success("已返回原文章，封面圖已更新", { duration: 3000 });
           } else {
             // 狀態過期，當作新圖片處理
-            setCurrentPost(prev => prev 
+            setCurrentPost(prev => prev
               ? { ...prev, cover_image: pendingImage.dataUrl }
               : { id: 0, title: "", content: "", created_at: new Date().toISOString(), cover_image: pendingImage.dataUrl }
             );
@@ -343,32 +343,32 @@ export default function BlogPage() {
           }
         } catch (e) {
           // 解析失敗，當作新圖片處理
-          setCurrentPost(prev => prev 
+          setCurrentPost(prev => prev
             ? { ...prev, cover_image: pendingImage.dataUrl }
             : { id: 0, title: "", content: "", created_at: new Date().toISOString(), cover_image: pendingImage.dataUrl }
           );
           toast.success(`已從圖片編輯室導入「${pendingImage.name || '設計作品'}」作為封面圖`, { duration: 4000 });
         }
-        
+
         // 清除保存的狀態
         localStorage.removeItem('blogPostStateForReturn');
       } else {
         // 沒有保存的狀態，當作新圖片處理
-        setCurrentPost(prev => prev 
+        setCurrentPost(prev => prev
           ? { ...prev, cover_image: pendingImage.dataUrl }
           : { id: 0, title: "", content: "", created_at: new Date().toISOString(), cover_image: pendingImage.dataUrl }
         );
         toast.success(`已從圖片編輯室導入「${pendingImage.name || '設計作品'}」作為封面圖`, { duration: 4000 });
       }
     };
-    
+
     checkPendingImage();
   }, [isMounted]);
 
   // 從 localStorage 恢復工作狀態（僅在客戶端掛載後）
   useEffect(() => {
     if (!isMounted) return;
-    
+
     try {
       // 檢查並清理過大的數據（超過 100KB 的舊數據可能是 base64 圖片）
       const savedPost = localStorage.getItem(STORAGE_KEY);
@@ -378,10 +378,10 @@ export default function BlogPage() {
           console.warn("Clearing oversized localStorage data");
           localStorage.removeItem(STORAGE_KEY);
         } else {
-        setCurrentPost(JSON.parse(savedPost));
+          setCurrentPost(JSON.parse(savedPost));
         }
       }
-      
+
       // 恢復設定（不恢復 customPrompt，每次都從空白開始，讓 AI 智能生成）
       const savedSettings = localStorage.getItem(STORAGE_SETTINGS_KEY);
       if (savedSettings) {
@@ -403,7 +403,7 @@ export default function BlogPage() {
   // 排除 cover_image 以避免超出 localStorage 配額
   useEffect(() => {
     if (!isMounted) return;
-    
+
     if (currentPost) {
       try {
         // 只儲存必要字段，排除可能很大的 cover_image
@@ -434,7 +434,7 @@ export default function BlogPage() {
   // 儲存設定到 localStorage（僅在客戶端掛載後）
   useEffect(() => {
     if (!isMounted) return;
-    
+
     try {
       localStorage.setItem(STORAGE_SETTINGS_KEY, JSON.stringify({
         topic,
@@ -485,29 +485,29 @@ export default function BlogPage() {
       .replace(/(<\/?(h[1-6]|p|div|ul|ol|li|blockquote|pre|table|tr|td|th|thead|tbody|section|article|header|footer|nav|aside)[^>]*>)/gi, '\n$1\n')
       .replace(/\n\s*\n/g, '\n')
       .trim();
-    
+
     // 添加縮進
     const lines = formatted.split('\n');
     let indent = 0;
     const indentSize = 2;
-    
+
     return lines.map(line => {
       const trimmedLine = line.trim();
       if (!trimmedLine) return '';
-      
+
       // 結束標籤減少縮進
       if (trimmedLine.match(/^<\/(h[1-6]|div|ul|ol|li|blockquote|pre|table|tr|td|th|thead|tbody|section|article|header|footer|nav|aside)/i)) {
         indent = Math.max(0, indent - indentSize);
       }
-      
+
       const indentedLine = ' '.repeat(indent) + trimmedLine;
-      
+
       // 開始標籤增加縮進（自閉合標籤除外）
-      if (trimmedLine.match(/^<(h[1-6]|div|ul|ol|blockquote|pre|table|thead|tbody|section|article|header|footer|nav|aside)[^>]*>$/i) && 
-          !trimmedLine.match(/\/>$/)) {
+      if (trimmedLine.match(/^<(h[1-6]|div|ul|ol|blockquote|pre|table|thead|tbody|section|article|header|footer|nav|aside)[^>]*>$/i) &&
+        !trimmedLine.match(/\/>$/)) {
         indent += indentSize;
       }
-      
+
       return indentedLine;
     }).filter(line => line.trim()).join('\n');
   };
@@ -761,7 +761,7 @@ export default function BlogPage() {
       toast.error("請先上傳圖片並選擇文章");
       return;
     }
-    
+
     setImageLoading(true);
     try {
       // 上傳到後端
@@ -769,15 +769,15 @@ export default function BlogPage() {
       if (uploadedCover) {
         formData.append("file", uploadedCover);
       }
-      
+
       const res = await api.post("/upload/media", formData, {
         headers: { "Content-Type": "multipart/form-data" }
       });
-      
+
       // 更新文章封面
       const imageUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}${res.data.url}`;
       setCurrentPost(prev => prev ? { ...prev, cover_image: imageUrl } : null);
-      
+
       // 清空上傳狀態
       handleRemoveUploadedCover();
     } catch (error: any) {
@@ -807,12 +807,12 @@ export default function BlogPage() {
   const handleGenerate = async (topicOverride?: string) => {
     const targetTopic = topicOverride || topic;
     if (!targetTopic.trim()) return;
-    
+
     // 🔑 開始新生成前，先清除上一則文章的狀態
     clearWorkspaceState();
-    
+
     setLoading(true);
-    
+
     try {
       const res = await api.post("/blog/generate", {
         topic: targetTopic.trim(),
@@ -840,9 +840,9 @@ export default function BlogPage() {
       toast.error("請先生成或選擇一篇文章");
       return null;
     }
-    
+
     setImageLoading(true);
-    
+
     try {
       const formData = new FormData();
       formData.append('topic', targetTitle);
@@ -859,9 +859,9 @@ export default function BlogPage() {
       if (targetPostId) {
         formData.append('post_id', String(targetPostId));
       }
-      
+
       const res = await api.post("/blog/generate-image", formData);
-      
+
       setCurrentPost(prev => prev ? { ...prev, cover_image: res.data.image_url } : null);
 
       // 自動保存到跨引擎圖庫
@@ -891,42 +891,40 @@ export default function BlogPage() {
     }
   };
 
-  // 根據主題生成預設圖片描述
+  // 根據主題生成預設圖片描述 (專業高品質 Prompt 模版)
   const generateDefaultImagePrompt = (articleTopic: string): string => {
-    // 清空舊的自訂描述，讓後端 AI 根據主題智能生成
-    // 或者提供一個基於主題的建議描述
-    return `關於「${articleTopic}」的專業封面圖片，高品質、有質感、符合主題氛圍`;
+    return `主題核心：「${articleTopic}」。這是一張極具視覺張力的專業封面圖片，採用高階電影級打光 (Cinematic Lighting)，呈現頂級攝影質感與細節。畫面構圖乾淨大氣，色彩飽滿且具有層次，主體清晰並帶有優美的景深效果。Style keywords: Masterpiece, best quality, ultra-detailed, photorealistic, dramatic lighting, 8k resolution, trending on ArtStation, award-winning photography, vivid colors, depth of field.`;
   };
 
   // 一鍵生成（文章 + 圖片）
   const handleAutoGenerate = async () => {
     if (!topic.trim()) return;
-    
+
     // 🔑 開始新生成前，先清除所有狀態（包括自訂描述，由 clearWorkspaceState 處理）
     clearWorkspaceState();
-    
+
     setAutoGenerating(true);
     setAutoStep("article");
-    
+
     try {
       // Step 1: 生成文章（handleGenerate 會再次調用 clearWorkspaceState，這是安全的）
       const res = await api.post("/blog/generate", {
         topic: topic.trim(),
         tone: tone
       });
-      
+
       if (!res.data) {
         setAutoGenerating(false);
         setAutoStep(null);
         return;
       }
-      
+
       setCurrentPost({ ...res.data, cover_image: undefined });
       fetchHistory();
-      
+
       // Step 2: 生成圖片（此時 customPrompt 為空，後端會根據 article.title 智能生成）
       setAutoStep("image");
-      
+
       const formData = new FormData();
       formData.append('topic', res.data.title);
       formData.append('style', tone);
@@ -935,7 +933,7 @@ export default function BlogPage() {
       // 傳送文章 ID，讓後端自動更新封面圖片
       formData.append('post_id', String(res.data.id));
       // customPrompt 為空，不傳送，讓後端智能生成
-      
+
       const imgRes = await api.post("/blog/generate-image", formData);
       setCurrentPost(prev => prev ? { ...prev, cover_image: imgRes.data.image_url } : null);
 
@@ -954,10 +952,10 @@ export default function BlogPage() {
           }).catch(console.error);
         });
       }
-      
+
       // 生成完成後，將預設提示詞填入欄位供使用者參考/修改
       setCustomPrompt(generateDefaultImagePrompt(res.data.title));
-      
+
       setTopic("");
     } catch (error: any) {
       toast.error(error.response?.data?.detail || "生成失敗");
@@ -978,7 +976,7 @@ export default function BlogPage() {
   // 複製文章內容
   const handleCopy = async () => {
     if (!currentPost) return;
-    
+
     try {
       const tempDiv = document.createElement("div");
       tempDiv.innerHTML = currentPost.content;
@@ -994,7 +992,7 @@ export default function BlogPage() {
   // 下載圖片
   const handleDownloadImage = async () => {
     if (!currentPost?.cover_image) return;
-    
+
     try {
       const link = document.createElement("a");
       link.href = currentPost.cover_image;
@@ -1052,10 +1050,10 @@ export default function BlogPage() {
   // 刪除單篇文章
   const handleDeletePost = async (postId: number, e: React.MouseEvent) => {
     e.stopPropagation();
-    
+
     const confirmed = window.confirm("確定要刪除這篇文章嗎？");
     if (!confirmed) return;
-    
+
     setDeletingId(postId);
     try {
       await api.delete(`/blog/posts/${postId}`);
@@ -1076,7 +1074,7 @@ export default function BlogPage() {
       "⚠️ 警告：此操作將永久刪除所有歷史紀錄！\n\n刪除後無法恢復，確定要繼續嗎？"
     );
     if (!confirmed) return;
-    
+
     try {
       await api.delete("/blog/posts/clear");
       setHistory([]);
@@ -1122,12 +1120,12 @@ export default function BlogPage() {
   // 批量刪除
   const handleBatchDelete = async () => {
     if (selectedIds.size === 0) return;
-    
+
     const confirmed = window.confirm(
       `確定要刪除選取的 ${selectedIds.size} 篇文章嗎？\n\n刪除後無法恢復。`
     );
     if (!confirmed) return;
-    
+
     setIsBatchDeleting(true);
     try {
       await api.post("/blog/posts/batch-delete", {
@@ -1184,15 +1182,15 @@ export default function BlogPage() {
 
   return (
     <div className="flex flex-col lg:grid lg:grid-cols-[1fr_320px] gap-6">
-      
+
       {/* --- 左側：主要工作區 --- */}
       <div className="flex flex-col gap-4 min-w-0">
-        
+
         {/* 步驟指示器 */}
-        <StepIndicator 
-          currentStep={getCurrentStep()} 
-          hasArticle={!!currentPost} 
-          hasImage={!!currentPost?.cover_image} 
+        <StepIndicator
+          currentStep={getCurrentStep()}
+          hasArticle={!!currentPost}
+          hasImage={!!currentPost?.cover_image}
         />
 
         {/* 文章生成輸入區 */}
@@ -1205,8 +1203,8 @@ export default function BlogPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-col sm:flex-row gap-3">
-              <Input 
-                placeholder="輸入文章主題..." 
+              <Input
+                placeholder="輸入文章主題..."
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -1219,8 +1217,8 @@ export default function BlogPage() {
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-600">
                   {TONE_OPTIONS.map(opt => (
-                    <SelectItem 
-                      key={opt.value} 
+                    <SelectItem
+                      key={opt.value}
                       value={opt.value}
                       className="text-white hover:bg-slate-700 focus:bg-slate-700"
                     >
@@ -1230,20 +1228,20 @@ export default function BlogPage() {
                 </SelectContent>
               </Select>
             </div>
-            
+
             {/* 生成按鈕組 */}
             <div className="flex flex-col sm:flex-row gap-3">
-              <Button 
+              <Button
                 variant="outline"
                 className="flex-1 border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white"
                 onClick={() => handleGenerate()}
                 disabled={isAnyLoading || !topic.trim()}
               >
                 {loading && !autoGenerating ? (
-                  <><Loader2 className="animate-spin w-4 h-4 mr-2"/>生成中...</>
+                  <><Loader2 className="animate-spin w-4 h-4 mr-2" />生成中...</>
                 ) : (
                   <>
-                    <Wand2 className="w-4 h-4 mr-2"/>
+                    <Wand2 className="w-4 h-4 mr-2" />
                     僅生成文章
                     <Badge variant="outline" className="ml-2 text-[10px] border-slate-500 text-slate-400 px-1.5 py-0">
                       5點
@@ -1251,19 +1249,19 @@ export default function BlogPage() {
                   </>
                 )}
               </Button>
-              <Button 
+              <Button
                 className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white"
                 onClick={handleAutoGenerate}
                 disabled={isAnyLoading || !topic.trim()}
               >
                 {autoGenerating ? (
                   <>
-                    <Loader2 className="animate-spin w-4 h-4 mr-2"/>
+                    <Loader2 className="animate-spin w-4 h-4 mr-2" />
                     {autoStep === "article" ? "生成文章中..." : "生成圖片中..."}
                   </>
                 ) : (
                   <>
-                    <Zap className="w-4 h-4 mr-2"/>
+                    <Zap className="w-4 h-4 mr-2" />
                     一鍵生成全部
                     <Badge className="ml-2 text-[10px] bg-white/20 border-0 px-1.5 py-0">
                       {getTotalCost()}點
@@ -1280,11 +1278,11 @@ export default function BlogPage() {
           <CardHeader className="border-b border-slate-700 py-3 bg-slate-800 shrink-0 space-y-2">
             {/* 標題列 */}
             <CardTitle className="text-base flex items-start gap-2 text-white min-w-0">
-              <FileText className="w-4 h-4 shrink-0 text-indigo-400 mt-0.5"/>
+              <FileText className="w-4 h-4 shrink-0 text-indigo-400 mt-0.5" />
               <span className="break-words whitespace-normal line-clamp-2">{currentPost ? currentPost.title : "文章預覽"}</span>
               {currentPost?.cover_image && (
                 <Badge className="shrink-0 text-xs bg-green-500/20 text-green-400 border-0">
-                  <CheckCircle2 className="w-3 h-3 mr-1"/>
+                  <CheckCircle2 className="w-3 h-3 mr-1" />
                   已完成
                 </Badge>
               )}
@@ -1300,9 +1298,9 @@ export default function BlogPage() {
                   title="複製純文字"
                 >
                   {copied ? (
-                    <><Check className="w-4 h-4 sm:mr-1.5 text-green-400"/><span className="hidden sm:inline">已複製</span></>
+                    <><Check className="w-4 h-4 sm:mr-1.5 text-green-400" /><span className="hidden sm:inline">已複製</span></>
                   ) : (
-                    <><Copy className="w-4 h-4 sm:mr-1.5"/><span className="hidden sm:inline">複製</span></>
+                    <><Copy className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">複製</span></>
                   )}
                 </Button>
                 <Button
@@ -1312,7 +1310,7 @@ export default function BlogPage() {
                   className="h-8 px-2 sm:px-3 text-slate-400 hover:text-white hover:bg-slate-700"
                   title="複製 HTML 原始碼"
                 >
-                  <Code className="w-4 h-4 sm:mr-1.5"/><span className="hidden sm:inline">原始碼</span>
+                  <Code className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">原始碼</span>
                 </Button>
                 {/* 排程上架按鈕 */}
                 <Button
@@ -1323,7 +1321,7 @@ export default function BlogPage() {
                     tempDiv.innerHTML = currentPost.content;
                     const textContent = tempDiv.textContent || tempDiv.innerText || "";
                     const summary = textContent.slice(0, 200);
-                    
+
                     setScheduleContent({
                       type: "blog_post",
                       title: currentPost.title,
@@ -1336,25 +1334,25 @@ export default function BlogPage() {
                   }}
                   className="h-8 px-2 sm:px-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white"
                 >
-                  <Clock className="w-4 h-4 sm:mr-1.5"/><span className="hidden sm:inline">排程上架</span>
+                  <Clock className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">排程上架</span>
                 </Button>
-                
+
                 {/* WordPress 發布按鈕 */}
                 <Button
                   size="sm"
                   onClick={handleOpenWordPressDialog}
                   className="h-8 px-2 sm:px-3 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white"
                 >
-                  <Globe className="w-4 h-4 sm:mr-1.5"/><span className="hidden sm:inline">WordPress</span>
+                  <Globe className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">WordPress</span>
                 </Button>
                 {/* 字數 & 閱讀時間 */}
                 <span className="ml-auto flex items-center gap-4 text-xs text-slate-500">
                   <span className="flex items-center gap-1">
-                    <Eye className="w-3.5 h-3.5"/>
+                    <Eye className="w-3.5 h-3.5" />
                     {getWordCount(currentPost.content)} 字
                   </span>
                   <span className="flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5"/>
+                    <Clock className="w-3.5 h-3.5" />
                     約 {getReadTime(currentPost.content)} 分鐘閱讀
                   </span>
                 </span>
@@ -1367,7 +1365,7 @@ export default function BlogPage() {
               <div className="flex flex-col items-center justify-center min-h-[400px] text-slate-400">
                 <div className="relative">
                   <div className="absolute inset-0 bg-indigo-500/20 rounded-full blur-xl animate-pulse"></div>
-                  <Loader2 className="w-14 h-14 animate-spin text-indigo-500 relative z-10"/>
+                  <Loader2 className="w-14 h-14 animate-spin text-indigo-500 relative z-10" />
                 </div>
                 <p className="mt-5 text-sm font-medium">AI 正在撰寫文章...</p>
                 <p className="text-xs text-slate-500 mt-1">預計 10-30 秒</p>
@@ -1384,22 +1382,22 @@ export default function BlogPage() {
                   {currentPost.cover_image ? (
                     <div className="relative group w-full">
                       <div className="w-full aspect-video overflow-hidden bg-slate-800">
-                        <img 
-                          src={currentPost.cover_image} 
-                          alt="封面圖片" 
+                        <img
+                          src={currentPost.cover_image}
+                          alt="封面圖片"
                           className={cn(
                             "w-full h-full object-cover transition-all duration-300",
                             imageLoading && "blur-sm scale-105"
                           )}
                         />
                       </div>
-                      
+
                       {/* 重新生成時的載入覆蓋層 */}
                       {imageLoading && (
                         <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm flex flex-col items-center justify-center z-10">
                           <div className="relative">
                             <div className="absolute inset-0 bg-amber-500/30 rounded-full blur-xl animate-pulse"></div>
-                            <Loader2 className="w-14 h-14 animate-spin text-amber-500 relative z-10"/>
+                            <Loader2 className="w-14 h-14 animate-spin text-amber-500 relative z-10" />
                           </div>
                           <p className="mt-4 text-base font-medium text-white">正在重新生成圖片...</p>
                           <p className="text-sm text-slate-400 mt-1">預計 30-90 秒</p>
@@ -1410,7 +1408,7 @@ export default function BlogPage() {
                           </div>
                         </div>
                       )}
-                      
+
                       <div className={cn(
                         "absolute top-3 right-3 flex gap-2 transition-opacity",
                         imageLoading ? "opacity-0" : "opacity-0 group-hover:opacity-100"
@@ -1420,21 +1418,21 @@ export default function BlogPage() {
                           onClick={handleDownloadImage}
                           className="h-8 bg-black/70 hover:bg-black/90 text-white border-0"
                         >
-                          <Download className="w-4 h-4 mr-1"/>下載
+                          <Download className="w-4 h-4 mr-1" />下載
                         </Button>
                         <Button
                           size="sm"
                           onClick={handleOpenInDesignStudio}
                           className="h-8 bg-indigo-600/80 hover:bg-indigo-600 text-white border-0"
                         >
-                          <Palette className="w-4 h-4 mr-1"/>編輯
+                          <Palette className="w-4 h-4 mr-1" />編輯
                         </Button>
                         <Button
                           size="sm"
                           onClick={() => setShowImageEditor(true)}
                           className="h-8 bg-purple-600/80 hover:bg-purple-600 text-white border-0"
                         >
-                          <Type className="w-4 h-4 mr-1"/>加標題
+                          <Type className="w-4 h-4 mr-1" />加標題
                         </Button>
                         <Button
                           size="sm"
@@ -1443,9 +1441,9 @@ export default function BlogPage() {
                           className="h-8 bg-black/70 hover:bg-black/90 text-white border-0"
                         >
                           {imageLoading ? (
-                            <Loader2 className="w-4 h-4 animate-spin"/>
+                            <Loader2 className="w-4 h-4 animate-spin" />
                           ) : (
-                            <><RefreshCw className="w-4 h-4 mr-1"/>重新生成</>
+                            <><RefreshCw className="w-4 h-4 mr-1" />重新生成</>
                           )}
                         </Button>
                         <Button
@@ -1453,7 +1451,7 @@ export default function BlogPage() {
                           onClick={() => setShowImageOptions(!showImageOptions)}
                           className="h-8 bg-black/70 hover:bg-black/90 text-white border-0"
                         >
-                          <ChevronDown className="w-4 h-4"/>
+                          <ChevronDown className="w-4 h-4" />
                         </Button>
                       </div>
                       <Badge className={cn(
@@ -1467,7 +1465,7 @@ export default function BlogPage() {
                     <div className="w-full min-h-[250px] bg-slate-800 flex flex-col items-center justify-center text-center">
                       <div className="relative">
                         <div className="absolute inset-0 bg-amber-500/20 rounded-full blur-xl animate-pulse"></div>
-                        <Loader2 className="w-12 h-12 animate-spin text-amber-500 relative z-10"/>
+                        <Loader2 className="w-12 h-12 animate-spin text-amber-500 relative z-10" />
                       </div>
                       <p className="mt-4 text-sm text-slate-400">AI 正在繪製封面圖片...</p>
                       <p className="text-xs text-slate-500 mt-1">預計 30-90 秒</p>
@@ -1485,7 +1483,7 @@ export default function BlogPage() {
                       )}>
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center text-slate-300">
-                            <ImageIcon className="w-5 h-5 mr-2 text-amber-400"/>
+                            <ImageIcon className="w-5 h-5 mr-2 text-amber-400" />
                             <span className="font-medium">封面圖片</span>
                             <Badge variant="outline" className="ml-2 text-xs border-slate-600 text-slate-500">
                               未設定
@@ -1496,7 +1494,7 @@ export default function BlogPage() {
                             className="text-xs text-slate-400 hover:text-white flex items-center"
                           >
                             {showImageOptions ? "收起" : "更多選項"}
-                            {showImageOptions ? <ChevronUp className="w-4 h-4 ml-1"/> : <ChevronDown className="w-4 h-4 ml-1"/>}
+                            {showImageOptions ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />}
                           </button>
                         </div>
 
@@ -1534,13 +1532,13 @@ export default function BlogPage() {
                             {uploadedCoverPreview ? (
                               <div className="relative w-full rounded-xl overflow-hidden border border-indigo-500/30 bg-slate-800 group shadow-lg shadow-indigo-500/5">
                                 <div className="aspect-video w-full overflow-hidden">
-                                  <img 
-                                    src={uploadedCoverPreview} 
-                                    alt="上傳的封面圖片" 
+                                  <img
+                                    src={uploadedCoverPreview}
+                                    alt="上傳的封面圖片"
                                     className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                                   />
                                 </div>
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"/>
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
                                 <div className="absolute bottom-0 left-0 right-0 p-4 flex justify-between items-end">
                                   <div className="flex flex-col gap-1">
                                     <span className="text-sm text-white font-medium truncate max-w-[200px]">
@@ -1557,7 +1555,7 @@ export default function BlogPage() {
                                       onClick={handleRemoveUploadedCover}
                                       className="h-8 bg-black/50 hover:bg-red-500/20 text-white border-slate-600 hover:border-red-500/50"
                                     >
-                                      <Trash2 className="w-4 h-4"/>
+                                      <Trash2 className="w-4 h-4" />
                                     </Button>
                                     <Button
                                       size="sm"
@@ -1566,7 +1564,7 @@ export default function BlogPage() {
                                       className="h-8 bg-indigo-500 hover:bg-indigo-600 text-white"
                                     >
                                       {imageLoading ? (
-                                        <Loader2 className="w-4 h-4 animate-spin"/>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
                                       ) : (
                                         <>套用為封面</>
                                       )}
@@ -1581,8 +1579,8 @@ export default function BlogPage() {
                                 onDrop={handleCoverUploadDrop}
                                 className={cn(
                                   "relative w-full rounded-xl border-2 border-dashed transition-all overflow-hidden",
-                                  isUploadDragging 
-                                    ? "border-indigo-400 bg-indigo-500/10 scale-[1.01]" 
+                                  isUploadDragging
+                                    ? "border-indigo-400 bg-indigo-500/10 scale-[1.01]"
                                     : "border-slate-600 hover:border-indigo-500/50 hover:bg-slate-800/30"
                                 )}
                               >
@@ -1602,7 +1600,7 @@ export default function BlogPage() {
                                       <Upload className={cn(
                                         "w-7 h-7 transition-all",
                                         isUploadDragging ? "text-indigo-400 animate-bounce" : "text-slate-400"
-                                      )}/>
+                                      )} />
                                     </div>
                                     <p className="text-sm text-slate-200 font-medium mb-1">
                                       {isUploadDragging ? "放開以上傳圖片" : "拖放或點擊上傳封面照片"}
@@ -1627,7 +1625,7 @@ export default function BlogPage() {
                             <div className="p-3 bg-gradient-to-r from-amber-500/10 to-orange-500/10 rounded-lg border border-amber-500/30">
                               <div className="flex items-center justify-between mb-2">
                                 <label className="text-sm text-amber-300 font-medium flex items-center gap-2">
-                                  <Wand2 className="w-4 h-4"/>
+                                  <Wand2 className="w-4 h-4" />
                                   自訂圖片描述
                                 </label>
                                 <div className="flex items-center gap-2">
@@ -1638,7 +1636,7 @@ export default function BlogPage() {
                                       className="text-xs px-2 py-1 rounded bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 hover:text-indigo-200 border border-indigo-500/30 transition-all flex items-center gap-1"
                                       title="根據文章主題自動填入建議描述"
                                     >
-                                      <Sparkles className="w-3 h-3"/>
+                                      <Sparkles className="w-3 h-3" />
                                       使用智能建議
                                     </button>
                                   )}
@@ -1692,7 +1690,7 @@ export default function BlogPage() {
                             <div className="w-full">
                               <div className="flex items-center justify-between mb-2">
                                 <label className="text-xs text-slate-300 flex items-center gap-1.5 font-medium">
-                                  <ImagePlus className="w-4 h-4 text-amber-400"/>
+                                  <ImagePlus className="w-4 h-4 text-amber-400" />
                                   參考圖片
                                   <span className="text-slate-500 font-normal">(選填)</span>
                                 </label>
@@ -1701,7 +1699,7 @@ export default function BlogPage() {
                                     onClick={handleRemoveReferenceImage}
                                     className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1 px-2 py-1 rounded hover:bg-red-500/10 transition-colors"
                                   >
-                                    <Trash2 className="w-3 h-3"/>
+                                    <Trash2 className="w-3 h-3" />
                                     移除圖片
                                   </button>
                                 )}
@@ -1709,13 +1707,13 @@ export default function BlogPage() {
                               {referenceImagePreview ? (
                                 <div className="relative w-full rounded-xl overflow-hidden border border-amber-500/30 bg-slate-800 group shadow-lg shadow-amber-500/5">
                                   <div className="aspect-[21/9] w-full overflow-hidden">
-                                    <img 
-                                      src={referenceImagePreview} 
-                                      alt="參考圖片" 
+                                    <img
+                                      src={referenceImagePreview}
+                                      alt="參考圖片"
                                       className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                                     />
                                   </div>
-                                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"/>
+                                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
                                   <div className="absolute bottom-0 left-0 right-0 p-4 flex justify-between items-end">
                                     <div className="flex flex-col gap-1">
                                       <span className="text-sm text-white font-medium truncate max-w-[200px]">
@@ -1737,8 +1735,8 @@ export default function BlogPage() {
                                   onDrop={handleDrop}
                                   className={cn(
                                     "relative w-full rounded-xl border-2 border-dashed transition-all overflow-hidden",
-                                    isDragging 
-                                      ? "border-amber-400 bg-amber-500/10 scale-[1.01]" 
+                                    isDragging
+                                      ? "border-amber-400 bg-amber-500/10 scale-[1.01]"
                                       : "border-slate-600 hover:border-amber-500/50 hover:bg-slate-800/30"
                                   )}
                                 >
@@ -1758,7 +1756,7 @@ export default function BlogPage() {
                                         <Upload className={cn(
                                           "w-6 h-6 transition-all",
                                           isDragging ? "text-amber-400 animate-bounce" : "text-slate-400"
-                                        )}/>
+                                        )} />
                                       </div>
                                       <p className="text-sm text-slate-200 font-medium mb-1">
                                         {isDragging ? "放開以上傳圖片" : "拖放或點擊上傳參考圖片"}
@@ -1800,8 +1798,8 @@ export default function BlogPage() {
                                   </SelectTrigger>
                                   <SelectContent className="bg-slate-800 border-slate-600">
                                     {IMAGE_QUALITY_OPTIONS.map(opt => (
-                                      <SelectItem 
-                                        key={opt.value} 
+                                      <SelectItem
+                                        key={opt.value}
                                         value={opt.value}
                                         className="text-white hover:bg-slate-700 focus:bg-slate-700"
                                       >
@@ -1812,12 +1810,12 @@ export default function BlogPage() {
                                 </Select>
                               </div>
                               <div className="flex items-end">
-                                <Button 
+                                <Button
                                   className="w-full h-9 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white"
                                   onClick={() => handleGenerateImage()}
                                   disabled={imageLoading}
                                 >
-                                  <Sparkles className="w-4 h-4 mr-2"/>生成圖片
+                                  <Sparkles className="w-4 h-4 mr-2" />生成圖片
                                 </Button>
                               </div>
                             </div>
@@ -1825,12 +1823,12 @@ export default function BlogPage() {
                         )}
 
                         {imageSourceMode === "generate" && !showImageOptions && (
-                          <Button 
+                          <Button
                             className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white"
                             onClick={() => handleGenerateImage()}
                             disabled={imageLoading}
                           >
-                            <Sparkles className="w-4 h-4 mr-2"/>生成封面圖片 ({getImageCost()}點)
+                            <Sparkles className="w-4 h-4 mr-2" />生成封面圖片 ({getImageCost()}點)
                           </Button>
                         )}
                       </div>
@@ -1846,7 +1844,7 @@ export default function BlogPage() {
                       <div className="p-3 bg-gradient-to-r from-amber-500/10 to-orange-500/10 rounded-lg border border-amber-500/30">
                         <div className="flex items-center justify-between mb-2">
                           <label className="text-sm text-amber-300 font-medium flex items-center gap-2">
-                            <Wand2 className="w-4 h-4"/>
+                            <Wand2 className="w-4 h-4" />
                             自訂圖片描述
                           </label>
                           <div className="flex items-center gap-2">
@@ -1857,7 +1855,7 @@ export default function BlogPage() {
                                 className="text-xs px-2 py-1 rounded bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 hover:text-indigo-200 border border-indigo-500/30 transition-all flex items-center gap-1"
                                 title="根據文章主題自動填入建議描述"
                               >
-                                <Sparkles className="w-3 h-3"/>
+                                <Sparkles className="w-3 h-3" />
                                 使用智能建議
                               </button>
                             )}
@@ -1911,7 +1909,7 @@ export default function BlogPage() {
                       <div className="w-full">
                         <div className="flex items-center justify-between mb-2">
                           <label className="text-xs text-slate-300 flex items-center gap-1.5 font-medium">
-                            <ImagePlus className="w-4 h-4 text-amber-400"/>
+                            <ImagePlus className="w-4 h-4 text-amber-400" />
                             參考圖片
                             <span className="text-slate-500 font-normal">(選填)</span>
                           </label>
@@ -1920,7 +1918,7 @@ export default function BlogPage() {
                               onClick={handleRemoveReferenceImage}
                               className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1 px-2 py-1 rounded hover:bg-red-500/10 transition-colors"
                             >
-                              <Trash2 className="w-3 h-3"/>
+                              <Trash2 className="w-3 h-3" />
                               移除圖片
                             </button>
                           )}
@@ -1928,13 +1926,13 @@ export default function BlogPage() {
                         {referenceImagePreview ? (
                           <div className="relative w-full rounded-xl overflow-hidden border border-amber-500/30 bg-slate-800 group shadow-lg shadow-amber-500/5">
                             <div className="aspect-[21/9] w-full overflow-hidden">
-                              <img 
-                                src={referenceImagePreview} 
-                                alt="參考圖片" 
+                              <img
+                                src={referenceImagePreview}
+                                alt="參考圖片"
                                 className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                               />
                             </div>
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"/>
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
                             <div className="absolute bottom-0 left-0 right-0 p-4 flex justify-between items-end">
                               <div className="flex flex-col gap-1">
                                 <span className="text-sm text-white font-medium truncate max-w-[200px]">
@@ -1956,8 +1954,8 @@ export default function BlogPage() {
                             onDrop={handleDrop}
                             className={cn(
                               "relative w-full rounded-xl border-2 border-dashed transition-all overflow-hidden",
-                              isDragging 
-                                ? "border-amber-400 bg-amber-500/10 scale-[1.01]" 
+                              isDragging
+                                ? "border-amber-400 bg-amber-500/10 scale-[1.01]"
                                 : "border-slate-600 hover:border-amber-500/50 hover:bg-slate-800/30"
                             )}
                           >
@@ -1977,7 +1975,7 @@ export default function BlogPage() {
                                   <Upload className={cn(
                                     "w-6 h-6 transition-all",
                                     isDragging ? "text-amber-400 animate-bounce" : "text-slate-400"
-                                  )}/>
+                                  )} />
                                 </div>
                                 <p className="text-sm text-slate-200 font-medium mb-1">
                                   {isDragging ? "放開以上傳圖片" : "拖放或點擊上傳參考圖片"}
@@ -2001,8 +1999,8 @@ export default function BlogPage() {
                             </SelectTrigger>
                             <SelectContent className="bg-slate-800 border-slate-600">
                               {IMAGE_QUALITY_OPTIONS.map(opt => (
-                                <SelectItem 
-                                  key={opt.value} 
+                                <SelectItem
+                                  key={opt.value}
                                   value={opt.value}
                                   className="text-white hover:bg-slate-700 focus:bg-slate-700"
                                 >
@@ -2013,15 +2011,15 @@ export default function BlogPage() {
                           </Select>
                         </div>
                         <div className="flex items-end">
-                          <Button 
+                          <Button
                             className="w-full h-9 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white disabled:opacity-50"
                             onClick={() => handleGenerateImage()}
                             disabled={imageLoading}
                           >
                             {imageLoading ? (
-                              <><Loader2 className="w-4 h-4 mr-2 animate-spin"/>生成中...</>
+                              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />生成中...</>
                             ) : (
-                              <><RefreshCw className="w-4 h-4 mr-2"/>重新生成</>
+                              <><RefreshCw className="w-4 h-4 mr-2" />重新生成</>
                             )}
                           </Button>
                         </div>
@@ -2065,7 +2063,7 @@ export default function BlogPage() {
                         原始碼
                       </button>
                     </div>
-                    
+
                     {viewMode === "source" && (
                       <div className="flex items-center gap-2">
                         {hasUnsavedChanges && (
@@ -2111,11 +2109,11 @@ export default function BlogPage() {
                     <div className="p-4 sm:p-6 md:p-10 lg:p-12 bg-gradient-to-b from-slate-900 to-slate-950">
                       {/* 專業文章預覽容器 - 模擬真實部落格排版 */}
                       <div className="max-w-3xl mx-auto w-full">
-                        <article 
+                        <article
                           className="blog-article-preview break-words"
-                          dangerouslySetInnerHTML={{ __html: currentPost.content }} 
+                          dangerouslySetInnerHTML={{ __html: currentPost.content }}
                         />
-                        
+
                         {/* SEO 預覽提示 */}
                         <div className="mt-10 pt-6 border-t border-slate-700/50">
                           <div className="flex items-center gap-2 text-xs text-slate-500">
@@ -2148,7 +2146,7 @@ export default function BlogPage() {
                           spellCheck={false}
                         />
                       </div>
-                      
+
                       {/* HTML 編輯提示 */}
                       <div className="mt-3 p-3 rounded-lg bg-slate-800/50 border border-slate-700">
                         <p className="text-xs text-slate-400 flex items-start gap-2">
@@ -2171,9 +2169,9 @@ export default function BlogPage() {
               <div className="flex flex-col items-center justify-center min-h-[400px] text-slate-500">
                 <div className="relative">
                   <div className="absolute inset-0 bg-slate-500/10 rounded-full blur-2xl"></div>
-                  <Wand2 className="w-16 h-16 opacity-20 relative z-10"/>
+                  <Wand2 className="w-16 h-16 opacity-20 relative z-10" />
                 </div>
-                <p className="mt-4 text-center">輸入主題開始生成<br/>或從右側選擇歷史文章</p>
+                <p className="mt-4 text-center">輸入主題開始生成<br />或從右側選擇歷史文章</p>
               </div>
             )}
           </CardContent>
@@ -2187,7 +2185,7 @@ export default function BlogPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-gradient-to-br from-violet-500/20 to-indigo-500/20 border border-violet-500/20">
-                <History className="w-4 h-4 text-violet-400"/>
+                <History className="w-4 h-4 text-violet-400" />
               </div>
               <div>
                 <CardTitle className="text-sm font-semibold text-white">
@@ -2195,8 +2193,8 @@ export default function BlogPage() {
                 </CardTitle>
                 {history.length > 0 && (
                   <p className="text-[11px] text-slate-400 mt-0.5">
-                    {isSelectionMode && selectedIds.size > 0 
-                      ? `已選取 ${selectedIds.size} / ${history.length} 篇` 
+                    {isSelectionMode && selectedIds.size > 0
+                      ? `已選取 ${selectedIds.size} / ${history.length} 篇`
                       : `共 ${history.length} 篇文章`}
                   </p>
                 )}
@@ -2210,8 +2208,8 @@ export default function BlogPage() {
                   onClick={toggleSelectionMode}
                   className={cn(
                     "h-8 w-8 p-0 rounded-lg transition-all",
-                    isSelectionMode 
-                      ? "text-violet-400 bg-violet-500/20 hover:bg-violet-500/30 ring-1 ring-violet-500/30" 
+                    isSelectionMode
+                      ? "text-violet-400 bg-violet-500/20 hover:bg-violet-500/30 ring-1 ring-violet-500/30"
                       : "text-slate-400 hover:text-white hover:bg-slate-700/50"
                   )}
                   title={isSelectionMode ? "取消選擇" : "批量選擇"}
@@ -2269,9 +2267,9 @@ export default function BlogPage() {
           <ScrollArea className="h-full max-h-[calc(100vh-16rem)]">
             <div className="p-3 space-y-2">
               {history.map((post, index) => (
-                <div 
+                <div
                   key={post.id}
-                  onClick={() => isSelectionMode ? toggleSelectPost(post.id, { stopPropagation: () => {} } as React.MouseEvent) : setCurrentPost(post)}
+                  onClick={() => isSelectionMode ? toggleSelectPost(post.id, { stopPropagation: () => { } } as React.MouseEvent) : setCurrentPost(post)}
                   style={{ animationDelay: `${index * 30}ms` }}
                   className={cn(
                     "group relative rounded-xl cursor-pointer transition-all duration-200 animate-in fade-in-0 slide-in-from-right-2",
@@ -2279,19 +2277,19 @@ export default function BlogPage() {
                     isSelectionMode && selectedIds.has(post.id)
                       ? "bg-violet-500/10 border-violet-500/50 ring-2 ring-violet-500/20 shadow-lg shadow-violet-500/5"
                       : currentPost?.id === post.id && !isSelectionMode
-                        ? "bg-indigo-500/10 border-indigo-500/50 ring-2 ring-indigo-500/20 shadow-lg shadow-indigo-500/5" 
+                        ? "bg-indigo-500/10 border-indigo-500/50 ring-2 ring-indigo-500/20 shadow-lg shadow-indigo-500/5"
                         : "bg-slate-800/50 border-slate-700/50 hover:bg-slate-800 hover:border-slate-600/50 hover:shadow-md"
                   )}
                 >
                   <div className="flex gap-3 p-3">
                     {/* 選擇模式下的 Checkbox */}
                     {isSelectionMode && (
-                      <div 
+                      <div
                         onClick={(e) => toggleSelectPost(post.id, e)}
                         className={cn(
                           "mt-1 w-5 h-5 rounded-md flex items-center justify-center shrink-0 transition-all cursor-pointer",
-                          selectedIds.has(post.id) 
-                            ? "bg-gradient-to-br from-violet-500 to-indigo-500 shadow-lg shadow-violet-500/30" 
+                          selectedIds.has(post.id)
+                            ? "bg-gradient-to-br from-violet-500 to-indigo-500 shadow-lg shadow-violet-500/30"
                             : "border-2 border-slate-500/50 hover:border-violet-400/50 hover:bg-violet-500/10"
                         )}
                       >
@@ -2300,14 +2298,14 @@ export default function BlogPage() {
                         )}
                       </div>
                     )}
-                    
+
                     {/* 封面縮圖 */}
                     {!isSelectionMode && (
                       <div className="w-16 h-16 rounded-lg overflow-hidden shrink-0 bg-gradient-to-br from-slate-700 to-slate-800 border border-slate-600/30">
                         {post.cover_image ? (
-                          <img 
-                            src={post.cover_image} 
-                            alt="" 
+                          <img
+                            src={post.cover_image}
+                            alt=""
                             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
                           />
                         ) : (
@@ -2317,7 +2315,7 @@ export default function BlogPage() {
                         )}
                       </div>
                     )}
-                    
+
                     <div className="flex-1 min-w-0 flex flex-col justify-between">
                       <div>
                         <div className="flex items-start justify-between gap-2">
@@ -2365,7 +2363,7 @@ export default function BlogPage() {
                       </div>
                     </div>
                   </div>
-                  
+
                   {/* 選中狀態的發光效果 */}
                   {(isSelectionMode && selectedIds.has(post.id)) || (currentPost?.id === post.id && !isSelectionMode) ? (
                     <div className="absolute inset-0 pointer-events-none">
@@ -2374,14 +2372,14 @@ export default function BlogPage() {
                   ) : null}
                 </div>
               ))}
-              
+
               {/* 空狀態 - 更精緻的設計 */}
               {history.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-16 px-4">
                   <div className="relative mb-4">
                     <div className="absolute inset-0 bg-gradient-to-br from-violet-500/20 to-indigo-500/20 rounded-full blur-2xl scale-150" />
                     <div className="relative p-4 rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50">
-                      <History className="w-10 h-10 text-slate-500"/>
+                      <History className="w-10 h-10 text-slate-500" />
                     </div>
                   </div>
                   <h4 className="text-sm font-medium text-slate-300 mb-1">尚無歷史紀錄</h4>
@@ -2674,8 +2672,8 @@ export default function BlogPage() {
             </DialogTitle>
           </DialogHeader>
           <div className="mt-4">
-            <ImageTextEditor 
-              imageUrl={currentPost?.cover_image} 
+            <ImageTextEditor
+              imageUrl={currentPost?.cover_image}
               onExport={(dataUrl) => {
                 // 更新封面圖片為編輯後的版本
                 if (currentPost) {
