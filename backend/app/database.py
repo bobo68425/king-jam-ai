@@ -8,10 +8,10 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://kingjam:kingjam_pass@db:5432/kingjam_db")
 
 # ============================================================
-# 連接池配置（優化高併發性能）
+# 連接池配置（優化高併發性能，針對 Cloud Run 水平擴展）
 # ============================================================
-POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "20"))          # 基礎連接池大小
-MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "30"))    # 額外可創建的連接數
+POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "5"))           # 基礎連接池大小 (調小以適應多實例)
+MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "10"))    # 額外可創建的連接數 (調小以防止耗盡連線數)
 POOL_TIMEOUT = int(os.getenv("DB_POOL_TIMEOUT", "30"))    # 等待連接的超時時間（秒）
 POOL_RECYCLE = int(os.getenv("DB_POOL_RECYCLE", "1800"))  # 連接回收時間（秒），防止連接過期
 
