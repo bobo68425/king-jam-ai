@@ -180,50 +180,43 @@ async def check_scene_status(request_id: str, model_id: str) -> Dict[str, Any]:
     if status == "COMPLETED":
         video_url = None
         
-        # 方法 1: 使用 fal_client SDK 取得結果
+        # 使用 REST GET 取得結果
+        # fal.ai docs: GET /requests/{id} 返回 { status, response: { video: { url } } }
+        result_url = f"https://queue.fal.run/{model_id}/requests/{request_id}"
         try:
-            import os
-            os.environ["FAL_KEY"] = FAL_KEY
-            import fal_client
-            
-            # fal_client.result() 是同步方法
-            import asyncio
-            loop = asyncio.get_event_loop()
-            result_data = await loop.run_in_executor(
-                None,
-                lambda: fal_client.result(model_id, request_id)
-            )
-            
-            logger.info(f"[fal] fal_client result keys: {list(result_data.keys()) if isinstance(result_data, dict) else type(result_data)}")
-            
-            if isinstance(result_data, dict):
-                if "video" in result_data:
-                    video_url = result_data["video"].get("url")
-                elif "data" in result_data and isinstance(result_data["data"], dict):
-                    video_url = result_data["data"].get("video", {}).get("url")
-            
-            if video_url:
-                logger.info(f"[fal] ✅ 影片生成完成: {video_url[:80]}...")
-        except ImportError:
-            logger.warning("[fal] fal_client 未安裝")
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.get(result_url, headers=headers)
+                logger.info(f"[fal] result GET status={resp.status_code}")
+                
+                if resp.status_code == 200:
+                    output = resp.json()
+                    logger.info(f"[fal] result output keys: {list(output.keys())}")
+                    
+                    # 新格式: { "response": { "video": { "url": "..." } } }
+                    if "response" in output and isinstance(output["response"], dict):
+                        inner = output["response"]
+                        if "video" in inner:
+                            video_url = inner["video"].get("url")
+                    # 舊格式: { "video": { "url": "..." } }
+                    elif "video" in output:
+                        video_url = output["video"].get("url")
+                    # 嘗試其他可能格式
+                    elif "data" in output:
+                        data = output["data"]
+                        if isinstance(data, dict) and "video" in data:
+                            video_url = data["video"].get("url")
+                    
+                    if not video_url:
+                        # 記錄完整輸出以便調試
+                        import json
+                        logger.warning(f"[fal] 無法從結果中取得 video_url, 完整輸出: {json.dumps(output, ensure_ascii=False)[:500]}")
+                else:
+                    logger.warning(f"[fal] result GET 失敗: {resp.status_code} - {resp.text[:200]}")
         except Exception as e:
-            logger.warning(f"[fal] fal_client 取得結果失敗: {e}")
+            logger.warning(f"[fal] result GET 異常: {e}")
         
-        # 方法 2: 嘗試 response_url (可能已棄用)
-        if not video_url:
-            response_url = result.get("response_url")
-            if response_url:
-                try:
-                    async with httpx.AsyncClient(timeout=15.0) as client:
-                        resp = await client.get(response_url, headers=headers)
-                        logger.info(f"[fal] response_url status: {resp.status_code}")
-                        if resp.status_code == 200:
-                            output = resp.json()
-                            logger.info(f"[fal] response_url output keys: {list(output.keys())}")
-                            if "video" in output:
-                                video_url = output["video"].get("url")
-                except Exception as e:
-                    logger.warning(f"[fal] response_url 取得失敗: {e}")
+        if video_url:
+            logger.info(f"[fal] ✅ 影片生成完成: {video_url[:100]}")
         
         return {
             "request_id": request_id,
