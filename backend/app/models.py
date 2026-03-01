@@ -243,6 +243,11 @@ class GenerationHistory(Base):
     error_message = Column(Text, nullable=True)
     error_details = Column(JSON, default=dict)
     
+    # 追蹤與成效洞察 (Analytics & Tracking)
+    fb_pixel_id = Column(String(50), nullable=True)
+    ga_measurement_id = Column(String(50), nullable=True)
+    custom_script = Column(Text, nullable=True)
+    
     # 元數據
     generation_duration_ms = Column(Integer, nullable=True)  # 生成耗時（毫秒）
     file_size_bytes = Column(Integer, nullable=True)  # 檔案大小

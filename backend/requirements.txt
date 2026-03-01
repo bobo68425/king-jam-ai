@@ -47,3 +47,5 @@ google-analytics-data>=0.18.0
 google-auth>=2.25.0
 # fal.ai AI 影片生成
 fal-client>=0.5.0
+# 安全性 (XSS Sanitization)
+bleach>=6.1.0

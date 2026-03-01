@@ -64,6 +64,12 @@ class HistoryResponse(BaseModel):
     error_message: Optional[str]
     generation_duration_ms: Optional[int]
     file_size_bytes: Optional[int]
+    
+    # Tracking fields
+    fb_pixel_id: Optional[str] = None
+    ga_measurement_id: Optional[str] = None
+    custom_script: Optional[str] = None
+    
     created_at: datetime
     
     class Config:
@@ -109,6 +115,26 @@ class HistoryStats(BaseModel):
     by_type: dict  # {"social_image": 10, "short_video": 5, ...}
     by_status: dict  # {"completed": 14, "failed": 1}
 
+class TrackingUpdate(BaseModel):
+    """更新追蹤設定"""
+    fb_pixel_id: Optional[str] = None
+    ga_measurement_id: Optional[str] = None
+    custom_script: Optional[str] = None
+
+class PublicHistoryResponse(BaseModel):
+    """公開歷史紀錄回應（隱藏 user_id 與 input 等敏感細節）"""
+    id: int
+    generation_type: str
+    output_data: dict
+    media_cloud_url: Optional[str]
+    thumbnail_url: Optional[str]
+    fb_pixel_id: Optional[str] = None
+    ga_measurement_id: Optional[str] = None
+    custom_script: Optional[str] = None
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
 
 # ============================================================
 # API Endpoints
@@ -442,4 +468,121 @@ async def admin_search_history(
         "total": total,
         "page": page,
         "page_size": page_size
+    }
+
+# ============================================================
+# Public API (無須驗證)
+# ============================================================
+
+@router.get("/public/{history_id}", response_model=PublicHistoryResponse)
+async def get_public_history(
+    history_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    取得公開的影片/紀錄資料 (不需驗證，用於 /v/[id] 播放頁面)
+    """
+    history = db.query(GenerationHistory).filter(
+        GenerationHistory.id == history_id,
+        GenerationHistory.is_deleted == False
+    ).first()
+    
+    if not history:
+        raise HTTPException(status_code=404, detail="內容不存在或已被移除")
+        
+    return history
+
+# ============================================================
+# Tracking 追蹤設定 API
+# ============================================================
+import bleach
+
+@router.get("/{history_id}/tracking", response_model=TrackingUpdate)
+async def get_tracking_settings(
+    history_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    取得影片/渲染紀錄的追蹤設定 (Pixel IDs 和自訂追蹤腳本)
+    """
+    history = db.query(GenerationHistory).filter(
+        GenerationHistory.id == history_id,
+        GenerationHistory.user_id == current_user.id,
+        GenerationHistory.is_deleted == False
+    ).first()
+    
+    if not history:
+        raise HTTPException(status_code=404, detail="紀錄不存在")
+        
+    return {
+        "fb_pixel_id": history.fb_pixel_id,
+        "ga_measurement_id": history.ga_measurement_id,
+        "custom_script": history.custom_script
+    }
+
+@router.put("/{history_id}/tracking", response_model=TrackingUpdate)
+async def update_tracking_settings(
+    history_id: int,
+    data: TrackingUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    更新影片/渲染紀錄的追蹤設定
+    對 custom_script 實施 XSS 清理保護，防止惡意攻擊
+    """
+    history = db.query(GenerationHistory).filter(
+        GenerationHistory.id == history_id,
+        GenerationHistory.user_id == current_user.id,
+        GenerationHistory.is_deleted == False
+    ).first()
+    
+    if not history:
+        raise HTTPException(status_code=404, detail="紀錄不存在")
+        
+    # XSS Sanitization for custom_script
+    if data.custom_script is not None:
+        if data.custom_script.strip() == "":
+            history.custom_script = ""
+        else:
+            # 放行標準的 script 和 noscript，供 GA / FB Pixel 使用
+            # 移除惡意的 onEvent 綁定如 onload, onerror 避免直接注入攻擊
+            allowed_tags = ['script', 'noscript', 'img', 'iframe', 'div']
+            allowed_attributes = {
+                'script': ['src', 'type', 'async', 'defer', 'charset', 'id', 'crossorigin'],
+                'noscript': [],
+                'img': ['src', 'height', 'width', 'style', 'alt'],
+                'iframe': ['src', 'height', 'width', 'style', 'frameborder'],
+                'div': ['id', 'class', 'style']
+            }
+            # bleach 用於清除危險的 DOM XSS 標籤，保留合理範圍內的追蹤標籤
+            sanitized_script = bleach.clean(
+                data.custom_script,
+                tags=allowed_tags,
+                attributes=allowed_attributes,
+                strip=True
+            )
+            history.custom_script = sanitized_script
+    
+    # 儲存純粹的 ID
+    if data.fb_pixel_id is not None:
+        # 強制清理掉不小心貼上的 script 標籤，只保留數字字元
+        import re
+        clean_fb_id = re.sub(r'[^\d]', '', data.fb_pixel_id)
+        history.fb_pixel_id = clean_fb_id if clean_fb_id else None
+        
+    if data.ga_measurement_id is not None:
+        # GA4 ID 格式為 G-XXXXXXX
+        import re
+        clean_ga_id = re.sub(r'[^a-zA-Z0-9-]', '', data.ga_measurement_id).upper()
+        history.ga_measurement_id = clean_ga_id if clean_ga_id else None
+        
+    db.commit()
+    db.refresh(history)
+    
+    return {
+        "fb_pixel_id": history.fb_pixel_id,
+        "ga_measurement_id": history.ga_measurement_id,
+        "custom_script": history.custom_script
     }
