@@ -419,6 +419,29 @@ export default function VideoPage() {
 
   // v3.0 引擎狀態
   const [v3Mode, setV3Mode] = useState<"t2v" | "i2v" | "s2v">("t2v");
+
+  // 讀取/儲存 Tab 狀態到 LocalStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedVersion = localStorage.getItem("kingjam_vid_version");
+      if (savedVersion === "2.0" || savedVersion === "3.0") setActiveVersion(savedVersion);
+
+      const savedMode = localStorage.getItem("kingjam_vid_v3mode");
+      if (savedMode === "t2v" || savedMode === "i2v" || savedMode === "s2v") setV3Mode(savedMode);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("kingjam_vid_version", activeVersion);
+    }
+  }, [activeVersion]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("kingjam_vid_v3mode", v3Mode);
+    }
+  }, [v3Mode]);
   const [v3Prompt, setV3Prompt] = useState("科技領域的前瞻創新，將重新定義未來的可能。");
   const [v3Style, setV3Style] = useState("tech_startup");
   const [v3Voice, setV3Voice] = useState("alloy");
