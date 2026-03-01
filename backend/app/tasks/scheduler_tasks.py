@@ -9,6 +9,8 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional
 import pytz
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 from app.celery_app import celery_app, SocialAPITask
 from app.database import SessionLocal
@@ -16,6 +18,24 @@ from app.models import ScheduledPost, PublishLog, SocialAccount
 from app.services.social_platforms.base import PublishContent, ContentType
 
 logger = logging.getLogger(__name__)
+
+def run_async_block(coro):
+    """
+    Safely runs an async coroutine from sync code, even if an event loop is already running in the current thread.
+    This prevents the "asyncio.run() cannot be called from a running event loop" error.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        # A loop is already running, so we use a separate thread to run the asyncio task cleanly
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(asyncio.run, coro)
+            return future.result()
+    else:
+        return asyncio.run(coro)
 
 
 @celery_app.task(name="app.tasks.scheduler_tasks.scan_pending_posts")
@@ -228,17 +248,14 @@ def publish_scheduled_post(self, scheduled_post_id: int):
             db.commit()
             # 內容驗證失敗仍嘗試發布（平台可能接受），但記錄警告
         
-        # 執行發布（這是同步版本，實際應使用 async）
-        # 這裡簡化處理，實際需要根據平台 SDK 調整
-        import asyncio
-        
+        # 執行發布
         async def do_publish():
             return await platform_publisher.publish(
                 access_token=social_account.access_token,
                 content=content
             )
         
-        result = asyncio.run(do_publish())
+        result = run_async_block(do_publish())
         
         if result.success:
             # 發布成功
@@ -385,7 +402,7 @@ def publish_to_wordpress(post: ScheduledPost, social_account: SocialAccount) -> 
             finally:
                 await wp_service.close()
         
-        return asyncio.run(do_publish())
+        return run_async_block(do_publish())
         
     except Exception as e:
         logger.error(f"[WordPress] 發布錯誤: {e}")
