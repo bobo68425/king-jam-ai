@@ -418,14 +418,21 @@ export default function VideoPage() {
   const [activeVersion, setActiveVersion] = useState<"2.0" | "3.0">("2.0");
 
   // v3.0 引擎狀態
+  const [v3Mode, setV3Mode] = useState<"t2v" | "i2v" | "s2v">("t2v");
   const [v3Prompt, setV3Prompt] = useState("科技領域的前瞻創新，將重新定義未來的可能。");
   const [v3Style, setV3Style] = useState("tech_startup");
   const [v3Voice, setV3Voice] = useState("alloy");
+  const [v3AspectRatio, setV3AspectRatio] = useState("9:16");
+  const [v3Duration, setV3Duration] = useState(30);
+  const [v3ScenesCount, setV3ScenesCount] = useState(3);
+  const [v3RefImage, setV3RefImage] = useState("");
+  const [v3NegPrompt, setV3NegPrompt] = useState("");
   const [v3Loading, setV3Loading] = useState(false);
   const [v3Result, setV3Result] = useState<any>(null);
   const [v3Error, setV3Error] = useState<string | null>(null);
   const [v3Scenes, setV3Scenes] = useState<any[]>([]);
   const [v3EditingIdx, setV3EditingIdx] = useState<number | null>(null);
+  const [v3ShowAdvanced, setV3ShowAdvanced] = useState(false);
 
   const handleV3Generate = async () => {
     if (!v3Prompt.trim()) {
@@ -440,8 +447,9 @@ export default function VideoPage() {
         script: v3Prompt,
         style_id: v3Style,
         voice: v3Voice,
-        duration: 30,
-        scenes_count: 3,
+        duration: v3Duration,
+        scenes_count: v3ScenesCount,
+        aspect_ratio: v3AspectRatio,
       });
       setV3Result(res.data);
       setV3Scenes(res.data.scenes ? [...res.data.scenes] : []);
@@ -3748,294 +3756,409 @@ export default function VideoPage() {
                 </Button>
               </div>
               <p className="text-slate-400 text-sm">
-                全新架構：支援 fal.ai 極速生成、專業級轉場與 OpenAI TTS 即時預覽配音。
+                全新架構：支援 T2V / I2V / S2V 多模式生成、專業級運鏡與 AI 配音。
               </p>
 
-              <div className="bg-slate-800/50 rounded-2xl p-6 border border-slate-700/50">
-                <h3 className="text-white font-medium mb-4 flex items-center gap-2">
-                  <Wand2 className="w-4 h-4 text-purple-400" />
-                  智能腳本編輯
-                </h3>
-                <div className="space-y-4">
+              {/* === 生成模式 Tabs === */}
+              <div className="flex bg-slate-800/80 rounded-xl p-1 gap-1">
+                {([
+                  { id: "t2v", label: "文字生成", icon: "✍️", desc: "Text to Video" },
+                  { id: "i2v", label: "圖片生成", icon: "🖼️", desc: "Image to Video" },
+                  { id: "s2v", label: "語音驅動", icon: "🎤", desc: "Speech to Video" },
+                ] as const).map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setV3Mode(tab.id)}
+                    className={`flex-1 flex flex-col items-center py-2.5 px-2 rounded-lg text-xs font-medium transition-all ${v3Mode === tab.id
+                      ? "bg-cyan-500/20 text-cyan-400 shadow-sm"
+                      : "text-slate-500 hover:text-slate-300 hover:bg-slate-700/50"
+                      }`}
+                  >
+                    <span className="text-base mb-0.5">{tab.icon}</span>
+                    <span>{tab.label}</span>
+                    <span className="text-[9px] text-slate-600 mt-0.5">{tab.desc}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="bg-slate-800/50 rounded-2xl p-5 border border-slate-700/50 space-y-4">
+                {/* Prompt 區 */}
+                <div>
+                  <label className="text-xs text-slate-400 block mb-1.5">
+                    {v3Mode === "t2v" ? "🎬 影片描述 (Prompt)" : v3Mode === "i2v" ? "🎬 動態描述" : "🎬 畫面描述"}
+                  </label>
+                  <textarea
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-cyan-500 transition-colors resize-none h-20"
+                    placeholder={v3Mode === "t2v" ? "描述你想要的影片內容、風格、氛圍..." : v3Mode === "i2v" ? "描述圖片要如何動起來..." : "描述人物在語音驅動下的畫面..."}
+                    value={v3Prompt}
+                    onChange={(e) => setV3Prompt(e.target.value)}
+                  />
+                </div>
+
+                {/* I2V 模式：參考圖片 */}
+                {v3Mode === "i2v" && (
                   <div>
-                    <label className="text-xs text-slate-400 block mb-1.5">影片主題 (Prompt)</label>
-                    <textarea
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-cyan-500 transition-colors resize-none h-24"
-                      placeholder="例如：科技新創公司的形象宣傳短片，色彩鮮明，節奏輕快..."
-                      value={v3Prompt}
-                      onChange={(e) => setV3Prompt(e.target.value)}
+                    <label className="text-xs text-slate-400 block mb-1.5">🖼️ 參考圖片 URL</label>
+                    <input
+                      type="text"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-cyan-500"
+                      placeholder="https://example.com/image.jpg"
+                      value={v3RefImage}
+                      onChange={(e) => setV3RefImage(e.target.value)}
+                    />
+                    <p className="text-[10px] text-slate-600 mt-1">支援 JPG / PNG，AI 將根據此圖生成動態影片</p>
+                  </div>
+                )}
+
+                {/* S2V 模式：語音輸入 */}
+                {v3Mode === "s2v" && (
+                  <div>
+                    <label className="text-xs text-slate-400 block mb-1.5">🎤 語音 / 音頻 URL</label>
+                    <input
+                      type="text"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-cyan-500"
+                      placeholder="https://example.com/speech.mp3"
+                    />
+                    <p className="text-[10px] text-slate-600 mt-1">上傳語音，AI 將根據音訊驅動角色表情與動作</p>
+                  </div>
+                )}
+
+                {/* 比例 + 時長 + 場景數 */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-xs text-slate-400 block mb-1.5">📐 比例</label>
+                    <div className="flex gap-1">
+                      {(["9:16", "16:9", "1:1"] as const).map(r => (
+                        <button
+                          key={r}
+                          onClick={() => setV3AspectRatio(r)}
+                          className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${v3AspectRatio === r
+                            ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
+                            : "bg-slate-900 text-slate-500 border border-slate-700 hover:text-slate-300"
+                            }`}
+                        >
+                          {r === "9:16" ? "竪屏" : r === "16:9" ? "橫屏" : "方形"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-400 block mb-1.5">⏱️ 時長 <span className="text-cyan-400">{v3Duration}s</span></label>
+                    <input
+                      type="range" min={10} max={120} step={5}
+                      value={v3Duration}
+                      onChange={e => setV3Duration(Number(e.target.value))}
+                      className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
                     />
                   </div>
-                  <div className="flex gap-4">
-                    <div className="flex-1">
-                      <label className="text-xs text-slate-400 block mb-1.5">風格模板</label>
-                      <select
-                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-cyan-500"
-                        value={v3Style}
-                        onChange={(e) => setV3Style(e.target.value)}
-                      >
-                        <option value="tech_startup">科技新創 (Tech Startup)</option>
-                        <option value="corporate">企業形象 (Corporate)</option>
-                        <option value="cyberpunk">霓虹賽博 (Cyberpunk)</option>
-                        <option value="food">美食饗宴 (Food)</option>
-                        <option value="travel">旅行探索 (Travel)</option>
-                        <option value="fitness">健身動感 (Fitness)</option>
-                        <option value="fashion">時尚潮流 (Fashion)</option>
-                        <option value="knowledge">知識解說 (Knowledge)</option>
-                        <option value="retro_film">復古膠片 (Retro Film)</option>
-                        <option value="minimal_bw">極簡黑白 (Minimal B&W)</option>
-                      </select>
-                    </div>
-                    <div className="flex-1">
-                      <label className="text-xs text-slate-400 block mb-1.5">AI 配音</label>
-                      <select
-                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-cyan-500"
-                        value={v3Voice}
-                        onChange={(e) => setV3Voice(e.target.value)}
-                      >
-                        <option value="alloy">Alloy (中性)</option>
-                        <option value="nova">Nova (女性活力)</option>
-                        <option value="echo">Echo (男性穩重)</option>
-                        <option value="onyx">Onyx (男性深沉)</option>
-                        <option value="shimmer">Shimmer (女性溫柔)</option>
-                        <option value="fable">Fable (敘事風)</option>
-                      </select>
+                  <div>
+                    <label className="text-xs text-slate-400 block mb-1.5">🎞️ 場景 <span className="text-cyan-400">{v3ScenesCount}</span></label>
+                    <input
+                      type="range" min={2} max={8} step={1}
+                      value={v3ScenesCount}
+                      onChange={e => setV3ScenesCount(Number(e.target.value))}
+                      className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                    />
+                  </div>
+                </div>
+
+                {/* 風格 + 配音 */}
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <label className="text-xs text-slate-400 block mb-1.5">🎨 風格模板</label>
+                    <select
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white text-sm focus:outline-none focus:border-cyan-500"
+                      value={v3Style}
+                      onChange={(e) => setV3Style(e.target.value)}
+                    >
+                      <option value="tech_startup">科技新創</option>
+                      <option value="corporate">企業形象</option>
+                      <option value="cyberpunk">霓虹賽博</option>
+                      <option value="food">美食饗宴</option>
+                      <option value="travel">旅行探索</option>
+                      <option value="fitness">健身動感</option>
+                      <option value="fashion">時尚潮流</option>
+                      <option value="knowledge">知識解說</option>
+                      <option value="retro_film">復古膠片</option>
+                      <option value="minimal_bw">極簡黑白</option>
+                    </select>
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-xs text-slate-400 block mb-1.5">🎙️ AI 配音</label>
+                    <select
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white text-sm focus:outline-none focus:border-cyan-500"
+                      value={v3Voice}
+                      onChange={(e) => setV3Voice(e.target.value)}
+                    >
+                      <option value="alloy">Alloy (中性)</option>
+                      <option value="nova">Nova (女性活力)</option>
+                      <option value="echo">Echo (男性穩重)</option>
+                      <option value="onyx">Onyx (男性深沉)</option>
+                      <option value="shimmer">Shimmer (女性溫柔)</option>
+                      <option value="fable">Fable (敘事風)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* 進階選項 */}
+                <button
+                  onClick={() => setV3ShowAdvanced(!v3ShowAdvanced)}
+                  className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                >
+                  <Settings2 className="w-3 h-3" />
+                  進階選項
+                  {v3ShowAdvanced ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                </button>
+                {v3ShowAdvanced && (
+                  <div className="space-y-3 bg-slate-900/50 rounded-xl p-3 border border-slate-800">
+                    <div>
+                      <label className="text-xs text-slate-400 block mb-1">🚫 負面提示 (Negative Prompt)</label>
+                      <input
+                        type="text"
+                        className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white text-xs focus:outline-none focus:border-cyan-500"
+                        placeholder="模糊、低品質、變形..."
+                        value={v3NegPrompt}
+                        onChange={e => setV3NegPrompt(e.target.value)}
+                      />
                     </div>
                   </div>
-                  <Button
-                    className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-xl py-6 font-medium shadow-lg shadow-cyan-500/20 disabled:opacity-50"
-                    onClick={handleV3Generate}
-                    disabled={v3Loading || !v3Prompt.trim()}
-                  >
-                    {v3Loading ? (
-                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> 生成中...</>
-                    ) : (
-                      <><Sparkles className="w-4 h-4 mr-2" /> 開始產生腳本與運鏡</>
-                    )}
-                  </Button>
+                )}
 
-                  {/* 錯誤訊息 */}
-                  {v3Error && (
-                    <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-red-400 text-sm flex items-start gap-2">
-                      <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                      {v3Error}
-                    </div>
+                {/* 生成按鈕 */}
+                <Button
+                  className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-xl py-6 font-medium shadow-lg shadow-cyan-500/20 disabled:opacity-50"
+                  onClick={handleV3Generate}
+                  disabled={v3Loading || !v3Prompt.trim()}
+                >
+                  {v3Loading ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> 生成中...</>
+                  ) : (
+                    <><Sparkles className="w-4 h-4 mr-2" /> 開始產生腳本與運鏡</>
                   )}
+                </Button>
 
-                  {/* 可編輯場景列表 */}
-                  {v3Scenes.length > 0 && (
-                    <div className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-emerald-400 font-medium text-sm">
-                          <CheckCircle2 className="w-4 h-4" />
-                          腳本編輯 · {v3Scenes.length} 場景
-                        </div>
-                        <div className="flex gap-1.5">
-                          <Button
-                            variant="ghost" size="sm"
-                            className="text-slate-400 hover:text-white h-7 px-2 text-xs"
-                            onClick={() => { setV3Scenes([]); setV3Result(null); }}
-                          >
-                            <RotateCcw className="w-3 h-3 mr-1" /> 重新生成
-                          </Button>
-                        </div>
+                {/* 錯誤訊息 */}
+                {v3Error && (
+                  <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-red-400 text-sm flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    {v3Error}
+                  </div>
+                )}
+
+                {/* 可編輯場景列表 */}
+                {v3Scenes.length > 0 && (
+                  <div className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-emerald-400 font-medium text-sm">
+                        <CheckCircle2 className="w-4 h-4" />
+                        腳本編輯 · {v3Scenes.length} 場景
                       </div>
-                      <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
-                        {v3Scenes.map((scene: any, i: number) => (
-                          <div key={i} className={`bg-slate-900/60 border rounded-lg p-3 space-y-2 transition-colors ${v3EditingIdx === i ? 'border-cyan-500/50 ring-1 ring-cyan-500/20' : 'border-slate-700/30'
-                            }`}>
-                            {/* 場景頭部 */}
-                            <div className="flex items-center gap-2 text-xs">
-                              <select
-                                className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 font-medium uppercase text-xs border-none focus:outline-none cursor-pointer"
-                                value={scene.type}
-                                onChange={(e) => {
-                                  const updated = [...v3Scenes];
-                                  updated[i] = { ...updated[i], type: e.target.value };
-                                  setV3Scenes(updated);
-                                }}
+                      <div className="flex gap-1.5">
+                        <Button
+                          variant="ghost" size="sm"
+                          className="text-slate-400 hover:text-white h-7 px-2 text-xs"
+                          onClick={() => { setV3Scenes([]); setV3Result(null); }}
+                        >
+                          <RotateCcw className="w-3 h-3 mr-1" /> 重新生成
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
+                      {v3Scenes.map((scene: any, i: number) => (
+                        <div key={i} className={`bg-slate-900/60 border rounded-lg p-3 space-y-2 transition-colors ${v3EditingIdx === i ? 'border-cyan-500/50 ring-1 ring-cyan-500/20' : 'border-slate-700/30'
+                          }`}>
+                          {/* 場景頭部 */}
+                          <div className="flex items-center gap-2 text-xs">
+                            <select
+                              className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 font-medium uppercase text-xs border-none focus:outline-none cursor-pointer"
+                              value={scene.type}
+                              onChange={(e) => {
+                                const updated = [...v3Scenes];
+                                updated[i] = { ...updated[i], type: e.target.value };
+                                setV3Scenes(updated);
+                              }}
+                            >
+                              <option value="hook">HOOK</option>
+                              <option value="problem">PROBLEM</option>
+                              <option value="solution">SOLUTION</option>
+                              <option value="benefit">BENEFIT</option>
+                              <option value="cta">CTA</option>
+                              <option value="story">STORY</option>
+                              <option value="demo">DEMO</option>
+                            </select>
+                            <span className="text-slate-500">場景 {i + 1}</span>
+                            <div className="ml-auto flex items-center gap-1">
+                              <Button
+                                variant="ghost" size="sm"
+                                className="h-6 w-6 p-0 text-slate-500 hover:text-cyan-400"
+                                onClick={() => setV3EditingIdx(v3EditingIdx === i ? null : i)}
                               >
-                                <option value="hook">HOOK</option>
-                                <option value="problem">PROBLEM</option>
-                                <option value="solution">SOLUTION</option>
-                                <option value="benefit">BENEFIT</option>
-                                <option value="cta">CTA</option>
-                                <option value="story">STORY</option>
-                                <option value="demo">DEMO</option>
-                              </select>
-                              <span className="text-slate-500">場景 {i + 1}</span>
-                              <div className="ml-auto flex items-center gap-1">
+                                <Edit3 className="w-3 h-3" />
+                              </Button>
+                              {v3Scenes.length > 2 && (
                                 <Button
                                   variant="ghost" size="sm"
-                                  className="h-6 w-6 p-0 text-slate-500 hover:text-cyan-400"
-                                  onClick={() => setV3EditingIdx(v3EditingIdx === i ? null : i)}
+                                  className="h-6 w-6 p-0 text-slate-500 hover:text-red-400"
+                                  onClick={() => setV3Scenes(v3Scenes.filter((_: any, idx: number) => idx !== i))}
                                 >
-                                  <Edit3 className="w-3 h-3" />
+                                  <Trash2 className="w-3 h-3" />
                                 </Button>
-                                {v3Scenes.length > 2 && (
-                                  <Button
-                                    variant="ghost" size="sm"
-                                    className="h-6 w-6 p-0 text-slate-500 hover:text-red-400"
-                                    onClick={() => setV3Scenes(v3Scenes.filter((_: any, idx: number) => idx !== i))}
+                              )}
+                            </div>
+                          </div>
+
+                          {/* 展開編輯 or 摺疊預覽 */}
+                          {v3EditingIdx === i ? (
+                            <div className="space-y-2">
+                              {/* 旁白 */}
+                              <div>
+                                <label className="text-[10px] text-slate-500 block mb-0.5">🎙️ 旁白</label>
+                                <textarea
+                                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white text-sm resize-none h-16 focus:outline-none focus:border-cyan-500"
+                                  value={scene.narration}
+                                  onChange={(e) => {
+                                    const updated = [...v3Scenes];
+                                    updated[i] = { ...updated[i], narration: e.target.value };
+                                    setV3Scenes(updated);
+                                  }}
+                                />
+                              </div>
+                              {/* 視覺提示 */}
+                              <div>
+                                <label className="text-[10px] text-slate-500 block mb-0.5">📹 Visual Prompt</label>
+                                <textarea
+                                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-slate-300 text-xs resize-none h-16 focus:outline-none focus:border-cyan-500"
+                                  value={scene.visualPrompt}
+                                  onChange={(e) => {
+                                    const updated = [...v3Scenes];
+                                    updated[i] = { ...updated[i], visualPrompt: e.target.value };
+                                    setV3Scenes(updated);
+                                  }}
+                                />
+                              </div>
+                              {/* 運鏡 + 轉場 */}
+                              <div className="flex gap-2">
+                                <div className="flex-1">
+                                  <label className="text-[10px] text-slate-500 block mb-0.5">🎬 運鏡</label>
+                                  <select
+                                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500"
+                                    value={scene.cameraMove}
+                                    onChange={(e) => {
+                                      const updated = [...v3Scenes];
+                                      updated[i] = { ...updated[i], cameraMove: e.target.value };
+                                      setV3Scenes(updated);
+                                    }}
                                   >
-                                    <Trash2 className="w-3 h-3" />
-                                  </Button>
-                                )}
+                                    <option value="static">Static</option>
+                                    <option value="pan-left">Pan Left</option>
+                                    <option value="pan-right">Pan Right</option>
+                                    <option value="zoom-in">Zoom In</option>
+                                    <option value="zoom-out">Zoom Out</option>
+                                    <option value="dolly-forward">Dolly Forward</option>
+                                    <option value="tilt-up">Tilt Up</option>
+                                    <option value="orbit">Orbit</option>
+                                  </select>
+                                </div>
+                                <div className="flex-1">
+                                  <label className="text-[10px] text-slate-500 block mb-0.5">↔ 轉場</label>
+                                  <select
+                                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500"
+                                    value={scene.transition}
+                                    onChange={(e) => {
+                                      const updated = [...v3Scenes];
+                                      updated[i] = { ...updated[i], transition: e.target.value };
+                                      setV3Scenes(updated);
+                                    }}
+                                  >
+                                    <option value="fade">Fade</option>
+                                    <option value="slide-left">Slide Left</option>
+                                    <option value="slide-right">Slide Right</option>
+                                    <option value="zoom-in">Zoom In</option>
+                                    <option value="dissolve">Dissolve</option>
+                                  </select>
+                                </div>
                               </div>
                             </div>
-
-                            {/* 展開編輯 or 摺疊預覽 */}
-                            {v3EditingIdx === i ? (
-                              <div className="space-y-2">
-                                {/* 旁白 */}
-                                <div>
-                                  <label className="text-[10px] text-slate-500 block mb-0.5">🎙️ 旁白</label>
-                                  <textarea
-                                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white text-sm resize-none h-16 focus:outline-none focus:border-cyan-500"
-                                    value={scene.narration}
-                                    onChange={(e) => {
-                                      const updated = [...v3Scenes];
-                                      updated[i] = { ...updated[i], narration: e.target.value };
-                                      setV3Scenes(updated);
-                                    }}
-                                  />
-                                </div>
-                                {/* 視覺提示 */}
-                                <div>
-                                  <label className="text-[10px] text-slate-500 block mb-0.5">📹 Visual Prompt</label>
-                                  <textarea
-                                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-slate-300 text-xs resize-none h-16 focus:outline-none focus:border-cyan-500"
-                                    value={scene.visualPrompt}
-                                    onChange={(e) => {
-                                      const updated = [...v3Scenes];
-                                      updated[i] = { ...updated[i], visualPrompt: e.target.value };
-                                      setV3Scenes(updated);
-                                    }}
-                                  />
-                                </div>
-                                {/* 運鏡 + 轉場 */}
-                                <div className="flex gap-2">
-                                  <div className="flex-1">
-                                    <label className="text-[10px] text-slate-500 block mb-0.5">🎬 運鏡</label>
-                                    <select
-                                      className="w-full bg-slate-800 border border-slate-700 rounded-lg p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500"
-                                      value={scene.cameraMove}
-                                      onChange={(e) => {
-                                        const updated = [...v3Scenes];
-                                        updated[i] = { ...updated[i], cameraMove: e.target.value };
-                                        setV3Scenes(updated);
-                                      }}
-                                    >
-                                      <option value="static">Static</option>
-                                      <option value="pan-left">Pan Left</option>
-                                      <option value="pan-right">Pan Right</option>
-                                      <option value="zoom-in">Zoom In</option>
-                                      <option value="zoom-out">Zoom Out</option>
-                                      <option value="dolly-forward">Dolly Forward</option>
-                                      <option value="tilt-up">Tilt Up</option>
-                                      <option value="orbit">Orbit</option>
-                                    </select>
-                                  </div>
-                                  <div className="flex-1">
-                                    <label className="text-[10px] text-slate-500 block mb-0.5">↔ 轉場</label>
-                                    <select
-                                      className="w-full bg-slate-800 border border-slate-700 rounded-lg p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500"
-                                      value={scene.transition}
-                                      onChange={(e) => {
-                                        const updated = [...v3Scenes];
-                                        updated[i] = { ...updated[i], transition: e.target.value };
-                                        setV3Scenes(updated);
-                                      }}
-                                    >
-                                      <option value="fade">Fade</option>
-                                      <option value="slide-left">Slide Left</option>
-                                      <option value="slide-right">Slide Right</option>
-                                      <option value="zoom-in">Zoom In</option>
-                                      <option value="dissolve">Dissolve</option>
-                                    </select>
-                                  </div>
-                                </div>
+                          ) : (
+                            /* 摺疊預覽模式 */
+                            <div className="cursor-pointer" onClick={() => setV3EditingIdx(i)}>
+                              <div className="flex items-center gap-2 text-xs text-slate-600 mb-1">
+                                <span>🎬 {scene.cameraMove}</span>
+                                <span>↔ {scene.transition}</span>
                               </div>
-                            ) : (
-                              /* 摺疊預覽模式 */
-                              <div className="cursor-pointer" onClick={() => setV3EditingIdx(i)}>
-                                <div className="flex items-center gap-2 text-xs text-slate-600 mb-1">
-                                  <span>🎬 {scene.cameraMove}</span>
-                                  <span>↔ {scene.transition}</span>
-                                </div>
-                                <p className="text-white text-sm leading-relaxed">🎙️ {scene.narration}</p>
-                                <p className="text-slate-500 text-xs italic mt-1 line-clamp-2">📹 {scene.visualPrompt}</p>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* 新增場景 */}
-                      <Button
-                        variant="ghost" size="sm"
-                        className="w-full border border-dashed border-slate-700 text-slate-500 hover:text-cyan-400 hover:border-cyan-500/50 rounded-lg h-8 text-xs"
-                        onClick={() => setV3Scenes([...v3Scenes, {
-                          index: v3Scenes.length,
-                          type: "story",
-                          durationInFrames: 300,
-                          narration: "",
-                          visualPrompt: "",
-                          cameraMove: "static",
-                          transition: "fade",
-                        }])}
-                      >
-                        <Plus className="w-3 h-3 mr-1" /> 新增場景
-                      </Button>
-
-                      {/* 下一步按鈕 */}
-                      <Button
-                        className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl py-5 font-medium shadow-lg shadow-emerald-500/20"
-                        onClick={() => toast.success('🎬 準備生成影片...（功能開發中）')}
-                      >
-                        <ArrowRight className="w-4 h-4 mr-2" />
-                        下一步：生成 AI 影片
-                      </Button>
+                              <p className="text-white text-sm leading-relaxed">🎙️ {scene.narration}</p>
+                              <p className="text-slate-500 text-xs italic mt-1 line-clamp-2">📹 {scene.visualPrompt}</p>
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                  )}
-                </div>
+
+                    {/* 新增場景 */}
+                    <Button
+                      variant="ghost" size="sm"
+                      className="w-full border border-dashed border-slate-700 text-slate-500 hover:text-cyan-400 hover:border-cyan-500/50 rounded-lg h-8 text-xs"
+                      onClick={() => setV3Scenes([...v3Scenes, {
+                        index: v3Scenes.length,
+                        type: "story",
+                        durationInFrames: 300,
+                        narration: "",
+                        visualPrompt: "",
+                        cameraMove: "static",
+                        transition: "fade",
+                      }])}
+                    >
+                      <Plus className="w-3 h-3 mr-1" /> 新增場景
+                    </Button>
+
+                    {/* 下一步按鈕 */}
+                    <Button
+                      className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl py-5 font-medium shadow-lg shadow-emerald-500/20"
+                      onClick={() => toast.success('🎬 準備生成影片...（功能開發中）')}
+                    >
+                      <ArrowRight className="w-4 h-4 mr-2" />
+                      下一步：生成 AI 影片
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
+          </div>
 
-            {/* 右側：Remotion 預覽窗格 */}
-            <div className="flex flex-col items-center justify-center bg-black/40 rounded-3xl border border-slate-800/80 p-8">
-              <div className="w-full max-w-[320px] aspect-[9/16] relative group rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10">
-                <div className="absolute inset-0 z-10 pointer-events-none rounded-2xl ring-inset ring-1 ring-white/10" />
+          {/* 右側：Remotion 預覽窗格 */}
+          <div className="flex flex-col items-center justify-center bg-black/40 rounded-3xl border border-slate-800/80 p-8">
+            <div className="w-full max-w-[320px] aspect-[9/16] relative group rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10">
+              <div className="absolute inset-0 z-10 pointer-events-none rounded-2xl ring-inset ring-1 ring-white/10" />
 
-                {/* 由於目前無法直接跨目錄 import ShortVideo (需設定 Monorepo)，此處先用 Placeholder */}
-                {/* 未來部署時將透過 component={ShortVideo} 載入組件 */}
-                <div className="w-full h-full bg-slate-900 flex flex-col items-center justify-center relative shadow-[0_0_50px_rgba(0,0,0,0.5)]">
-                  <div className="absolute inset-0 bg-gradient-to-b from-slate-900/50 via-slate-900 to-black/80" />
+              {/* 由於目前無法直接跨目錄 import ShortVideo (需設定 Monorepo)，此處先用 Placeholder */}
+              {/* 未來部署時將透過 component={ShortVideo} 載入組件 */}
+              <div className="w-full h-full bg-slate-900 flex flex-col items-center justify-center relative shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+                <div className="absolute inset-0 bg-gradient-to-b from-slate-900/50 via-slate-900 to-black/80" />
 
-                  {/* Mock Player UI */}
-                  <div className="relative z-20 flex flex-col items-center group-hover:scale-105 transition-transform duration-500">
-                    <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center backdrop-blur-md border border-white/20 mb-4 cursor-pointer hover:bg-white/20 hover:scale-110 transition-all">
-                      <Play className="w-6 h-6 text-white ml-1" />
-                    </div>
-                    <span className="text-sm font-medium text-white tracking-widest uppercase opacity-80">Real-time Preview</span>
-                    <span className="text-xs text-slate-400 mt-2 bg-black/40 px-3 py-1 rounded-full">Powered by Remotion</span>
+                {/* Mock Player UI */}
+                <div className="relative z-20 flex flex-col items-center group-hover:scale-105 transition-transform duration-500">
+                  <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center backdrop-blur-md border border-white/20 mb-4 cursor-pointer hover:bg-white/20 hover:scale-110 transition-all">
+                    <Play className="w-6 h-6 text-white ml-1" />
                   </div>
-
-                  {/* 下方播放條 Placeholder */}
-                  <div className="absolute bottom-6 left-6 right-6 z-20">
-                    <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden mb-3">
-                      <div className="h-full bg-cyan-500 w-1/3 rounded-full relative">
-                        <div className="absolute top-0 bottom-0 right-0 w-8 bg-gradient-to-l from-white/40 to-transparent" />
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-center text-xs text-white/60">
-                      <span>00:05</span>
-                      <span>00:15</span>
-                    </div>
-                  </div>
+                  <span className="text-sm font-medium text-white tracking-widest uppercase opacity-80">Real-time Preview</span>
+                  <span className="text-xs text-slate-400 mt-2 bg-black/40 px-3 py-1 rounded-full">Powered by Remotion</span>
                 </div>
 
-                {/* 實際整合時的程式碼範例：
+                {/* 下方播放條 Placeholder */}
+                <div className="absolute bottom-6 left-6 right-6 z-20">
+                  <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden mb-3">
+                    <div className="h-full bg-cyan-500 w-1/3 rounded-full relative">
+                      <div className="absolute top-0 bottom-0 right-0 w-8 bg-gradient-to-l from-white/40 to-transparent" />
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center text-xs text-white/60">
+                    <span>00:05</span>
+                    <span>00:15</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 實際整合時的程式碼範例：
                 <Player
                   component={ShortVideo}
                   durationInFrames={450}
@@ -4047,11 +4170,11 @@ export default function VideoPage() {
                   inputProps={{ ...mockProps }}
                 />
                 */}
-              </div>
             </div>
           </div>
         </div>
-      )}
+      )
+      }
     </div>
   );
 }
