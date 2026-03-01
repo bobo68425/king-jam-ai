@@ -433,6 +433,9 @@ export default function VideoPage() {
   const [v3Scenes, setV3Scenes] = useState<any[]>([]);
   const [v3EditingIdx, setV3EditingIdx] = useState<number | null>(null);
   const [v3ShowAdvanced, setV3ShowAdvanced] = useState(false);
+  const [v3VideoGenerating, setV3VideoGenerating] = useState(false);
+  const [v3VideoJobs, setV3VideoJobs] = useState<any[]>([]);
+  const [v3VideoProgress, setV3VideoProgress] = useState<string>("");
 
   const handleV3Generate = async () => {
     if (!v3Prompt.trim()) {
@@ -465,6 +468,83 @@ export default function VideoPage() {
       toast.error(`生成失敗: ${msg}`);
     } finally {
       setV3Loading(false);
+    }
+  };
+
+  const handleV3GenerateVideo = async () => {
+    if (v3Scenes.length === 0) {
+      toast.error("請先生成腳本");
+      return;
+    }
+    setV3VideoGenerating(true);
+    setV3VideoProgress("提交場景到 fal.ai...");
+    setV3VideoJobs([]);
+
+    try {
+      const clipRes = await api.post("/video/v3/api/generate-clips", {
+        scenes: v3Scenes,
+        aspect_ratio: v3AspectRatio,
+      });
+      const jobs = clipRes.data.jobs || [];
+      setV3VideoJobs(jobs);
+      toast.success(`🎬 ${clipRes.data.submitted} 個場景已提交到 AI 影片引擎`);
+
+      const validJobs = jobs.filter((j: any) => j.request_id);
+      if (validJobs.length === 0) {
+        toast.error("所有場景提交失敗");
+        setV3VideoGenerating(false);
+        return;
+      }
+
+      let attempts = 0;
+      const maxAttempts = 60;
+      const pollInterval = 5000;
+
+      while (attempts < maxAttempts) {
+        attempts++;
+        setV3VideoProgress(`影片生成中... (${attempts * 5}s)`);
+        await new Promise(r => setTimeout(r, pollInterval));
+
+        try {
+          const statusRes = await api.post("/video/v3/api/check-clips", {
+            jobs: validJobs.map((j: any) => ({ request_id: j.request_id, model: j.model })),
+          });
+
+          const statuses = statusRes.data.statuses || [];
+          const completed = statuses.filter((s: any) => s.status === "completed" || s.status === "COMPLETED").length;
+          setV3VideoProgress(`影片生成中... ${completed}/${validJobs.length} 完成`);
+
+          const updatedScenes = [...v3Scenes];
+          statuses.forEach((s: any, idx: number) => {
+            if ((s.status === "completed" || s.status === "COMPLETED") && s.video_url) {
+              const sceneIdx = validJobs[idx]?.index;
+              if (sceneIdx !== undefined && updatedScenes[sceneIdx]) {
+                updatedScenes[sceneIdx] = { ...updatedScenes[sceneIdx], videoUrl: s.video_url };
+              }
+            }
+          });
+          setV3Scenes(updatedScenes);
+
+          if (statusRes.data.all_done) {
+            const successCount = statuses.filter((s: any) => s.video_url).length;
+            toast.success(`🎉 ${successCount} 個影片片段生成完成！`);
+            setV3VideoProgress(`✅ ${successCount}/${validJobs.length} 完成`);
+            break;
+          }
+        } catch {
+          // 輪詢失敗不中斷
+        }
+      }
+      if (attempts >= maxAttempts) {
+        toast.error("部分場景生成超時");
+        setV3VideoProgress("⏱️ 超時");
+      }
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || err.message || "提交失敗";
+      toast.error(`影片生成失敗: ${msg}`);
+      setV3VideoProgress("");
+    } finally {
+      setV3VideoGenerating(false);
     }
   };
 
@@ -4089,6 +4169,18 @@ export default function VideoPage() {
                               <div className="flex items-center gap-2 text-xs text-slate-600 mb-1">
                                 <span>🎬 {scene.cameraMove}</span>
                                 <span>↔ {scene.transition}</span>
+                                {scene.emotion && <span className="text-purple-400">💭 {scene.emotion}</span>}
+                                {scene.videoUrl && (
+                                  <a
+                                    href={scene.videoUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="ml-auto flex items-center gap-1 text-emerald-400 hover:text-emerald-300"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <Play className="w-3 h-3" /> 已生成
+                                  </a>
+                                )}
                               </div>
                               <p className="text-white text-sm leading-relaxed">🎙️ {scene.narration}</p>
                               <p className="text-slate-500 text-xs italic mt-1 line-clamp-2">📹 {scene.visualPrompt}</p>
@@ -4116,12 +4208,22 @@ export default function VideoPage() {
                     </Button>
 
                     {/* 下一步按鈕 */}
+                    {v3VideoProgress && (
+                      <div className="flex items-center gap-2 text-xs text-cyan-400 bg-cyan-500/10 rounded-lg px-3 py-2">
+                        {v3VideoGenerating && <Loader2 className="w-3 h-3 animate-spin" />}
+                        {v3VideoProgress}
+                      </div>
+                    )}
                     <Button
-                      className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl py-5 font-medium shadow-lg shadow-emerald-500/20"
-                      onClick={() => toast.success('🎬 準備生成影片...（功能開發中）')}
+                      className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl py-5 font-medium shadow-lg shadow-emerald-500/20 disabled:opacity-50"
+                      onClick={handleV3GenerateVideo}
+                      disabled={v3VideoGenerating || v3Scenes.length === 0}
                     >
-                      <ArrowRight className="w-4 h-4 mr-2" />
-                      下一步：生成 AI 影片
+                      {v3VideoGenerating ? (
+                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> 影片生成中...</>
+                      ) : (
+                        <><ArrowRight className="w-4 h-4 mr-2" /> 下一步：生成 AI 影片</>
+                      )}
                     </Button>
                   </div>
                 )}

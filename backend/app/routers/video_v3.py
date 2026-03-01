@@ -235,6 +235,103 @@ async def fal_webhook(request: Request):
 
 
 # ============================================================
+# 批次影片片段生成 API
+# ============================================================
+
+class BatchClipRequest(BaseModel):
+    """批次場景片段生成"""
+    scenes: List[Dict[str, Any]] = Field(..., description="場景列表")
+    aspect_ratio: str = Field(default="9:16")
+    model_preference: str = Field(default="auto")
+
+
+class CheckClipsRequest(BaseModel):
+    """批次查詢片段狀態"""
+    jobs: List[Dict[str, str]] = Field(..., description="[{request_id, model}]")
+
+
+@router.post("/api/generate-clips")
+async def generate_clips(request: BatchClipRequest):
+    """
+    批次提交場景到 fal.ai 生成 AI 影片片段
+    
+    輸入: scenes 陣列 (每個含 visualPrompt, refImageUrl 等)
+    輸出: 每個場景的 fal.ai job ID
+    """
+    from app.services.video_v3.fal_service import generate_scene_clip
+    
+    results = []
+    errors = []
+    
+    for i, scene in enumerate(request.scenes):
+        try:
+            prompt = scene.get("visualPrompt", "")
+            ref_image = scene.get("refImageUrl", None)
+            duration_sec = max(3, min(10, scene.get("durationInFrames", 150) // 30))
+            
+            result = await generate_scene_clip(
+                prompt=prompt,
+                duration=duration_sec,
+                aspect_ratio=request.aspect_ratio,
+                model_preference=request.model_preference,
+                reference_image_url=ref_image,
+            )
+            
+            results.append({
+                "index": i,
+                "request_id": result["request_id"],
+                "model": result["model"],
+                "status": "queued",
+            })
+            logger.info(f"[v3 batch] 場景 {i} 已提交: {result['request_id']}")
+            
+        except Exception as e:
+            logger.error(f"[v3 batch] 場景 {i} 提交失敗: {e}")
+            errors.append({"index": i, "error": str(e)})
+            results.append({
+                "index": i,
+                "request_id": None,
+                "model": None,
+                "status": "error",
+                "error": str(e),
+            })
+    
+    return {
+        "total": len(request.scenes),
+        "submitted": len([r for r in results if r["status"] == "queued"]),
+        "failed": len(errors),
+        "jobs": results,
+    }
+
+
+@router.post("/api/check-clips")
+async def check_clips(request: CheckClipsRequest):
+    """
+    批次查詢 fal.ai 片段生成狀態
+    """
+    from app.services.video_v3.fal_service import check_scene_status
+    
+    statuses = []
+    for job in request.jobs:
+        rid = job.get("request_id")
+        model = job.get("model", "")
+        if not rid:
+            statuses.append({"request_id": rid, "status": "error", "error": "missing request_id"})
+            continue
+        try:
+            status = await check_scene_status(rid, model)
+            statuses.append(status)
+        except Exception as e:
+            statuses.append({"request_id": rid, "status": "error", "error": str(e)})
+    
+    all_done = all(s.get("status") in ("completed", "error", "COMPLETED") for s in statuses)
+    
+    return {
+        "all_done": all_done,
+        "statuses": statuses,
+    }
+
+
 # 公開 API — 全自動閉環
 # ============================================================
 
