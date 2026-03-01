@@ -4477,118 +4477,119 @@ export default function VideoPage() {
           </div>
 
           {/* 右側：Remotion 預覽窗格 */}
-          <div className="flex flex-col items-center justify-center bg-slate-950/40 backdrop-blur-3xl rounded-[2rem] border border-white/5 p-4 sm:p-8 relative overflow-hidden shadow-2xl">
-            {/* 裝飾性背景光暈 */}
-            <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-cyan-500/10 rounded-full blur-[80px]" />
-            <div className="absolute bottom-1/4 right-1/4 w-64 h-64 bg-purple-500/10 rounded-full blur-[80px]" />
+          <div className="lg:sticky lg:top-8 h-fit">
+            <div className="flex flex-col items-center justify-center bg-slate-950/40 backdrop-blur-3xl rounded-[2rem] border border-white/5 p-4 sm:p-8 relative overflow-hidden shadow-2xl min-h-[600px]">
+              {/* 裝飾性背景光暈 */}
+              <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-cyan-500/10 rounded-full blur-[80px]" />
+              <div className="absolute bottom-1/4 right-1/4 w-64 h-64 bg-purple-500/10 rounded-full blur-[80px]" />
 
-            <div className="w-full max-w-[320px] aspect-[9/16] relative group rounded-[1.5rem] overflow-hidden shadow-[0_0_60px_-15px_rgba(0,0,0,0.8)] ring-1 ring-white/10 bg-black isolate">
-              <div className="absolute inset-0 z-20 pointer-events-none rounded-[1.5rem] ring-inset ring-1 ring-white/10" />
+              <div className="w-full max-w-[320px] aspect-[9/16] relative group rounded-[1.5rem] overflow-hidden shadow-[0_0_60px_-15px_rgba(0,0,0,0.8)] ring-1 ring-white/10 bg-black isolate my-auto">
+                <div className="absolute inset-0 z-20 pointer-events-none rounded-[1.5rem] ring-inset ring-1 ring-white/10" />
 
-              {/* 由於目前無法直接跨目錄 import ShortVideo (需設定 Monorepo)，此處先用 Placeholder */}
-              {/* 未來部署時將透過 component={ShortVideo} 載入組件 */}
-              {/* 動態渲染第一個已生成的影片，或是播放清單，若有最終合成影片則優先顯示 */}
-              {v3FinalVideoUrl ? (
-                <div className="w-full h-full flex flex-col relative bg-transparent">
-                  <video
-                    src={v3FinalVideoUrl}
-                    controls
-                    autoPlay
-                    loop
-                    className="w-full h-full object-cover rounded-[1.5rem]"
-                  />
-                  <div className="absolute top-4 inset-x-4 flex justify-between items-start z-10 pointer-events-none">
-                    <div className="bg-gradient-to-r from-purple-600/90 to-indigo-600/90 backdrop-blur-md px-3 py-1.5 rounded-full text-[10px] font-medium text-white shadow-lg shadow-purple-500/30 flex items-center gap-1.5 ring-1 ring-white/20">
-                      <Sparkles className="w-3 h-3" /> 最終合成影片
-                    </div>
-                  </div>
-                </div>
-              ) : v3Scenes.some(s => s.videoUrl) ? (
-                <div className="w-full h-full flex flex-col relative bg-transparent">
-                  <video
-                    src={v3Scenes.find(s => s.videoUrl)?.videoUrl}
-                    controls
-                    autoPlay
-                    loop
-                    className="w-full h-full object-cover rounded-[1.5rem]"
-                  />
-                  <div className="absolute top-4 inset-x-4 flex gap-2 overflow-x-auto pb-2 scrollbar-hide z-10 pointer-events-none">
-                    {(v3VideoGenerating || v3Synthesizing) && (
-                      <div className="bg-emerald-500/20 backdrop-blur-md px-3 py-1.5 rounded-full text-[10px] text-emerald-300 font-medium ring-1 ring-emerald-500/30 flex items-center gap-1.5 shrink-0 animate-pulse">
-                        <Loader2 className="w-3 h-3 animate-spin" /> {(v3VideoProgress || v3SynthesisProgress)?.replace('...', '') || '處理中'}
-                      </div>
-                    )}
-                    {v3Scenes.filter(s => s.videoUrl).length > 0 && (
-                      <div className="bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full text-[10px] text-white/90 ring-1 ring-white/10 shrink-0">
-                        目前素材: {v3Scenes.filter(s => s.videoUrl).length} 個片段
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                /* 預設的未生成 Placeholder UI */
-                <div className="w-full h-full bg-slate-950 flex flex-col items-center justify-center relative shadow-[inset_0_0_100px_rgba(0,0,0,0.8)]">
-                  <div className="absolute inset-0 bg-[linear-gradient(to_bottom,transparent_0%,rgba(0,0,0,0.8)_100%)] z-0" />
-
-                  {/* Grid 網格佈景 */}
-                  <div className="absolute inset-0 z-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay" />
-                  <div className="absolute inset-0 z-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:20px_20px] [mask-image:radial-gradient(ellipse_60%_60%_at_50%_50%,#000_20%,transparent_100%)]" />
-
-                  {/* 當正在生成時顯示掃描光束 */}
-                  {(v3VideoGenerating || v3Synthesizing) && (
-                    <div className="absolute top-0 inset-x-0 h-32 bg-gradient-to-b from-cyan-500/0 via-cyan-500/10 to-cyan-400/30 z-10 animate-[scan_3s_ease-in-out_infinite_alternate] border-b border-cyan-400/50" />
-                  )}
-
-                  {/* Mock Player UI */}
-                  <div className={`relative z-20 flex flex-col items-center transition-all duration-700 ${(v3VideoGenerating || v3Synthesizing) ? 'scale-105 opacity-90' : 'group-hover:scale-105'}`}>
-                    {/* 發光的播放按鈕 */}
-                    <div className="relative">
-                      <div className={`absolute -inset-4 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full blur-xl opacity-20 ${(v3VideoGenerating || v3Synthesizing) ? 'animate-pulse' : 'group-hover:opacity-40'} transition-opacity`} />
-                      <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center backdrop-blur-xl border border-white/20 mb-6 cursor-pointer hover:bg-white/10 hover:border-white/30 transition-all shadow-2xl relative z-10">
-                        {v3VideoGenerating || v3Synthesizing ? (
-                          <div className="relative flex items-center justify-center">
-                            <div className="absolute w-12 h-12 border-2 border-cyan-500/30 border-t-cyan-400 rounded-full animate-spin" />
-                            <div className="w-8 h-8 rounded-full bg-cyan-500/20 blur-sm animate-pulse" />
-                          </div>
-                        ) : (
-                          <Play className="w-8 h-8 text-white ml-2 opacity-90 group-hover:opacity-100 transition-opacity drop-shadow-md" />
-                        )}
+                {/* 由於目前無法直接跨目錄 import ShortVideo (需設定 Monorepo)，此處先用 Placeholder */}
+                {/* 未來部署時將透過 component={ShortVideo} 載入組件 */}
+                {/* 動態渲染第一個已生成的影片，或是播放清單，若有最終合成影片則優先顯示 */}
+                {v3FinalVideoUrl ? (
+                  <div className="w-full h-full flex flex-col relative bg-transparent">
+                    <video
+                      src={v3FinalVideoUrl}
+                      controls
+                      autoPlay
+                      loop
+                      className="w-full h-full object-cover rounded-[1.5rem]"
+                    />
+                    <div className="absolute top-4 inset-x-4 flex justify-between items-start z-10 pointer-events-none">
+                      <div className="bg-gradient-to-r from-purple-600/90 to-indigo-600/90 backdrop-blur-md px-3 py-1.5 rounded-full text-[10px] font-medium text-white shadow-lg shadow-purple-500/30 flex items-center gap-1.5 ring-1 ring-white/20">
+                        <Sparkles className="w-3 h-3" /> 最終合成影片
                       </div>
                     </div>
-
-                    <span className="text-sm font-semibold text-white tracking-[0.2em] uppercase opacity-90 drop-shadow-md">
-                      {v3Synthesizing ? "Synthesizing" : v3VideoGenerating ? "Generating" : "Preview Area"}
-                    </span>
-                    <span className="text-xs text-slate-400 mt-3 bg-black/50 backdrop-blur-sm px-4 py-1.5 rounded-full border border-white/5 font-medium tracking-wide">
-                      {v3Synthesizing ? "Rendering final composition..." : v3VideoGenerating ? "AI is rendering your scenes..." : "Video will appear here"}
-                    </span>
                   </div>
-
-                  {/* 下方現代化播放條 Mockup */}
-                  <div className="absolute bottom-6 inset-x-6 z-20">
-                    <div className="flex justify-between items-center text-[10px] text-slate-500 font-mono mb-2 px-1">
-                      <span>00:00</span>
-                      <span>{v3Scenes.length ? `00:${('0' + (v3Scenes.reduce((acc, s) => acc + parseInt(s.durationInFrames || 150) / 30, 0))).slice(-2)}` : '00:00'}</span>
-                    </div>
-                    <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden backdrop-blur-sm group-hover:h-2 transition-all cursor-pointer relative">
-                      {v3Scenes.length > 0 && !v3VideoGenerating && !v3Synthesizing && (
-                        // 畫出場景節點
-                        <div className="absolute inset-0 flex">
-                          {v3Scenes.map((s, idx) => (
-                            <div key={idx} className="h-full border-r border-black/50" style={{ width: `${100 / v3Scenes.length}%` }} />
-                          ))}
+                ) : v3Scenes.some(s => s.videoUrl) ? (
+                  <div className="w-full h-full flex flex-col relative bg-transparent">
+                    <video
+                      src={v3Scenes.find(s => s.videoUrl)?.videoUrl}
+                      controls
+                      autoPlay
+                      loop
+                      className="w-full h-full object-cover rounded-[1.5rem]"
+                    />
+                    <div className="absolute top-4 inset-x-4 flex gap-2 overflow-x-auto pb-2 scrollbar-hide z-10 pointer-events-none">
+                      {(v3VideoGenerating || v3Synthesizing) && (
+                        <div className="bg-emerald-500/20 backdrop-blur-md px-3 py-1.5 rounded-full text-[10px] text-emerald-300 font-medium ring-1 ring-emerald-500/30 flex items-center gap-1.5 shrink-0 animate-pulse">
+                          <Loader2 className="w-3 h-3 animate-spin" /> {(v3VideoProgress || v3SynthesisProgress)?.replace('...', '') || '處理中'}
                         </div>
                       )}
+                      {v3Scenes.filter(s => s.videoUrl).length > 0 && (
+                        <div className="bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full text-[10px] text-white/90 ring-1 ring-white/10 shrink-0">
+                          目前素材: {v3Scenes.filter(s => s.videoUrl).length} 個片段
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  /* 預設的未生成 Placeholder UI */
+                  <div className="w-full h-full bg-slate-950 flex flex-col items-center justify-center relative shadow-[inset_0_0_100px_rgba(0,0,0,0.8)]">
+                    <div className="absolute inset-0 bg-[linear-gradient(to_bottom,transparent_0%,rgba(0,0,0,0.8)_100%)] z-0" />
 
-                      <div className={`h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full relative transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(6,182,212,0.5)] ${v3Synthesizing ? 'w-5/6 animate-pulse' : v3VideoGenerating ? 'w-1/3' : 'w-0'}`}>
-                        <div className="absolute top-0 bottom-0 right-0 w-8 bg-gradient-to-l from-white/40 to-transparent" />
+                    {/* Grid 網格佈景 */}
+                    <div className="absolute inset-0 z-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay" />
+                    <div className="absolute inset-0 z-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:20px_20px] [mask-image:radial-gradient(ellipse_60%_60%_at_50%_50%,#000_20%,transparent_100%)]" />
+
+                    {/* 當正在生成時顯示掃描光束 */}
+                    {(v3VideoGenerating || v3Synthesizing) && (
+                      <div className="absolute top-0 inset-x-0 h-32 bg-gradient-to-b from-cyan-500/0 via-cyan-500/10 to-cyan-400/30 z-10 animate-[scan_3s_ease-in-out_infinite_alternate] border-b border-cyan-400/50" />
+                    )}
+
+                    {/* Mock Player UI */}
+                    <div className={`relative z-20 flex flex-col items-center transition-all duration-700 ${(v3VideoGenerating || v3Synthesizing) ? 'scale-105 opacity-90' : 'group-hover:scale-105'}`}>
+                      {/* 發光的播放按鈕 */}
+                      <div className="relative">
+                        <div className={`absolute -inset-4 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full blur-xl opacity-20 ${(v3VideoGenerating || v3Synthesizing) ? 'animate-pulse' : 'group-hover:opacity-40'} transition-opacity`} />
+                        <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center backdrop-blur-xl border border-white/20 mb-6 cursor-pointer hover:bg-white/10 hover:border-white/30 transition-all shadow-2xl relative z-10">
+                          {v3VideoGenerating || v3Synthesizing ? (
+                            <div className="relative flex items-center justify-center">
+                              <div className="absolute w-12 h-12 border-2 border-cyan-500/30 border-t-cyan-400 rounded-full animate-spin" />
+                              <div className="w-8 h-8 rounded-full bg-cyan-500/20 blur-sm animate-pulse" />
+                            </div>
+                          ) : (
+                            <Play className="w-8 h-8 text-white ml-2 opacity-90 group-hover:opacity-100 transition-opacity drop-shadow-md" />
+                          )}
+                        </div>
+                      </div>
+
+                      <span className="text-sm font-semibold text-white tracking-[0.2em] uppercase opacity-90 drop-shadow-md">
+                        {v3Synthesizing ? "Synthesizing" : v3VideoGenerating ? "Generating" : "Preview Area"}
+                      </span>
+                      <span className="text-xs text-slate-400 mt-3 bg-black/50 backdrop-blur-sm px-4 py-1.5 rounded-full border border-white/5 font-medium tracking-wide">
+                        {v3Synthesizing ? "Rendering final composition..." : v3VideoGenerating ? "AI is rendering your scenes..." : "Video will appear here"}
+                      </span>
+                    </div>
+
+                    {/* 下方現代化播放條 Mockup */}
+                    <div className="absolute bottom-6 inset-x-6 z-20">
+                      <div className="flex justify-between items-center text-[10px] text-slate-500 font-mono mb-2 px-1">
+                        <span>00:00</span>
+                        <span>{v3Scenes.length ? `00:${('0' + (v3Scenes.reduce((acc, s) => acc + parseInt(s.durationInFrames || 150) / 30, 0))).slice(-2)}` : '00:00'}</span>
+                      </div>
+                      <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden backdrop-blur-sm group-hover:h-2 transition-all cursor-pointer relative">
+                        {v3Scenes.length > 0 && !v3VideoGenerating && !v3Synthesizing && (
+                          // 畫出場景節點
+                          <div className="absolute inset-0 flex">
+                            {v3Scenes.map((s, idx) => (
+                              <div key={idx} className="h-full border-r border-black/50" style={{ width: `${100 / v3Scenes.length}%` }} />
+                            ))}
+                          </div>
+                        )}
+
+                        <div className={`h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full relative transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(6,182,212,0.5)] ${v3Synthesizing ? 'w-5/6 animate-pulse' : v3VideoGenerating ? 'w-1/3' : 'w-0'}`}>
+                          <div className="absolute top-0 bottom-0 right-0 w-8 bg-gradient-to-l from-white/40 to-transparent" />
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* 實際整合時的程式碼範例：
+                {/* 實際整合時的程式碼範例：
                 <Player
                   component={ShortVideo}
                   durationInFrames={450}
@@ -4600,11 +4601,11 @@ export default function VideoPage() {
                   inputProps={{ ...mockProps }}
                 />
                 */}
+              </div>
             </div>
           </div>
         </div>
-      )
-      }
+      )}
     </div>
   );
 }
