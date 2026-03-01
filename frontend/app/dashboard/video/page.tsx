@@ -4162,15 +4162,21 @@ export default function VideoPage() {
                 {/* 比例 + 時長 + 場景數 */}
                 <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label className="text-xs text-slate-400 block mb-1.5">📐 比例</label>
+                    <label className="text-xs text-slate-400 block mb-1.5">
+                      📐 比例
+                      {v3Mode === "sadtalker" && <span className="text-cyan-400 ml-1 text-[10px]">(源自圖片)</span>}
+                    </label>
                     <div className="flex gap-1">
                       {(["9:16", "16:9", "1:1"] as const).map(r => (
                         <button
                           key={r}
                           onClick={() => setV3AspectRatio(r)}
-                          className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${v3AspectRatio === r
-                            ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
-                            : "bg-slate-900 text-slate-500 border border-slate-700 hover:text-slate-300"
+                          disabled={v3Mode === "sadtalker"}
+                          className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${v3Mode === "sadtalker"
+                              ? "bg-slate-800 text-slate-600 cursor-not-allowed border border-slate-700/50"
+                              : v3AspectRatio === r
+                                ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
+                                : "bg-slate-900 text-slate-500 border border-slate-700 hover:text-slate-300"
                             }`}
                         >
                           {r === "9:16" ? "竪屏" : r === "16:9" ? "橫屏" : "方形"}
@@ -4179,21 +4185,33 @@ export default function VideoPage() {
                     </div>
                   </div>
                   <div>
-                    <label className="text-xs text-slate-400 block mb-1.5">⏱️ 時長 <span className="text-cyan-400">{v3Duration}s</span></label>
+                    <label className="text-xs text-slate-400 block mb-1.5">
+                      ⏱️ 時長
+                      <span className="text-cyan-400 ml-1">
+                        {v3Mode === "sadtalker" ? "依語音長度決定" : `${v3Duration}s`}
+                      </span>
+                    </label>
                     <input
                       type="range" min={10} max={120} step={5}
                       value={v3Duration}
                       onChange={e => setV3Duration(Number(e.target.value))}
-                      className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                      disabled={v3Mode === "sadtalker"}
+                      className={`w-full h-1.5 rounded-lg appearance-none outline-none ${v3Mode === "sadtalker" ? "bg-slate-800 cursor-not-allowed" : "bg-slate-700 cursor-pointer accent-cyan-500"}`}
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-slate-400 block mb-1.5">🎞️ 場景 <span className="text-cyan-400">{v3ScenesCount}</span></label>
+                    <label className="text-xs text-slate-400 block mb-1.5">
+                      🎞️ 場景
+                      <span className="text-cyan-400 ml-1">
+                        {v3Mode === "sadtalker" ? "固定 1 鏡到底" : v3ScenesCount}
+                      </span>
+                    </label>
                     <input
                       type="range" min={2} max={8} step={1}
-                      value={v3ScenesCount}
+                      value={v3Mode === "sadtalker" ? 1 : v3ScenesCount}
                       onChange={e => setV3ScenesCount(Number(e.target.value))}
-                      className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                      disabled={v3Mode === "sadtalker"}
+                      className={`w-full h-1.5 rounded-lg appearance-none outline-none ${v3Mode === "sadtalker" ? "bg-slate-800 cursor-not-allowed" : "bg-slate-700 cursor-pointer accent-cyan-500"}`}
                     />
                   </div>
                 </div>
