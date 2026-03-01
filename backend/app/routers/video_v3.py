@@ -57,13 +57,17 @@ class RenderRequest(BaseModel):
 
 
 class FullGenerateRequest(BaseModel):
-    """全自動影片生成請求"""
+    """全自動影片生成請求 — 支援 T2V / I2V / S2V 三種模式"""
+    mode: str = Field(default="t2v", description="生成模式: t2v / i2v / s2v")
     script: str = Field(..., min_length=1, max_length=5000, description="影片腳本/主題")
     style_id: str = Field(default="tech_startup", description="模板 ID")
     voice: str = Field(default="alloy", description="配音語音")
     duration: int = Field(default=30, ge=10, le=120, description="影片秒數")
     aspect_ratio: str = Field(default="9:16")
     scenes_count: int = Field(default=3, ge=2, le=8, description="場景數")
+    ref_image_url: Optional[str] = Field(default=None, description="I2V 模式: 參考圖片 URL")
+    audio_url: Optional[str] = Field(default=None, description="S2V 模式: 語音/音頻 URL")
+    negative_prompt: Optional[str] = Field(default=None, description="負面提示")
 
 
 class ThemeResponse(BaseModel):
@@ -237,29 +241,78 @@ async def fal_webhook(request: Request):
 @router.post("/api/generate-video")
 async def generate_video_api(request: FullGenerateRequest):
     """
-    全自動影片生成 API — 使用 Gemini AI 生成腳本與運鏡
+    全自動影片生成 API — 支援 T2V / I2V / S2V 三種模式
     
-    流程:
-    1. 使用 Gemini AI 將文字腳本拆分為場景 (含旁白、運鏡、視覺提示)
-    2. 返回結構化 scenes 資料供前端預覽
-    
-    Request:
-        { "script": "...", "style_id": "tech_startup", "voice": "alloy" }
-    
-    Response:
-        { "job_id": "...", "status": "completed", "scenes": [...], "subtitles": [...] }
+    - T2V (Text → Video): Gemini 將文字拆分為場景 + AI 影片提示
+    - I2V (Image → Video): 以參考圖為基礎，Gemini 生成動態場景描述
+    - S2V (Speech → Video): 以語音為驅動，Gemini 生成表情/動作場景
     """
     import os
     import json
     
     job_id = str(uuid.uuid4())
+    mode = request.mode.lower()
     
     GEMINI_KEY = os.getenv("GOOGLE_GEMINI_KEY", "")
     if not GEMINI_KEY:
         raise HTTPException(status_code=500, detail="GOOGLE_GEMINI_KEY 未設定")
     
-    # ====== 使用 Gemini AI 生成場景腳本 ======
-    system_prompt = f"""你是一位專業的短影音導演與編劇。
+    # ====== 根據模式構建不同的 Gemini Prompt ======
+    if mode == "i2v":
+        # 圖片生成影片模式
+        system_prompt = f"""你是一位專業的影片動態導演。
+用戶會給你一段描述，以及一張參考圖片的概念。
+請基於這張圖片，生成 {request.scenes_count} 個場景的短影音腳本，讓圖片「動起來」。
+
+重要規則：
+- 每個場景應該呈現圖片中不同角度、不同動態的變化
+- visualPrompt 必須包含 "reference image" 的元素描述
+- 動態應該自然流暢，像電影鏡頭掃描一張照片
+
+每個場景需要包含：
+- narration: 旁白文字 (中文，15-30字)
+- visualPrompt: 英文 AI 影片提示詞 (描述從圖片衍生的動態畫面)
+- cameraMove: 運鏡方式 (pan-left / pan-right / zoom-in / zoom-out / dolly-forward / static / tilt-up / orbit)
+- transition: 轉場效果 (fade / slide-left / slide-right / zoom-in / dissolve)
+- type: 場景類型 (hook / story / demo / cta)
+
+風格模板: {request.style_id}
+影片總長: {request.duration} 秒
+比例: {request.aspect_ratio}
+
+嚴格以 JSON 陣列格式回覆，不要加其他文字。"""
+        ref_note = f"\n參考圖片 URL: {request.ref_image_url}" if request.ref_image_url else ""
+        user_prompt = f"描述：{request.script}{ref_note}"
+        
+    elif mode == "s2v":
+        # 語音驅動影片模式
+        system_prompt = f"""你是一位專業的語音驅動影片導演。
+用戶會給你一段語音/對話的描述，請生成 {request.scenes_count} 個場景的短影音腳本。
+
+重要規則：
+- 旁白文字即為語音內容，需要自然朗讀感
+- visualPrompt 要包含角色的表情、動作、口型同步效果
+- 場景應該配合語音情緒變化（激動→平靜→高潮）
+- 包含 "speaking", "lip sync", "facial expression" 等關鍵詞
+
+每個場景需要包含：
+- narration: 語音旁白文字 (中文，20-40字，對話式)
+- visualPrompt: 英文 AI 影片提示詞 (強調表情、口型同步、肢體語言)
+- cameraMove: 運鏡方式 (pan-left / pan-right / zoom-in / zoom-out / dolly-forward / static / tilt-up / orbit)
+- transition: 轉場效果 (fade / slide-left / slide-right / zoom-in / dissolve)
+- type: 場景類型 (hook / story / demo / cta)
+- emotion: 情緒標籤 (excited / calm / serious / happy / dramatic)
+
+風格模板: {request.style_id}
+影片總長: {request.duration} 秒
+比例: {request.aspect_ratio}
+
+嚴格以 JSON 陣列格式回覆，不要加其他文字。"""
+        user_prompt = f"語音主題：{request.script}"
+        
+    else:
+        # T2V 文字生成影片模式（原有邏輯）
+        system_prompt = f"""你是一位專業的短影音導演與編劇。
 用戶會給你一段文字主題，請將它轉化為 {request.scenes_count} 個場景的短影音腳本。
 
 每個場景需要包含：
@@ -283,9 +336,9 @@ async def generate_video_api(request: FullGenerateRequest):
     "type": "hook"
   }}
 ]"""
+        user_prompt = f"主題文字：{request.script}"
     
-    user_prompt = f"主題文字：{request.script}"
-    
+    # ====== 呼叫 Gemini AI ======
     try:
         import google.generativeai as genai
         genai.configure(api_key=GEMINI_KEY)
@@ -295,7 +348,7 @@ async def generate_video_api(request: FullGenerateRequest):
             [system_prompt, user_prompt],
             generation_config=genai.GenerationConfig(
                 temperature=0.8,
-                max_output_tokens=2000,
+                max_output_tokens=3000,
             ),
         )
         
@@ -335,6 +388,17 @@ async def generate_video_api(request: FullGenerateRequest):
             "cameraMove": ai_scene.get("cameraMove", "static"),
             "transition": ai_scene.get("transition", "fade"),
         }
+        
+        # I2V 模式：每個場景附加參考圖片 URL
+        if mode == "i2v" and request.ref_image_url:
+            scene["refImageUrl"] = request.ref_image_url
+        
+        # S2V 模式：附加情緒標籤和音頻 URL
+        if mode == "s2v":
+            scene["emotion"] = ai_scene.get("emotion", "calm")
+            if request.audio_url:
+                scene["audioUrl"] = request.audio_url
+        
         scenes.append(scene)
         
         # 生成字幕 cue
@@ -349,9 +413,13 @@ async def generate_video_api(request: FullGenerateRequest):
         frame_offset += per_scene_frames
     
     # ====== 組合完整回應 ======
+    height_map = {"9:16": 1920, "16:9": 1080, "1:1": 1080}
+    width_map = {"9:16": 1080, "16:9": 1920, "1:1": 1080}
+    
     return {
         "job_id": job_id,
         "status": "completed",
+        "mode": mode,
         "scenes": scenes,
         "subtitles": subtitles,
         "script": {
@@ -360,16 +428,19 @@ async def generate_video_api(request: FullGenerateRequest):
             "description": request.script,
             "totalDurationInFrames": frame_offset,
             "fps": fps,
-            "width": 1080,
-            "height": 1920 if request.aspect_ratio == "9:16" else 1080,
+            "width": width_map.get(request.aspect_ratio, 1080),
+            "height": height_map.get(request.aspect_ratio, 1920),
             "aspectRatio": request.aspect_ratio,
         },
         "config": {
+            "mode": mode,
             "style_id": request.style_id,
             "duration": request.duration,
             "aspect_ratio": request.aspect_ratio,
             "voice": request.voice,
             "scenes_count": len(scenes),
+            "ref_image_url": request.ref_image_url,
+            "audio_url": request.audio_url,
         },
     }
 

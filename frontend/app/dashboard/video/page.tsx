@@ -444,17 +444,21 @@ export default function VideoPage() {
     setV3Result(null);
     try {
       const res = await api.post("/video/v3/api/generate-video", {
+        mode: v3Mode,
         script: v3Prompt,
         style_id: v3Style,
         voice: v3Voice,
         duration: v3Duration,
         scenes_count: v3ScenesCount,
         aspect_ratio: v3AspectRatio,
+        ref_image_url: v3Mode === "i2v" ? v3RefImage || undefined : undefined,
+        negative_prompt: v3NegPrompt || undefined,
       });
       setV3Result(res.data);
       setV3Scenes(res.data.scenes ? [...res.data.scenes] : []);
       setV3EditingIdx(null);
-      toast.success(`🎬 腳本生成完成！${res.data.scenes?.length || 0} 個場景`);
+      const modeLabels: Record<string, string> = { t2v: "文字生成", i2v: "圖片生成", s2v: "語音驅動" };
+      toast.success(`🎬 ${modeLabels[v3Mode] || v3Mode} 完成！${res.data.scenes?.length || 0} 個場景`);
     } catch (err: any) {
       const msg = err?.response?.data?.detail || err.message || "生成失敗";
       setV3Error(msg);
