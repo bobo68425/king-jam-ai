@@ -19,8 +19,8 @@ FAL_MODELS = {
     # Wan 2.1 — 最佳通用模型
     "wan21": "fal-ai/wan/v2.1/1.3b/text-to-video",
     "wan21_img2vid": "fal-ai/wan/v2.1/1.3b/image-to-video",
-    # Luma — 高品質電影風格
-    "luma": "fal-ai/luma-dream-machine",
+    # Minimax — 高品質且快速 (取代已棄用的 Luma)
+    "minimax": "fal-ai/minimax/video-01",
     # Kling — 高性價比
     "kling": "fal-ai/kling-video/v2/master/text-to-video",
 }
@@ -29,8 +29,8 @@ FAL_MODELS = {
 MODEL_SELECTION_RULES = {
     # 動態人物、複雜場景 → Wan 2.1
     "wan21": ["人物", "角色", "對話", "表演", "舞蹈", "運動", "動作", "character", "person", "dance"],
-    # 電影感、風景、質感 → Luma
-    "luma": ["電影", "風景", "自然", "航拍", "城市", "夜景", "cinematic", "landscape", "scenic"],
+    # 電影感、風景、質感 → Minimax
+    "minimax": ["電影", "風景", "自然", "航拍", "城市", "夜景", "cinematic", "landscape", "scenic"],
     # 產品展示、簡單場景 → Kling (高性價比)
     "kling": ["產品", "展示", "商品", "食物", "美食", "product", "food", "unboxing"],
 }
@@ -120,9 +120,9 @@ async def generate_scene_clip(
         input_data["aspect_ratio"] = aspect_ratio
         if reference_image_url:
             input_data["image_url"] = reference_image_url
-    elif "luma" in model_id:
-        # Luma: 只接受 prompt, aspect_ratio, loop
-        input_data["aspect_ratio"] = aspect_ratio
+    elif "minimax" in model_id:
+        # Minimax: 不額外傳參數，預設只吃 prompt
+        pass
     elif "kling" in model_id:
         # Kling: 接受 duration, aspect_ratio
         input_data["duration"] = str(min(duration, 5))
