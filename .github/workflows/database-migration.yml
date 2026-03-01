@@ -71,16 +71,17 @@ jobs:
       
       - name: 🔗 Start Cloud SQL Proxy
         run: |
-          echo "Connecting to ${{ env.PROJECT_ID }}:${{ env.REGION }}:kingjam-db"
-          ./cloud_sql_proxy -instances=${{ env.PROJECT_ID }}:${{ env.REGION }}:kingjam-db=tcp:5432 &
+          echo "Connecting to ${{ env.PROJECT_ID }}:${{ env.REGION }}:kingjam-db on port 5433"
+          ./cloud_sql_proxy -instances=${{ env.PROJECT_ID }}:${{ env.REGION }}:kingjam-db=tcp:5433 > cloud_sql_proxy.log 2>&1 &
           sleep 8
+          cat cloud_sql_proxy.log
       
       - name: 🗄️ Run Migration
         env:
           _DB_PASS: ${{ secrets.DB_PASSWORD }}
         run: |
           cd backend
-          export DATABASE_URL="postgresql://postgres:${_DB_PASS}@localhost:5432/kingjam"
+          export DATABASE_URL="postgresql://postgres:${_DB_PASS}@localhost:5433/kingjam"
           
           if [ -z "${_DB_PASS}" ]; then
             echo "❌ DB_PASSWORD secret 未設定"
@@ -92,7 +93,9 @@ jobs:
           
           case "${{ inputs.action }}" in
             upgrade)
-              echo "📈 執行資料庫遷移..."
+              echo "📈 執行 Alembic 資料庫遷移..."
+              alembic upgrade head
+              echo "📈 執行附加直接資料庫遷移腳本..."
               python3 scripts/run_direct_migration.py
               ;;
             current)
