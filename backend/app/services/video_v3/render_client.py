@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 # Cloud Run 渲染服務 URL
 RENDER_SERVICE_URL = os.getenv(
     "REMOTION_RENDER_URL",
-    "https://kingjam-video-renderer-xxxxx.run.app"  # 部署後替換
+    "https://kingjam-video-renderer-811364632967.asia-east1.run.app"
 )
 
 

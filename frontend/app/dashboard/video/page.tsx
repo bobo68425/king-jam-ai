@@ -436,6 +436,108 @@ export default function VideoPage() {
   const [v3VideoGenerating, setV3VideoGenerating] = useState(false);
   const [v3VideoJobs, setV3VideoJobs] = useState<any[]>([]);
   const [v3VideoProgress, setV3VideoProgress] = useState<string>("");
+  const [v3SynthesisProgress, setV3SynthesisProgress] = useState("");
+  const [v3Synthesizing, setV3Synthesizing] = useState(false);
+  const [v3FinalVideoUrl, setV3FinalVideoUrl] = useState<string | null>(null);
+
+  const handleV3SynthesizeVideo = async () => {
+    if (v3Scenes.length === 0 || !v3Scenes.every((s: any) => s.videoUrl)) {
+      toast.error("請確認所有場景皆已生成影片片段");
+      return;
+    }
+    setV3Synthesizing(true);
+    setV3SynthesisProgress("生成語音旁白...");
+    setV3FinalVideoUrl(null);
+    try {
+      // 1. 生成配音與字幕
+      const fullText = v3Scenes.map((s: any) => s.narration).join(" ");
+      const ttsRes = await api.post("/video/v3/tts", {
+        text: fullText || "無旁白",
+        voice: v3Voice || "alloy",
+        model: "tts-1-hd",
+        speed: "normal",
+        fps: 30
+      });
+      const { audio_url, subtitles } = ttsRes.data;
+
+      setV3SynthesisProgress("提交雲端渲染...");
+
+      // 2. 構建 Remotion Props
+      const props = {
+        script: {
+          projectId: "v3_demo",
+          title: v3Prompt || "AI Video",
+          description: v3Prompt || "AI Generated Video",
+          totalDurationInFrames: v3Scenes.reduce((acc: number, s: any) => acc + (s.durationInFrames || 150), 0),
+          fps: 30,
+          width: 1080,
+          height: 1920,
+          aspectRatio: "9:16"
+        },
+        scenes: v3Scenes.map((s: any, idx: number) => ({
+          index: idx,
+          type: s.type || "story",
+          durationInFrames: s.durationInFrames || 150,
+          videoUrl: s.videoUrl,
+          narration: s.narration,
+          visualPrompt: s.visualPrompt,
+          transition: s.transition || "fade"
+        })),
+        audioUrl: audio_url,
+        subtitles: subtitles,
+        theme: {
+          id: "default",
+          name: "Default",
+          category: "Basic",
+          colors: { primary: "#00e5ff", secondary: "#7000ff", accent: "#ff00e5", bg: "#000000", text: "#ffffff" },
+          fonts: { title: "Inter", body: "Inter", accent: "Inter" },
+          transitions: ["fade"],
+          progressBarStyle: "gradient",
+          subtitlePreset: { fontSize: 40, fontColor: "#fff", outlineColor: "#000", outlineWidth: 3, position: "center", fontFamily: "Inter" },
+          musicMood: "minimal",
+          animationIntensity: "moderate"
+        },
+        showProgressBar: true,
+        showWatermark: true,
+        musicUrl: "https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3",
+        musicVolume: 0.3
+      };
+
+      // 3. 提交渲染請求
+      const renderRes = await api.post("/video/v3/render", {
+        props,
+        output_format: "mp4",
+        quality: "medium"
+      });
+      const jobId = renderRes.data.jobId;
+
+      setV3SynthesisProgress("雲端合成中... (0%)");
+
+      // 4. 輪詢狀態
+      let attempts = 0;
+      while (attempts < 120) {
+        attempts++;
+        await new Promise(r => setTimeout(r, 5000));
+        const statusRes = await api.get(`/video/v3/render/status/${jobId}`);
+        const status = statusRes.data;
+        if (status.status === "done" && status.videoUrl) {
+          setV3FinalVideoUrl(status.videoUrl.startsWith('http') ? status.videoUrl : `https://kingjam-video-renderer-811364632967.asia-east1.run.app${status.videoUrl}`);
+          setV3SynthesisProgress("✅ 合成完成");
+          toast.success("影片合成完成！");
+          break;
+        } else if (status.status === "error") {
+          throw new Error(status.error || "未知渲染錯誤");
+        } else {
+          setV3SynthesisProgress(`雲端合成中... (${Math.round((status.progress || 0) * 100)}%)`);
+        }
+      }
+    } catch (err: any) {
+      toast.error("影片合成失敗: " + (err.message || ""));
+      setV3SynthesisProgress("❌ 合成失敗");
+    } finally {
+      setV3Synthesizing(false);
+    }
+  };
 
   const handleV3Generate = async () => {
     if (!v3Prompt.trim()) {
@@ -4281,14 +4383,33 @@ export default function VideoPage() {
                       </div>
                     )}
                     <Button
-                      className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl py-5 font-medium shadow-lg shadow-emerald-500/20 disabled:opacity-50"
+                      className="w-full bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 rounded-xl py-5 font-medium disabled:opacity-50"
                       onClick={handleV3GenerateVideo}
                       disabled={v3VideoGenerating || v3Scenes.length === 0}
                     >
                       {v3VideoGenerating ? (
                         <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> 影片生成中...</>
                       ) : (
-                        <><ArrowRight className="w-4 h-4 mr-2" /> 下一步：生成 AI 影片</>
+                        <><ArrowRight className="w-4 h-4 mr-2" /> 第 2 步：生成 AI 影片素材</>
+                      )}
+                    </Button>
+
+                    {/* 合成最終影片按鈕 */}
+                    {v3SynthesisProgress && (
+                      <div className="flex items-center gap-2 text-xs text-purple-400 bg-purple-500/10 rounded-lg px-3 py-2 mt-2">
+                        {v3Synthesizing && <Loader2 className="w-3 h-3 animate-spin" />}
+                        {v3SynthesisProgress}
+                      </div>
+                    )}
+                    <Button
+                      className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl py-5 font-medium shadow-lg shadow-purple-500/20 disabled:opacity-50 mt-2"
+                      onClick={handleV3SynthesizeVideo}
+                      disabled={v3Synthesizing || v3Scenes.length === 0 || !v3Scenes.every(s => s.videoUrl)}
+                    >
+                      {v3Synthesizing ? (
+                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> 雲端合成中...</>
+                      ) : (
+                        <><Play className="w-4 h-4 mr-2" /> 第 3 步：合成最終配音與影片</>
                       )}
                     </Button>
                   </div>
@@ -4304,8 +4425,23 @@ export default function VideoPage() {
 
               {/* 由於目前無法直接跨目錄 import ShortVideo (需設定 Monorepo)，此處先用 Placeholder */}
               {/* 未來部署時將透過 component={ShortVideo} 載入組件 */}
-              {/* 動態渲染第一個已生成的影片，或是播放清單 */}
-              {v3Scenes.some(s => s.videoUrl) ? (
+              {/* 動態渲染第一個已生成的影片，或是播放清單，若有最終合成影片則優先顯示 */}
+              {v3FinalVideoUrl ? (
+                <div className="w-full h-full bg-black flex flex-col relative shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+                  <video
+                    src={v3FinalVideoUrl}
+                    controls
+                    autoPlay
+                    loop
+                    className="w-full h-full object-cover rounded-2xl"
+                  />
+                  <div className="absolute top-4 left-4 right-4 flex gap-2 overflow-x-auto">
+                    <div className="bg-purple-600/80 backdrop-blur-md px-3 py-1 rounded-full text-[10px] text-white border border-white/20 whitespace-nowrap shadow-lg shadow-purple-500/50">
+                      ⚡ 最終合成影片 (配音+BGM)
+                    </div>
+                  </div>
+                </div>
+              ) : v3Scenes.some(s => s.videoUrl) ? (
                 <div className="w-full h-full bg-black flex flex-col relative shadow-[0_0_50px_rgba(0,0,0,0.5)]">
                   <video
                     src={v3Scenes.find(s => s.videoUrl)?.videoUrl}
