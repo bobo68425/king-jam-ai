@@ -22,7 +22,8 @@ FAL_MODELS = {
     # Minimax — 高品質且快速 (取代已棄用的 Luma)
     "minimax": "fal-ai/minimax/video-01",
     # Kling — 高性價比
-    "kling": "fal-ai/kling-video/v2/master/text-to-video",
+    "kling": "fal-ai/kling-video/v1/standard/text-to-video",
+    "kling_img2vid": "fal-ai/kling-video/v1/standard/image-to-video",
 }
 
 # 關鍵字 → 模型選擇規則
@@ -96,8 +97,11 @@ async def generate_scene_clip(
     model_id = select_best_model(prompt, model_preference)
     
     # 如果有參考圖片，使用 image-to-video 版本
-    if reference_image_url and "wan" in model_id:
-        model_id = FAL_MODELS["wan21_img2vid"]
+    if reference_image_url:
+        if "wan" in model_id:
+            model_id = FAL_MODELS["wan21_img2vid"]
+        elif "kling" in model_id:
+            model_id = FAL_MODELS["kling_img2vid"]
     
     # 構建模型特定請求參數 (fal.ai 各模型 schema 不同)
     input_data: Dict[str, Any] = {
@@ -118,6 +122,8 @@ async def generate_scene_clip(
         # Kling: 接受 duration, aspect_ratio
         input_data["duration"] = str(min(duration, 5))
         input_data["aspect_ratio"] = aspect_ratio
+        if reference_image_url:
+            input_data["image_url"] = reference_image_url
     
     # 使用 Queue API 異步提交 — 直接傳入 input_data (不要包在 "input" key 裡)
     api_url = f"https://queue.fal.run/{model_id}"
