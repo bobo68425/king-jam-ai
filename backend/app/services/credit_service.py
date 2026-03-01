@@ -263,6 +263,11 @@ class FeatureCode(str, Enum):
     
     # 部落格文章
     BLOG_POST_BASIC = "blog_post_basic"
+    BLOG_POST_PREMIUM = "blog_post_premium"
+    
+    # 舊版短影片生成
+    SHORT_VIDEO_BASIC = "short_video_basic"
+    SHORT_VIDEO_PREMIUM = "short_video_premium"
     
     # V3 短影音生成
     V3_GENERATE_SCRIPT = "v3_generate_script"
@@ -288,6 +293,9 @@ class FeatureCode(str, Enum):
     # Veo 影片渲染（高成本）
     RENDER_VEO_FAST = "render_veo_fast"
     RENDER_VEO_ULTRA = "render_veo_ultra"
+    VEO_VIDEO_8S = "veo_video_8s"
+    VEO_VIDEO_15S = "veo_video_15s"
+    VEO_VIDEO_30S = "veo_video_30s"
 
 
 # 預設定價（資料庫未設定時的備用，需與引擎一致）
@@ -300,6 +308,11 @@ DEFAULT_PRICING: Dict[str, int] = {
     
     # 部落格文章
     FeatureCode.BLOG_POST_BASIC: 5,
+    FeatureCode.BLOG_POST_PREMIUM: 15,
+    
+    # 舊版短影片生成
+    FeatureCode.SHORT_VIDEO_BASIC: 30,
+    FeatureCode.SHORT_VIDEO_PREMIUM: 60,
     
     # 部落格封面圖
     FeatureCode.BLOG_COVER_DRAFT: 5,
@@ -325,6 +338,9 @@ DEFAULT_PRICING: Dict[str, int] = {
     # Veo 影片渲染
     FeatureCode.RENDER_VEO_FAST: 200,
     FeatureCode.RENDER_VEO_ULTRA: 350,
+    FeatureCode.VEO_VIDEO_8S: 150,
+    FeatureCode.VEO_VIDEO_15S: 250,
+    FeatureCode.VEO_VIDEO_30S: 400,
 }
 
 
