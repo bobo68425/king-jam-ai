@@ -826,16 +826,23 @@ async def publish_now(
             raise Exception(f"發布失敗: {result.error_message}")
     
     except Exception as e:
+        import traceback
+        print(f"[PublishNow] ❌ 發布失敗: platform={social_account.platform if social_account else 'unknown'}, error={e}")
+        print(f"[PublishNow] Traceback: {traceback.format_exc()}")
         post.status = "failed"
-        post.error_message = str(e)
-        log_err = PublishLog(
-            scheduled_post_id=post.id, action="error",
-            message=f"發布失敗: {str(e)[:200]}",
-            details={"error": str(e)}
-        )
-        db.add(log_err)
-        db.commit()
-        raise HTTPException(status_code=400, detail=f"發布失敗: {str(e)}")
+        post.error_message = str(e)[:500]  # 限制長度避免 DB 欄位溢出
+        try:
+            log_err = PublishLog(
+                scheduled_post_id=post.id, action="error",
+                message=f"發布失敗: {str(e)[:200]}",
+                details={"error": str(e)[:1000]}
+            )
+            db.add(log_err)
+            db.commit()
+        except Exception as db_err:
+            print(f"[PublishNow] ⚠️ 記錄錯誤日誌失敗: {db_err}")
+            db.rollback()
+        raise HTTPException(status_code=400, detail=f"發布失敗: {str(e)[:500]}")
 
 
 # ============================================================

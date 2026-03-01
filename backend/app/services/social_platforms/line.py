@@ -4,6 +4,7 @@ LINE 平台整合
 """
 
 import os
+import json
 import aiohttp
 from urllib.parse import urlencode
 from typing import Optional, Dict, Any, List
@@ -180,13 +181,21 @@ class LinePlatform(BasePlatform):
         """
         try:
             if not self._channel_access_token:
+                print("[LINE] ❌ 缺少 LINE_CHANNEL_ACCESS_TOKEN 環境變數")
                 return PublishResult(
                     success=False,
                     error_message="缺少 LINE Channel Access Token，請在環境變數設定 LINE_CHANNEL_ACCESS_TOKEN"
                 )
             
-            return await self._broadcast_message(content)
+            print(f"[LINE] 開始廣播: content_type={content.content_type}, media_urls={content.media_urls}, caption_len={len(content.caption or '')}")
+            result = await self._broadcast_message(content)
+            if result.success:
+                print(f"[LINE] ✅ 廣播成功")
+            else:
+                print(f"[LINE] ❌ 廣播失敗: {result.error_message}")
+            return result
         except Exception as e:
+            print(f"[LINE] ❌ 發布異常: {type(e).__name__}: {e}")
             return PublishResult(success=False, error_message=str(e))
     
     async def _broadcast_message(self, content: PublishContent) -> PublishResult:
@@ -239,12 +248,18 @@ class LinePlatform(BasePlatform):
             
             data = {"messages": messages[:5]}  # LINE 一次最多 5 則訊息
             
+            print(f"[LINE] 發送 broadcast: messages_count={len(messages)}, payload={json.dumps(data, ensure_ascii=False)[:500]}")
+            
             async with session.post(broadcast_url, headers=headers, json=data) as response:
-                if response.status != 200:
-                    error_text = await response.text()
-                    return PublishResult(success=False, error_message=error_text)
+                body = await response.text()
                 
-                result = await response.json()
+                if response.status != 200:
+                    print(f"[LINE] ❌ Broadcast API 錯誤: status={response.status}, body={body[:500]}")
+                    return PublishResult(success=False, error_message=f"LINE API {response.status}: {body[:300]}")
+                
+                # LINE Broadcast API 成功時回傳 {} 或空 body
+                result = json.loads(body) if body.strip() else {}
+                print(f"[LINE] ✅ Broadcast API 成功: response={result}")
                 
                 return PublishResult(
                     success=True,

@@ -263,6 +263,12 @@ class FeatureCode(str, Enum):
     # 部落格文章
     BLOG_POST_BASIC = "blog_post_basic"
     
+    # V3 短影音生成
+    V3_GENERATE_SCRIPT = "v3_generate_script"
+    V3_GENERATE_CLIP_STANDARD = "v3_generate_clip_standard"
+    V3_GENERATE_CLIP_SADTALKER = "v3_generate_clip_sadtalker"
+    V3_RENDER_VIDEO = "v3_render_video"
+    
     # 部落格封面圖
     BLOG_COVER_DRAFT = "blog_cover_draft"
     BLOG_COVER_STANDARD = "blog_cover_standard"
@@ -302,6 +308,12 @@ DEFAULT_PRICING: Dict[str, int] = {
     FeatureCode.SCRIPT_15S: 20,
     FeatureCode.SCRIPT_30S: 30,
     FeatureCode.SCRIPT_60S: 50,
+    
+    # V3 短影音
+    FeatureCode.V3_GENERATE_SCRIPT: 5,
+    FeatureCode.V3_GENERATE_CLIP_STANDARD: 50,    # Kling / Wan 等每個 5s 片段
+    FeatureCode.V3_GENERATE_CLIP_SADTALKER: 10,   # 數字人播報片段
+    FeatureCode.V3_RENDER_VIDEO: 20,              # 最終合成與配音
     
     # 標準影片渲染
     FeatureCode.RENDER_STANDARD_15S: 50,

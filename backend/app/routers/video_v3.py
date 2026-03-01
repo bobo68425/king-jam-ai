@@ -21,6 +21,13 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.models import User
+from app.routers.auth import get_current_user
+from app.services.credit_service import FeatureCode, CreditService
+from app.services.credit_decorators import consume_credits_manually
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +127,11 @@ async def get_themes():
 
 
 @router.post("/scene/generate")
-async def generate_scene(request: SceneGenerateRequest):
+async def generate_scene(
+    request: SceneGenerateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """
     單場景 AI 影片片段生成
     使用 fal.ai 異步生成
@@ -130,6 +141,20 @@ async def generate_scene(request: SceneGenerateRequest):
     # 構建 Webhook URL
     webhook_url = None  # TODO: 設定公開 webhook URL
     
+    # 計算點數成本
+    is_sadtalker = "sadtalker" in request.model_preference.lower()
+    feature_code = FeatureCode.V3_GENERATE_CLIP_SADTALKER if is_sadtalker else FeatureCode.V3_GENERATE_CLIP_STANDARD
+    
+    # 扣除點數
+    consume_result = consume_credits_manually(
+        db=db,
+        user=current_user,
+        feature_code=feature_code,
+        description=f"V3 影片片段生成 ({request.model_preference})"
+    )
+    if not consume_result["success"]:
+        raise HTTPException(status_code=402, detail=consume_result.get("error", "點數不足以生成此片段"))
+
     result = await generate_scene_clip(
         prompt=request.prompt,
         duration=request.duration,
@@ -148,7 +173,10 @@ async def generate_scene(request: SceneGenerateRequest):
 
 
 @router.post("/tts")
-async def generate_tts(request: TTSRequest):
+async def generate_tts(
+    request: TTSRequest,
+    current_user: User = Depends(get_current_user)
+):
     """
     OpenAI TTS 配音生成
     返回音頻 URL + Remotion SubtitleCue 格式的時間戳
@@ -185,13 +213,27 @@ async def generate_tts(request: TTSRequest):
 
 
 @router.post("/render")
-async def submit_render(request: RenderRequest):
+async def submit_render(
+    request: RenderRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """
     提交 Remotion 渲染任務
     將 props 發送到 Cloud Run 渲染服務
     """
     from app.services.video_v3.render_client import submit_render_job
     
+    # 扣除點數
+    consume_result = consume_credits_manually(
+        db=db,
+        user=current_user,
+        feature_code=FeatureCode.V3_RENDER_VIDEO,
+        description="V3 影片最終合成與配音"
+    )
+    if not consume_result["success"]:
+        raise HTTPException(status_code=402, detail=consume_result.get("error", "點數不足以合成影片"))
+
     result = await submit_render_job(
         props=request.props,
         output_format=request.output_format,
@@ -201,10 +243,13 @@ async def submit_render(request: RenderRequest):
     return result
 
 
-@router.get("/render/status/{job_id}")
-async def get_render_status(job_id: str):
+@router.get("/status/{job_id}")
+async def get_render_status(
+    job_id: str,
+    current_user: User = Depends(get_current_user)
+):
     """
-    查詢渲染任務狀態
+    查詢 Cloud Run 渲染狀態任務狀態
     """
     from app.services.video_v3.render_client import check_render_status
     
@@ -251,15 +296,27 @@ class CheckClipsRequest(BaseModel):
 
 
 @router.post("/api/generate-clips")
-async def generate_clips(request: BatchClipRequest):
+async def generate_clips(
+    request: BatchClipRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """
     批次提交場景到 fal.ai 生成 AI 影片片段
-    
-    輸入: scenes 陣列 (每個含 visualPrompt, refImageUrl 等)
-    輸出: 每個場景的 fal.ai job ID
     """
     from app.services.video_v3.fal_service import generate_scene_clip
     
+    # 計算點數成本
+    is_sadtalker = "sadtalker" in request.model_preference.lower()
+    feature_code = FeatureCode.V3_GENERATE_CLIP_SADTALKER if is_sadtalker else FeatureCode.V3_GENERATE_CLIP_STANDARD
+    
+    credit_service = CreditService(db)
+    cost_per_clip = credit_service.get_feature_cost(feature_code, current_user.tier)
+    total_cost = cost_per_clip * len(request.scenes)
+    
+    if credit_service.get_balance(current_user.id) < total_cost:
+        raise HTTPException(status_code=402, detail=f"點數不足 (需要 {total_cost} 點，餘額不足)")
+
     results = []
     errors = []
     
@@ -277,6 +334,14 @@ async def generate_clips(request: BatchClipRequest):
                 model_preference=request.model_preference,
                 reference_image_url=ref_image,
                 audio_url=audio_url,
+            )
+            
+            # 扣除單一片段點數
+            consume_credits_manually(
+                db=db,
+                user=current_user,
+                feature_code=feature_code,
+                description=f"V3 影片片段生成 ({request.model_preference})"
             )
             
             results.append({
@@ -307,7 +372,10 @@ async def generate_clips(request: BatchClipRequest):
 
 
 @router.post("/api/check-clips")
-async def check_clips(request: CheckClipsRequest):
+async def check_clips(
+    request: CheckClipsRequest,
+    current_user: User = Depends(get_current_user)
+):
     """
     批次查詢 fal.ai 片段生成狀態
     """
@@ -338,7 +406,11 @@ async def check_clips(request: CheckClipsRequest):
 # ============================================================
 
 @router.post("/api/generate-video")
-async def generate_video_api(request: FullGenerateRequest):
+async def generate_video_api(
+    request: FullGenerateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """
     全自動影片生成 API — 支援 T2V / I2V / S2V 三種模式
     
@@ -352,6 +424,16 @@ async def generate_video_api(request: FullGenerateRequest):
     job_id = str(uuid.uuid4())
     mode = request.mode.lower()
     
+    # 扣除生成腳本點數
+    consume_result = consume_credits_manually(
+        db=db,
+        user=current_user,
+        feature_code=FeatureCode.V3_GENERATE_SCRIPT,
+        description="V3 AI 腳本生成"
+    )
+    if not consume_result["success"]:
+        raise HTTPException(status_code=402, detail=consume_result.get("error", "點數不足以生成腳本"))
+
     GEMINI_KEY = os.getenv("GOOGLE_GEMINI_KEY", "")
     if not GEMINI_KEY:
         raise HTTPException(status_code=500, detail="GOOGLE_GEMINI_KEY 未設定")
