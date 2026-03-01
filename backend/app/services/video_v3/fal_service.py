@@ -163,6 +163,8 @@ async def check_scene_status(request_id: str, model_id: str) -> Dict[str, Any]:
     """
     查詢 fal.ai 任務狀態
     
+    使用 /status?logs=1 端點，並在 COMPLETED 時嘗試用 response_url 取得結果
+    
     Returns:
         { "status": "queued" | "processing" | "completed" | "failed",
           "video_url": str | None, "error": str | None }
@@ -181,34 +183,55 @@ async def check_scene_status(request_id: str, model_id: str) -> Dict[str, Any]:
     status = result.get("status", "unknown")
     
     if status == "COMPLETED":
-        # 取得結果
-        result_url = f"https://queue.fal.run/{model_id}/requests/{request_id}"
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.get(result_url, headers=headers)
-            response.raise_for_status()
-            output = response.json()
-        
+        # 嘗試從 response_url 取得結果
+        response_url = result.get("response_url")
         video_url = None
-        # 不同模型的輸出格式
-        if "video" in output:
-            video_url = output["video"].get("url")
-        elif "output" in output and isinstance(output["output"], dict):
-            video_url = output["output"].get("video", {}).get("url")
+        
+        if response_url:
+            try:
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    resp = await client.get(response_url, headers=headers)
+                    if resp.status_code == 200:
+                        output = resp.json()
+                        # 各模型輸出格式
+                        if "video" in output:
+                            video_url = output["video"].get("url")
+                        elif "data" in output and isinstance(output["data"], dict):
+                            video_url = output["data"].get("video", {}).get("url")
+            except Exception as e:
+                logger.warning(f"[fal] 取得結果失敗 (response_url), 嘗試 subscribe: {e}")
+        
+        # 如果 response_url 方式失敗，使用 fal_client subscribe 方式
+        if not video_url:
+            try:
+                import fal_client
+                result_data = fal_client.result(model_id, request_id)
+                if isinstance(result_data, dict):
+                    if "video" in result_data:
+                        video_url = result_data["video"].get("url")
+                    elif "data" in result_data:
+                        video_url = result_data.get("data", {}).get("video", {}).get("url")
+            except ImportError:
+                logger.warning("[fal] fal_client 未安裝，無法取得結果")
+            except Exception as e:
+                logger.warning(f"[fal] fal_client 取得結果失敗: {e}")
         
         return {
+            "request_id": request_id,
             "status": "completed",
             "video_url": video_url,
         }
     
     elif status == "FAILED":
         return {
+            "request_id": request_id,
             "status": "failed",
             "error": result.get("error", "Unknown error"),
         }
     
     return {
+        "request_id": request_id,
         "status": status.lower(),
-        "video_url": None,
     }
 
 
