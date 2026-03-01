@@ -20,6 +20,7 @@ UPLOAD_DIR = "/app/static/uploads"
 SCENE_IMAGES_DIR = "/app/static/uploads/scenes"
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"}
 ALLOWED_VIDEO_TYPES = {"video/mp4", "video/webm", "video/quicktime", "video/mpeg"}
+ALLOWED_AUDIO_TYPES = {"audio/mpeg", "audio/mp3", "audio/wav", "audio/ogg", "audio/m4a", "audio/x-m4a", "audio/mp4"}
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 MAX_SCENE_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB per scene image
 
@@ -45,15 +46,16 @@ async def upload_media(
     
     # 檢查文件類型
     content_type = file.content_type or ""
-    if content_type not in ALLOWED_IMAGE_TYPES and content_type not in ALLOWED_VIDEO_TYPES:
+    all_allowed = ALLOWED_IMAGE_TYPES | ALLOWED_VIDEO_TYPES | ALLOWED_AUDIO_TYPES
+    if content_type not in all_allowed:
         raise HTTPException(
             status_code=400,
-            detail=f"不支援的文件類型: {content_type}。支援的格式: JPG, PNG, GIF, WebP, MP4, WebM"
+            detail=f"不支援的文件類型: {content_type}。支援的格式: JPG, PNG, GIF, WebP, MP4, WebM, MP3, WAV, OGG, M4A"
         )
     
     # 生成唯一文件名
     ext = os.path.splitext(file.filename or "file")[1].lower() or (
-        ".jpg" if content_type in ALLOWED_IMAGE_TYPES else ".mp4"
+        ".jpg" if content_type in ALLOWED_IMAGE_TYPES else ".mp3" if content_type in ALLOWED_AUDIO_TYPES else ".mp4"
     )
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     unique_id = uuid.uuid4().hex[:8]
@@ -91,7 +93,7 @@ async def upload_media(
     url = f"/upload/media/{filename}"
     
     # 確定媒體類型
-    media_type = "image" if content_type in ALLOWED_IMAGE_TYPES else "video"
+    media_type = "image" if content_type in ALLOWED_IMAGE_TYPES else "audio" if content_type in ALLOWED_AUDIO_TYPES else "video"
     
     return {
         "success": True,

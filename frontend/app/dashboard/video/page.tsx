@@ -3879,31 +3879,97 @@ export default function VideoPage() {
                   />
                 </div>
 
-                {/* I2V 模式：參考圖片 */}
+                {/* I2V 模式：參考圖片上傳 */}
                 {v3Mode === "i2v" && (
                   <div>
-                    <label className="text-xs text-slate-400 block mb-1.5">🖼️ 參考圖片 URL</label>
-                    <input
-                      type="text"
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-cyan-500"
-                      placeholder="https://example.com/image.jpg"
-                      value={v3RefImage}
-                      onChange={(e) => setV3RefImage(e.target.value)}
-                    />
-                    <p className="text-[10px] text-slate-600 mt-1">支援 JPG / PNG，AI 將根據此圖生成動態影片</p>
+                    <label className="text-xs text-slate-400 block mb-1.5">🖼️ 參考圖片</label>
+                    {v3RefImage ? (
+                      <div className="relative bg-slate-900 border border-slate-700 rounded-xl p-2">
+                        <img src={v3RefImage.startsWith("/") ? `https://api.kingjam.app${v3RefImage}` : v3RefImage} alt="參考圖" className="w-full h-32 object-cover rounded-lg" />
+                        <button
+                          onClick={() => setV3RefImage("")}
+                          className="absolute top-3 right-3 bg-red-500/80 hover:bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                        <p className="text-[10px] text-emerald-400 mt-1.5">✅ 已上傳</p>
+                      </div>
+                    ) : (
+                      <label className="flex flex-col items-center justify-center w-full h-28 bg-slate-900 border-2 border-dashed border-slate-700 hover:border-cyan-500/50 rounded-xl cursor-pointer transition-colors">
+                        <Upload className="w-5 h-5 text-slate-500 mb-1" />
+                        <span className="text-xs text-slate-500">點擊或拖放圖片上傳</span>
+                        <span className="text-[10px] text-slate-600 mt-0.5">JPG / PNG / WebP</span>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/gif"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const formData = new FormData();
+                            formData.append("file", file);
+                            try {
+                              toast.loading("上傳中...", { id: "v3upload" });
+                              const res = await api.post("/upload/media", formData, { headers: { "Content-Type": "multipart/form-data" } });
+                              setV3RefImage(res.data.url);
+                              toast.success("圖片上傳成功！", { id: "v3upload" });
+                            } catch (err: any) {
+                              toast.error(`上傳失敗: ${err?.response?.data?.detail || err.message}`, { id: "v3upload" });
+                            }
+                          }}
+                        />
+                      </label>
+                    )}
                   </div>
                 )}
 
-                {/* S2V 模式：語音輸入 */}
+                {/* S2V 模式：語音上傳 */}
                 {v3Mode === "s2v" && (
                   <div>
-                    <label className="text-xs text-slate-400 block mb-1.5">🎤 語音 / 音頻 URL</label>
-                    <input
-                      type="text"
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-cyan-500"
-                      placeholder="https://example.com/speech.mp3"
-                    />
-                    <p className="text-[10px] text-slate-600 mt-1">上傳語音，AI 將根據音訊驅動角色表情與動作</p>
+                    <label className="text-xs text-slate-400 block mb-1.5">🎤 語音 / 音頻檔案</label>
+                    {v3RefImage ? (
+                      <div className="bg-slate-900 border border-slate-700 rounded-xl p-3 flex items-center gap-3">
+                        <div className="w-10 h-10 bg-cyan-500/20 rounded-lg flex items-center justify-center">
+                          <Mic className="w-5 h-5 text-cyan-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-white text-sm truncate">已上傳音頻</p>
+                          <p className="text-[10px] text-emerald-400">✅ 準備就緒</p>
+                        </div>
+                        <button
+                          onClick={() => setV3RefImage("")}
+                          className="text-slate-500 hover:text-red-400 p-1"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="flex flex-col items-center justify-center w-full h-28 bg-slate-900 border-2 border-dashed border-slate-700 hover:border-cyan-500/50 rounded-xl cursor-pointer transition-colors">
+                        <Mic className="w-5 h-5 text-slate-500 mb-1" />
+                        <span className="text-xs text-slate-500">點擊或拖放音頻上傳</span>
+                        <span className="text-[10px] text-slate-600 mt-0.5">MP3 / WAV / OGG / M4A</span>
+                        <input
+                          type="file"
+                          accept="audio/mpeg,audio/mp3,audio/wav,audio/ogg,audio/m4a,audio/x-m4a,audio/mp4"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const formData = new FormData();
+                            formData.append("file", file);
+                            try {
+                              toast.loading("上傳中...", { id: "v3upload" });
+                              const res = await api.post("/upload/media", formData, { headers: { "Content-Type": "multipart/form-data" } });
+                              setV3RefImage(res.data.url);
+                              toast.success("音頻上傳成功！", { id: "v3upload" });
+                            } catch (err: any) {
+                              toast.error(`上傳失敗: ${err?.response?.data?.detail || err.message}`, { id: "v3upload" });
+                            }
+                          }}
+                        />
+                      </label>
+                    )}
+                    <p className="text-[10px] text-slate-600 mt-1">AI 將根據音訊驅動角色表情與動作</p>
                   </div>
                 )}
 
