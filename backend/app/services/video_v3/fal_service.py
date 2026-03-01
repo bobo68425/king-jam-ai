@@ -51,11 +51,12 @@ def select_best_model(prompt: str, preference: str = "auto") -> str:
         logger.info(f"[fal] 使用指定模型: {preference}")
         return FAL_MODELS[preference]
     
-    # 由於 fal.ai 近期對 Luma 棄用以及 Minimax 下游服務不穩定 (Downstream unavailable)
-    # 我們在此強制所有請求都退回到最穩定的 Wan 2.1 模型，以確保管線能成功產出影片
-    best = "wan21" 
+    # 由於 fal.ai 近期對 Luma 棄用、Minimax 下游服務不穩定 (Downstream unavailable)
+    # 且 Wan 2.1 的結果取得 API 目前回傳 404 Path not found (官方伺服器端 BUG)
+    # 我們在此強制所有請求都退回到唯一完全穩定運作的 Kling 模型
+    best = "kling" 
     
-    logger.info(f"[fal] Prompt 分析: '{prompt[:30]}...' → 因穩定性考量，強制回退使用模型 {best}")
+    logger.info(f"[fal] Prompt 分析: '{prompt[:30]}...' → 因其他模型官方 API 不穩定，強制回退使用模型 {best}")
     return FAL_MODELS[best]
 
 
