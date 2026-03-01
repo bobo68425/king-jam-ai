@@ -521,9 +521,36 @@ export default function VideoPage() {
         const statusRes = await api.get(`/video/v3/render/status/${jobId}`);
         const status = statusRes.data;
         if (status.status === "done" && status.videoUrl) {
-          setV3FinalVideoUrl(status.videoUrl.startsWith('http') ? status.videoUrl : `https://kingjam-video-renderer-811364632967.asia-east1.run.app${status.videoUrl}`);
+          const finalUrl = status.videoUrl.startsWith('http') ? status.videoUrl : `https://kingjam-video-renderer-811364632967.asia-east1.run.app${status.videoUrl}`;
+          setV3FinalVideoUrl(finalUrl);
           setV3SynthesisProgress("✅ 合成完成");
           toast.success("影片合成完成！");
+
+          // 加入歷史紀錄 (支援發布與排程)
+          try {
+            await api.post("/history", {
+              generation_type: "short_video",
+              status: "completed",
+              input_params: {
+                project_id: "v3_demo",
+                title: v3Prompt || "AI 影片",
+                prompt: v3Prompt || "AI 影片",
+                model: "Remotion (v3)",
+                aspect_ratio: v3AspectRatio,
+                duration: "30"
+              },
+              output_data: {
+                caption: `AI Video: ${v3Prompt}`,
+                video_url: finalUrl,
+                title: v3Prompt || "AI 影片"
+              },
+              media_cloud_url: finalUrl,
+              credits_used: 15
+            });
+            loadHistory(); // 重新載入歷史列表
+          } catch (e) {
+            console.error("保存合成紀錄失敗", e);
+          }
           break;
         } else if (status.status === "error") {
           throw new Error(status.error || "未知渲染錯誤");
@@ -628,9 +655,40 @@ export default function VideoPage() {
           setV3Scenes(updatedScenes);
 
           if (statusRes.data.all_done) {
-            const successCount = statuses.filter((s: any) => s.video_url).length;
-            toast.success(`🎉 ${successCount} 個影片片段生成完成！`);
-            setV3VideoProgress(`✅ ${successCount}/${validJobs.length} 完成`);
+            const successClips = statuses.filter((s: any) => s.video_url);
+            toast.success(`🎉 ${successClips.length} 個影片片段生成完成！`);
+            setV3VideoProgress(`✅ ${successClips.length}/${validJobs.length} 完成`);
+
+            // 將每一個成功生成的片段加入歷史紀錄 (支援發布與排程)
+            for (let i = 0; i < successClips.length; i++) {
+              const clip = successClips[i];
+              const sceneIdx = validJobs[i]?.index;
+              const sceneDetail = sceneIdx !== undefined ? updatedScenes[sceneIdx] : null;
+              try {
+                await api.post("/history", {
+                  generation_type: "short_video",
+                  status: "completed",
+                  input_params: {
+                    project_id: "v3_clips",
+                    title: sceneDetail?.narration ? `場景片段: ${sceneDetail.narration.substring(0, 15)}...` : "AI 影片片段",
+                    prompt: sceneDetail?.visualPrompt || "AI 影片片段",
+                    model: "Kling/Wan (v3)",
+                    aspect_ratio: v3AspectRatio,
+                    duration: "5"
+                  },
+                  output_data: {
+                    caption: sceneDetail?.narration || "AI 影片片段",
+                    video_url: clip.video_url,
+                    title: sceneDetail?.narration ? `場景片段: ${sceneDetail.narration.substring(0, 15)}...` : "AI 影片片段"
+                  },
+                  media_cloud_url: clip.video_url,
+                  credits_used: 5
+                });
+              } catch (e) {
+                console.error("保存片段紀錄失敗", e);
+              }
+            }
+            loadHistory(); // 重新載入歷史列表
             break;
           }
         } catch {
