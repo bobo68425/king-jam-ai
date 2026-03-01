@@ -257,6 +257,7 @@ class FeatureCode(str, Enum):
     """功能代碼（對應點數定價，需與資料庫 credit_pricing 一致）"""
     # 社群圖文
     SOCIAL_IMAGE_DRAFT = "social_image_draft"
+    SOCIAL_IMAGE_BASIC = "social_image_basic"
     SOCIAL_IMAGE_STANDARD = "social_image_standard"
     SOCIAL_IMAGE_PREMIUM = "social_image_premium"
     
@@ -293,6 +294,7 @@ class FeatureCode(str, Enum):
 DEFAULT_PRICING: Dict[str, int] = {
     # 社群圖文
     FeatureCode.SOCIAL_IMAGE_DRAFT: 10,
+    FeatureCode.SOCIAL_IMAGE_BASIC: 15,
     FeatureCode.SOCIAL_IMAGE_STANDARD: 20,
     FeatureCode.SOCIAL_IMAGE_PREMIUM: 50,
     
