@@ -4304,31 +4304,55 @@ export default function VideoPage() {
 
               {/* 由於目前無法直接跨目錄 import ShortVideo (需設定 Monorepo)，此處先用 Placeholder */}
               {/* 未來部署時將透過 component={ShortVideo} 載入組件 */}
-              <div className="w-full h-full bg-slate-900 flex flex-col items-center justify-center relative shadow-[0_0_50px_rgba(0,0,0,0.5)]">
-                <div className="absolute inset-0 bg-gradient-to-b from-slate-900/50 via-slate-900 to-black/80" />
-
-                {/* Mock Player UI */}
-                <div className="relative z-20 flex flex-col items-center group-hover:scale-105 transition-transform duration-500">
-                  <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center backdrop-blur-md border border-white/20 mb-4 cursor-pointer hover:bg-white/20 hover:scale-110 transition-all">
-                    <Play className="w-6 h-6 text-white ml-1" />
-                  </div>
-                  <span className="text-sm font-medium text-white tracking-widest uppercase opacity-80">Real-time Preview</span>
-                  <span className="text-xs text-slate-400 mt-2 bg-black/40 px-3 py-1 rounded-full">Powered by Remotion</span>
+              {/* 動態渲染第一個已生成的影片，或是播放清單 */}
+              {v3Scenes.some(s => s.videoUrl) ? (
+                <div className="w-full h-full bg-black flex flex-col relative shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+                  <video
+                    src={v3Scenes.find(s => s.videoUrl)?.videoUrl}
+                    controls
+                    autoPlay
+                    loop
+                    className="w-full h-full object-cover rounded-2xl"
+                  />
+                  {/* 若有多個影片，顯示分段標籤 */}
+                  {v3Scenes.filter(s => s.videoUrl).length > 1 && (
+                    <div className="absolute top-4 left-4 right-4 flex gap-2 overflow-x-auto">
+                      {v3Scenes.filter(s => s.videoUrl).map((s, idx) => (
+                        <div key={idx} className="bg-black/60 backdrop-blur-md px-3 py-1 rounded-full text-[10px] text-white/80 border border-white/10 whitespace-nowrap">
+                          片段 {idx + 1}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
+              ) : (
+                /* 預設的未生成 Placeholder UI */
+                <div className="w-full h-full bg-slate-900 flex flex-col items-center justify-center relative shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+                  <div className="absolute inset-0 bg-gradient-to-b from-slate-900/50 via-slate-900 to-black/80" />
 
-                {/* 下方播放條 Placeholder */}
-                <div className="absolute bottom-6 left-6 right-6 z-20">
-                  <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden mb-3">
-                    <div className="h-full bg-cyan-500 w-1/3 rounded-full relative">
-                      <div className="absolute top-0 bottom-0 right-0 w-8 bg-gradient-to-l from-white/40 to-transparent" />
+                  {/* Mock Player UI */}
+                  <div className="relative z-20 flex flex-col items-center group-hover:scale-105 transition-transform duration-500">
+                    <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center backdrop-blur-md border border-white/20 mb-4 cursor-pointer hover:bg-white/20 hover:scale-110 transition-all">
+                      <Play className="w-6 h-6 text-white ml-1" />
+                    </div>
+                    <span className="text-sm font-medium text-white tracking-widest uppercase opacity-80">
+                      {v3VideoGenerating ? "Generating..." : "Preview Area"}
+                    </span>
+                    <span className="text-xs text-slate-400 mt-2 bg-black/40 px-3 py-1 rounded-full">
+                      {v3VideoGenerating ? "Video is being rendered by AI" : "Generated video will appear here"}
+                    </span>
+                  </div>
+
+                  {/* 下方播放條 Placeholder */}
+                  <div className="absolute bottom-6 left-6 right-6 z-20">
+                    <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden mb-3">
+                      <div className={`h-full bg-cyan-500 rounded-full relative ${v3VideoGenerating ? 'w-2/3 animate-pulse' : 'w-1/3'}`}>
+                        <div className="absolute top-0 bottom-0 right-0 w-8 bg-gradient-to-l from-white/40 to-transparent" />
+                      </div>
                     </div>
                   </div>
-                  <div className="flex justify-between items-center text-xs text-white/60">
-                    <span>00:05</span>
-                    <span>00:15</span>
-                  </div>
                 </div>
-              </div>
+              )}
 
               {/* 實際整合時的程式碼範例：
                 <Player
