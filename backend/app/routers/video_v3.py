@@ -57,8 +57,8 @@ class RenderRequest(BaseModel):
 
 
 class FullGenerateRequest(BaseModel):
-    """全自動影片生成請求 — 支援 T2V / I2V / S2V 三種模式"""
-    mode: str = Field(default="t2v", description="生成模式: t2v / i2v / s2v")
+    """全自動影片生成請求 — 支援 T2V / I2V / S2V / SadTalker 四種模式"""
+    mode: str = Field(default="t2v", description="生成模式: t2v / i2v / s2v / sadtalker")
     script: str = Field(..., min_length=1, max_length=5000, description="影片腳本/主題")
     style_id: str = Field(default="tech_startup", description="模板 ID")
     voice: str = Field(default="alloy", description="配音語音")
@@ -267,6 +267,7 @@ async def generate_clips(request: BatchClipRequest):
         try:
             prompt = scene.get("visualPrompt", "")
             ref_image = scene.get("refImageUrl", None)
+            audio_url = scene.get("audioUrl", None)
             duration_sec = max(3, min(10, scene.get("durationInFrames", 150) // 30))
             
             result = await generate_scene_clip(
@@ -275,6 +276,7 @@ async def generate_clips(request: BatchClipRequest):
                 aspect_ratio=request.aspect_ratio,
                 model_preference=request.model_preference,
                 reference_image_url=ref_image,
+                audio_url=audio_url,
             )
             
             results.append({
@@ -407,6 +409,26 @@ async def generate_video_api(request: FullGenerateRequest):
 嚴格以 JSON 陣列格式回覆，不要加其他文字。"""
         user_prompt = f"語音主題：{request.script}"
         
+    elif mode == "sadtalker":
+        # 數字人播報模式
+        system_prompt = f"""你是一位專業的講稿撰寫人與導演。
+用戶會給你一段語音/對話的主題，請生成 1 個連續場景的短影音腳本，專供「數字人播報 (Avatar)」使用。
+
+重要規則：
+- 只需要生成 1 個場景 (因為數字人是一鏡到底的播報)
+- narration: 完整的演講稿/播報文字 (中文，長度需符合影片秒數)
+- visualPrompt: 填寫 "A highly detailed portrait talking to the camera, neutral background"
+- cameraMove: "static"
+- transition: "fade"
+- type: "story"
+- emotion: 情緒標籤 (excited / calm / serious / happy)
+
+風格模板: {request.style_id}
+影片總長: {request.duration} 秒
+
+嚴格以 JSON 陣列格式回覆，不要加其他文字。"""
+        user_prompt = f"播報主題：{request.script}"
+        
     else:
         # T2V 文字生成影片模式（原有邏輯）
         system_prompt = f"""你是一位專業的短影音導演與編劇。
@@ -486,12 +508,12 @@ async def generate_video_api(request: FullGenerateRequest):
             "transition": ai_scene.get("transition", "fade"),
         }
         
-        # I2V 模式：每個場景附加參考圖片 URL
-        if mode == "i2v" and request.ref_image_url:
+        # I2V 與 SadTalker 模式：每個場景附加參考圖片 URL
+        if mode in ("i2v", "sadtalker") and request.ref_image_url:
             scene["refImageUrl"] = request.ref_image_url
         
-        # S2V 模式：附加情緒標籤和音頻 URL
-        if mode == "s2v":
+        # S2V 與 SadTalker 模式：附加情緒標籤和音頻 URL
+        if mode in ("s2v", "sadtalker"):
             scene["emotion"] = ai_scene.get("emotion", "calm")
             if request.audio_url:
                 scene["audioUrl"] = request.audio_url

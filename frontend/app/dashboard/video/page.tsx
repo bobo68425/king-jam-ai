@@ -418,7 +418,7 @@ export default function VideoPage() {
   const [activeVersion, setActiveVersion] = useState<"2.0" | "3.0">("2.0");
 
   // v3.0 引擎狀態
-  const [v3Mode, setV3Mode] = useState<"t2v" | "i2v" | "s2v">("t2v");
+  const [v3Mode, setV3Mode] = useState<"t2v" | "i2v" | "s2v" | "sadtalker">("t2v");
 
   // 讀取/儲存 Tab 狀態到 LocalStorage
   useEffect(() => {
@@ -427,7 +427,7 @@ export default function VideoPage() {
       if (savedVersion === "2.0" || savedVersion === "3.0") setActiveVersion(savedVersion);
 
       const savedMode = localStorage.getItem("kingjam_vid_v3mode");
-      if (savedMode === "t2v" || savedMode === "i2v" || savedMode === "s2v") setV3Mode(savedMode);
+      if (savedMode === "t2v" || savedMode === "i2v" || savedMode === "s2v" || savedMode === "sadtalker") setV3Mode(savedMode);
     }
   }, []);
 
@@ -449,6 +449,7 @@ export default function VideoPage() {
   const [v3Duration, setV3Duration] = useState(30);
   const [v3ScenesCount, setV3ScenesCount] = useState(3);
   const [v3RefImage, setV3RefImage] = useState("");
+  const [v3AudioUrl, setV3AudioUrl] = useState("");
   const [v3NegPrompt, setV3NegPrompt] = useState("");
   const [v3Loading, setV3Loading] = useState(false);
   const [v3Result, setV3Result] = useState<any>(null);
@@ -604,15 +605,16 @@ export default function VideoPage() {
         style_id: v3Style,
         voice: v3Voice,
         duration: v3Duration,
-        scenes_count: v3ScenesCount,
+        scenes_count: v3Mode === "sadtalker" ? 1 : v3ScenesCount, // SadTalker 只有 1 個播報場景
         aspect_ratio: v3AspectRatio,
-        ref_image_url: v3Mode === "i2v" ? v3RefImage || undefined : undefined,
+        ref_image_url: (v3Mode === "i2v" || v3Mode === "sadtalker") ? v3RefImage || undefined : undefined,
+        audio_url: (v3Mode === "s2v" || v3Mode === "sadtalker") ? v3AudioUrl || undefined : undefined,
         negative_prompt: v3NegPrompt || undefined,
       });
       setV3Result(res.data);
       setV3Scenes(res.data.scenes ? [...res.data.scenes] : []);
       setV3EditingIdx(null);
-      const modeLabels: Record<string, string> = { t2v: "文字生成", i2v: "圖片生成", s2v: "語音驅動" };
+      const modeLabels: Record<string, string> = { t2v: "文字生成", i2v: "圖片生成", s2v: "語音驅動", sadtalker: "數字人播報" };
       toast.success(`🎬 ${modeLabels[v3Mode] || v3Mode} 完成！${res.data.scenes?.length || 0} 個場景`);
     } catch (err: any) {
       const msg = err?.response?.data?.detail || err.message || "生成失敗";
@@ -4032,6 +4034,7 @@ export default function VideoPage() {
                   { id: "t2v", label: "文字生成", icon: "✍️", desc: "Text to Video" },
                   { id: "i2v", label: "圖片生成", icon: "🖼️", desc: "Image to Video" },
                   { id: "s2v", label: "語音驅動", icon: "🎤", desc: "Speech to Video" },
+                  { id: "sadtalker", label: "數字人播報", icon: "👤", desc: "Digital Avatar" },
                 ] as const).map(tab => (
                   <button
                     key={tab.id}
@@ -4052,30 +4055,30 @@ export default function VideoPage() {
                 {/* Prompt 區 */}
                 <div>
                   <label className="text-xs text-slate-400 block mb-1.5">
-                    {v3Mode === "t2v" ? "🎬 影片描述 (Prompt)" : v3Mode === "i2v" ? "🎬 動態描述" : "🎬 畫面描述"}
+                    {v3Mode === "t2v" ? "🎬 影片描述 (Prompt)" : v3Mode === "i2v" ? "🎬 動態描述" : v3Mode === "sadtalker" ? "🎬 播報講稿 (可選)" : "🎬 畫面描述"}
                   </label>
                   <textarea
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-cyan-500 transition-colors resize-none h-20"
-                    placeholder={v3Mode === "t2v" ? "描述你想要的影片內容、風格、氛圍..." : v3Mode === "i2v" ? "描述圖片要如何動起來..." : "描述人物在語音驅動下的畫面..."}
+                    placeholder={v3Mode === "t2v" ? "描述你想要的影片內容、風格、氛圍..." : v3Mode === "i2v" ? "描述圖片要如何動起來..." : v3Mode === "sadtalker" ? "在此輸入播報講稿，將用於生成字幕..." : "描述人物在語音驅動下的畫面..."}
                     value={v3Prompt}
                     onChange={(e) => setV3Prompt(e.target.value)}
                   />
                 </div>
 
-                {/* I2V 模式：參考圖片上傳 */}
-                {v3Mode === "i2v" && (
+                {/* I2V 與 SadTalker 模式：參考圖片上傳 */}
+                {(v3Mode === "i2v" || v3Mode === "sadtalker") && (
                   <div>
-                    <label className="text-xs text-slate-400 block mb-1.5">🖼️ 參考圖片</label>
+                    <label className="text-xs text-slate-400 block mb-1.5">🖼️ 參考圖片 (Avatar 臉部來源)</label>
                     {v3RefImage ? (
                       <div className="relative bg-slate-900 border border-slate-700 rounded-xl p-2">
-                        <img src={v3RefImage.startsWith("/") ? `https://api.kingjam.app${v3RefImage}` : v3RefImage} alt="參考圖" className="w-full h-32 object-cover rounded-lg" />
+                        <img src={v3RefImage.startsWith("/") ? `https://api.kingjam.app${v3RefImage}` : v3RefImage} alt="參考圖" className="w-full h-32 object-contain rounded-lg bg-black" />
                         <button
                           onClick={() => setV3RefImage("")}
                           className="absolute top-3 right-3 bg-red-500/80 hover:bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs"
                         >
                           <X className="w-3 h-3" />
                         </button>
-                        <p className="text-[10px] text-emerald-400 mt-1.5">✅ 已上傳</p>
+                        <p className="text-[10px] text-emerald-400 mt-1.5 text-center">✅ 已上傳</p>
                       </div>
                     ) : (
                       <label className="flex flex-col items-center justify-center w-full h-28 bg-slate-900 border-2 border-dashed border-slate-700 hover:border-cyan-500/50 rounded-xl cursor-pointer transition-colors">
@@ -4092,12 +4095,12 @@ export default function VideoPage() {
                             const formData = new FormData();
                             formData.append("file", file);
                             try {
-                              toast.loading("上傳中...", { id: "v3upload" });
+                              toast.loading("上傳中...", { id: "v3uploadI" });
                               const res = await api.post("/upload/media", formData, { headers: { "Content-Type": "multipart/form-data" } });
                               setV3RefImage(res.data.url);
-                              toast.success("圖片上傳成功！", { id: "v3upload" });
+                              toast.success("圖片上傳成功！", { id: "v3uploadI" });
                             } catch (err: any) {
-                              toast.error(`上傳失敗: ${err?.response?.data?.detail || err.message}`, { id: "v3upload" });
+                              toast.error(`上傳失敗: ${err?.response?.data?.detail || err.message}`, { id: "v3uploadI" });
                             }
                           }}
                         />
@@ -4106,11 +4109,11 @@ export default function VideoPage() {
                   </div>
                 )}
 
-                {/* S2V 模式：語音上傳 */}
-                {v3Mode === "s2v" && (
+                {/* S2V 與 SadTalker 模式：語音上傳 */}
+                {(v3Mode === "s2v" || v3Mode === "sadtalker") && (
                   <div>
-                    <label className="text-xs text-slate-400 block mb-1.5">🎤 語音 / 音頻檔案</label>
-                    {v3RefImage ? (
+                    <label className="text-xs text-slate-400 block mb-1.5">🎤 語音 / 音頻檔案 (驅動口型用)</label>
+                    {v3AudioUrl ? (
                       <div className="bg-slate-900 border border-slate-700 rounded-xl p-3 flex items-center gap-3">
                         <div className="w-10 h-10 bg-cyan-500/20 rounded-lg flex items-center justify-center">
                           <Mic className="w-5 h-5 text-cyan-400" />
@@ -4120,7 +4123,7 @@ export default function VideoPage() {
                           <p className="text-[10px] text-emerald-400">✅ 準備就緒</p>
                         </div>
                         <button
-                          onClick={() => setV3RefImage("")}
+                          onClick={() => setV3AudioUrl("")}
                           className="text-slate-500 hover:text-red-400 p-1"
                         >
                           <X className="w-4 h-4" />
@@ -4141,18 +4144,18 @@ export default function VideoPage() {
                             const formData = new FormData();
                             formData.append("file", file);
                             try {
-                              toast.loading("上傳中...", { id: "v3upload" });
+                              toast.loading("上傳中...", { id: "v3uploadA" });
                               const res = await api.post("/upload/media", formData, { headers: { "Content-Type": "multipart/form-data" } });
-                              setV3RefImage(res.data.url);
-                              toast.success("音頻上傳成功！", { id: "v3upload" });
+                              setV3AudioUrl(res.data.url);
+                              toast.success("音頻上傳成功！", { id: "v3uploadA" });
                             } catch (err: any) {
-                              toast.error(`上傳失敗: ${err?.response?.data?.detail || err.message}`, { id: "v3upload" });
+                              toast.error(`上傳失敗: ${err?.response?.data?.detail || err.message}`, { id: "v3uploadA" });
                             }
                           }}
                         />
                       </label>
                     )}
-                    <p className="text-[10px] text-slate-600 mt-1">AI 將根據音訊驅動角色表情與動作</p>
+                    <p className="text-[10px] text-slate-600 mt-1">AI 將根據音訊驅動角色口型與表情</p>
                   </div>
                 )}
 

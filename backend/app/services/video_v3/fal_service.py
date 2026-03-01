@@ -24,6 +24,8 @@ FAL_MODELS = {
     # Kling — 高性價比
     "kling": "fal-ai/kling-video/v1/standard/text-to-video",
     "kling_img2vid": "fal-ai/kling-video/v1/standard/image-to-video",
+    # SadTalker — 數字人播報 (極低成本 S2V)
+    "sadtalker": "fal-ai/sadtalker",
 }
 
 # 關鍵字 → 模型選擇規則
@@ -62,12 +64,13 @@ def select_best_model(prompt: str, preference: str = "auto") -> str:
 
 
 async def generate_scene_clip(
-    prompt: str,
+    prompt: str = "",
     duration: int = 5,
     aspect_ratio: str = "9:16",
     model_preference: str = "auto",
     webhook_url: Optional[str] = None,
     reference_image_url: Optional[str] = None,
+    audio_url: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     異步生成 AI 影片片段
@@ -95,35 +98,48 @@ async def generate_scene_clip(
     
     # 選擇模型
     model_id = select_best_model(prompt, model_preference)
-    
-    # 如果有參考圖片，使用 image-to-video 版本
-    if reference_image_url:
+
+    if model_preference == "sadtalker" or "sadtalker" in model_id:
+        # SadTalker 數字人模式
+        model_id = FAL_MODELS["sadtalker"]
+        if not reference_image_url or not audio_url:
+            raise ValueError("SadTalker 模式必須同時提供 reference_image_url 與 audio_url")
+        
+        input_data: Dict[str, Any] = {
+            "source_image_url": reference_image_url,
+            "driven_audio_url": audio_url,
+            "still": True
+        }
+    else:
+        # 既有的 T2V / I2V 邏輯
+        # 如果有參考圖片，使用 image-to-video 版本
+        if reference_image_url:
+            if "wan" in model_id:
+                model_id = FAL_MODELS["wan21_img2vid"]
+            elif "kling" in model_id:
+                model_id = FAL_MODELS["kling_img2vid"]
+        
+        # 構建模型特定請求參數 (fal.ai 各模型 schema 不同)
+        input_data: Dict[str, Any] = {
+            "prompt": prompt,
+        }
+        
         if "wan" in model_id:
-            model_id = FAL_MODELS["wan21_img2vid"]
+            # Wan 2.1: 支持 num_frames, resolution, aspect_ratio
+            input_data["num_frames"] = min(duration * 24, 81)  # Wan 2.1 1.3b 最多 81 frames
+            input_data["resolution"] = "480p"
+            input_data["aspect_ratio"] = aspect_ratio
+            if reference_image_url:
+                input_data["image_url"] = reference_image_url
+        elif "minimax" in model_id:
+            # Minimax: 不額外傳參數，預設只吃 prompt
+            pass
         elif "kling" in model_id:
-            model_id = FAL_MODELS["kling_img2vid"]
-    
-    # 構建模型特定請求參數 (fal.ai 各模型 schema 不同)
-    input_data: Dict[str, Any] = {
-        "prompt": prompt,
-    }
-    
-    if "wan" in model_id:
-        # Wan 2.1: 支持 num_frames, resolution, aspect_ratio
-        input_data["num_frames"] = min(duration * 24, 81)  # Wan 2.1 1.3b 最多 81 frames
-        input_data["resolution"] = "480p"
-        input_data["aspect_ratio"] = aspect_ratio
-        if reference_image_url:
-            input_data["image_url"] = reference_image_url
-    elif "minimax" in model_id:
-        # Minimax: 不額外傳參數，預設只吃 prompt
-        pass
-    elif "kling" in model_id:
-        # Kling: 接受 duration, aspect_ratio
-        input_data["duration"] = str(min(duration, 5))
-        input_data["aspect_ratio"] = aspect_ratio
-        if reference_image_url:
-            input_data["image_url"] = reference_image_url
+            # Kling: 接受 duration, aspect_ratio
+            input_data["duration"] = str(min(duration, 5))
+            input_data["aspect_ratio"] = aspect_ratio
+            if reference_image_url:
+                input_data["image_url"] = reference_image_url
     
     # 使用 Queue API 異步提交 — 直接傳入 input_data (不要包在 "input" key 裡)
     api_url = f"https://queue.fal.run/{model_id}"
@@ -168,6 +184,8 @@ async def check_scene_status(request_id: str, model_id: str) -> Dict[str, Any]:
         base_app_id = "fal-ai/wan"
     elif "fal-ai/kling" in model_id:
         base_app_id = "fal-ai/kling-video"
+    elif "fal-ai/sadtalker" in model_id:
+        base_app_id = "fal-ai/sadtalker"
         
     # Step 1: 查詢狀態
     status_url = f"https://queue.fal.run/{base_app_id}/requests/{request_id}/status"
