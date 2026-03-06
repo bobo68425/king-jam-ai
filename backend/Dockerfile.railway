@@ -37,5 +37,5 @@ RUN mkdir -p /app/static/uploads /app/static/videos /app/static/thumbnails
 # 暴露端口
 EXPOSE 8080
 
-# Railway 啟動命令
-CMD ["/bin/sh", "-c", "exec gunicorn --bind :${PORT:-8080} --workers 1 --threads 4 --timeout 120 --keep-alive 5 --access-logfile - --error-logfile - --capture-output -k uvicorn.workers.UvicornWorker app.main:app"]
+# 啟動命令（Railway 會用 railway.toml 的 startCommand 覆蓋此指令）
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--threads", "4", "--timeout", "120", "-k", "uvicorn.workers.UvicornWorker", "app.main:app"]
