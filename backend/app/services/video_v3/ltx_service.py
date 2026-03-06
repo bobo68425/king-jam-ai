@@ -65,6 +65,7 @@ async def generate_scene_clip(
     if reference_image_url:
         endpoint = f"{LTX_INFERENCE_URL}/v1/image-to-video"
         payload: Dict[str, Any] = {
+            "user_id": 1,
             "prompt": prompt,
             "model": model,
             "duration": duration,
@@ -74,6 +75,7 @@ async def generate_scene_clip(
     else:
         endpoint = f"{LTX_INFERENCE_URL}/v1/text-to-video"
         payload = {
+            "user_id": 1,
             "prompt": prompt,
             "model": model,
             "duration": duration,
