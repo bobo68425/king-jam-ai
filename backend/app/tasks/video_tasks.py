@@ -379,3 +379,76 @@ def _upload_to_cloud(local_path: str, user_id: int) -> Dict[str, Any]:
         return {"success": False, "error": "雲端儲存服務未配置"}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+@celery_app.task(
+    name="app.tasks.video_tasks.generate_ltx_video_task",
+    base=VideoRenderTask,
+    bind=True,
+    queue="queue_video",
+)
+def generate_ltx_video_task(
+    self,
+    prompt: str,
+    duration: int,
+    model: str,
+    resolution: str,
+    image_url: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    LTX Video 同步生成任務（透過 Celery 轉為非同步）
+    """
+    import requests
+    import tempfile
+    
+    LTX_INFERENCE_URL = os.getenv("LTX_INFERENCE_URL", "http://localhost:8080")
+    
+    headers = {
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "prompt": prompt,
+        "model": model,
+        "duration": duration,
+        "resolution": resolution
+    }
+    
+    endpoint = f"{LTX_INFERENCE_URL}/v1/text-to-video"
+    if image_url:
+        endpoint = f"{LTX_INFERENCE_URL}/v1/image-to-video"
+        payload["image_uri"] = image_url
+        
+    try:
+        # LTX Server generation might take some time (5-10 mins on L4 depending on frames)
+        response = requests.post(endpoint, headers=headers, json=payload, timeout=900)
+        response.raise_for_status()
+        
+        # 暫存影片
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+            temp_path = f.name
+            
+        # 上傳到雲端
+        upload_result = _upload_to_cloud(temp_path, user_id=0)
+        os.remove(temp_path)
+        
+        if upload_result.get("success"):
+            return {
+                "success": True,
+                "video_url": upload_result["url"],
+                "cloud_key": upload_result.get("key")
+            }
+        else:
+            raise Exception(upload_result.get("error", "上傳到雲端失敗"))
+            
+    except requests.exceptions.HTTPError as he:
+        err_msg = str(he)
+        if he.response is not None:
+            err_msg += f" - {he.response.text}"
+        logger.error(f"[LTX] 影片生成 HTTP 錯誤: {err_msg}")
+        raise self.retry(exc=Exception(err_msg))
+    except Exception as e:
+        logger.error(f"[LTX] 影片生成失敗: {e}")
+        raise self.retry(exc=e)

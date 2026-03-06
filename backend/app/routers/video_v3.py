@@ -136,7 +136,8 @@ async def generate_scene(
     單場景 AI 影片片段生成
     使用 fal.ai 異步生成
     """
-    from app.services.video_v3.fal_service import generate_scene_clip
+    from app.services.video_v3.fal_service import generate_scene_clip as fal_generate_scene
+    from app.services.video_v3.ltx_service import generate_scene_clip as ltx_generate_scene
     
     # 構建 Webhook URL
     webhook_url = None  # TODO: 設定公開 webhook URL
@@ -155,14 +156,35 @@ async def generate_scene(
     if not consume_result["success"]:
         raise HTTPException(status_code=402, detail=consume_result.get("error", "點數不足以生成此片段"))
 
-    result = await generate_scene_clip(
-        prompt=request.prompt,
-        duration=request.duration,
-        aspect_ratio=request.aspect_ratio,
-        model_preference=request.model_preference,
-        webhook_url=webhook_url,
-        reference_image_url=request.reference_image_url,
-    )
+    if is_sadtalker or "fal" in request.model_preference.lower():
+        result = await fal_generate_scene(
+            prompt=request.prompt,
+            duration=request.duration,
+            aspect_ratio=request.aspect_ratio,
+            model_preference=request.model_preference,
+            webhook_url=webhook_url,
+            reference_image_url=request.reference_image_url,
+        )
+    else:
+        try:
+            result = await ltx_generate_scene(
+                prompt=request.prompt,
+                duration=request.duration,
+                aspect_ratio=request.aspect_ratio,
+                model_preference=request.model_preference,
+                webhook_url=webhook_url,
+                reference_image_url=request.reference_image_url,
+            )
+        except Exception as e:
+            logger.warning(f"[Dual-Engine] LTX 啟動失敗，降級為 Fal.ai: {e}")
+            result = await fal_generate_scene(
+                prompt=request.prompt,
+                duration=request.duration,
+                aspect_ratio=request.aspect_ratio,
+                model_preference=request.model_preference,
+                webhook_url=webhook_url,
+                reference_image_url=request.reference_image_url,
+            )
     
     return {
         "request_id": result["request_id"],
@@ -304,7 +326,8 @@ async def generate_clips(
     """
     批次提交場景到 fal.ai 生成 AI 影片片段
     """
-    from app.services.video_v3.fal_service import generate_scene_clip
+    from app.services.video_v3.fal_service import generate_scene_clip as fal_generate_scene
+    from app.services.video_v3.ltx_service import generate_scene_clip as ltx_generate_scene
     
     # 計算點數成本
     is_sadtalker = "sadtalker" in request.model_preference.lower()
@@ -327,14 +350,35 @@ async def generate_clips(
             audio_url = scene.get("audioUrl", None)
             duration_sec = max(3, min(10, scene.get("durationInFrames", 150) // 30))
             
-            result = await generate_scene_clip(
-                prompt=prompt,
-                duration=duration_sec,
-                aspect_ratio=request.aspect_ratio,
-                model_preference=request.model_preference,
-                reference_image_url=ref_image,
-                audio_url=audio_url,
-            )
+            if is_sadtalker or "fal" in request.model_preference.lower():
+                result = await fal_generate_scene(
+                    prompt=prompt,
+                    duration=duration_sec,
+                    aspect_ratio=request.aspect_ratio,
+                    model_preference=request.model_preference,
+                    reference_image_url=ref_image,
+                    audio_url=audio_url,
+                )
+            else:
+                try:
+                    result = await ltx_generate_scene(
+                        prompt=prompt,
+                        duration=duration_sec,
+                        aspect_ratio=request.aspect_ratio,
+                        model_preference=request.model_preference,
+                        reference_image_url=ref_image,
+                        audio_url=audio_url,
+                    )
+                except Exception as e:
+                    logger.warning(f"[Dual-Engine batch] 場景 {i} LTX 失敗，降級為 Fal.ai: {e}")
+                    result = await fal_generate_scene(
+                        prompt=prompt,
+                        duration=duration_sec,
+                        aspect_ratio=request.aspect_ratio,
+                        model_preference=request.model_preference,
+                        reference_image_url=ref_image,
+                        audio_url=audio_url,
+                    )
             
             # 扣除單一片段點數
             consume_credits_manually(
@@ -379,7 +423,8 @@ async def check_clips(
     """
     批次查詢 fal.ai 片段生成狀態
     """
-    from app.services.video_v3.fal_service import check_scene_status
+    from app.services.video_v3.fal_service import check_scene_status as fal_check_status
+    from app.services.video_v3.ltx_service import check_scene_status as ltx_check_status
     
     statuses = []
     for job in request.jobs:
@@ -389,7 +434,10 @@ async def check_clips(
             statuses.append({"request_id": rid, "status": "error", "error": "missing request_id"})
             continue
         try:
-            status = await check_scene_status(rid, model)
+            if "ltx" in model.lower():
+                status = await ltx_check_status(rid, model)
+            else:
+                status = await fal_check_status(rid, model)
             statuses.append(status)
         except Exception as e:
             statuses.append({"request_id": rid, "status": "error", "error": str(e)})
