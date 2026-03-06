@@ -34,10 +34,6 @@ USER appuser
 # 建立必要目錄
 RUN mkdir -p /app/static/uploads /app/static/videos /app/static/thumbnails
 
-# 健康檢查
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
-
 # Railway 啟動命令（使用 $PORT 環境變數）
 CMD exec gunicorn \
     --bind :${PORT:-8080} \
