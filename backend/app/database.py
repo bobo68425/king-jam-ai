@@ -11,10 +11,14 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://kingjam:kingjam_pass@db:5
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-# 如果 DATABASE_URL 為空或無效，使用暫時的 SQLite 資料庫位址以讓 docker build 階段或尚未設定環境變數時可以通過 import
+# 如果 DATABASE_URL 為空或無效，且處於建置階段，才使用暫時的 SQLite
 if not DATABASE_URL or not DATABASE_URL.startswith(("postgresql://", "sqlite://", "mysql://")):
-    print(f"⚠️ [database.py] Invalid DATABASE_URL detected: '{DATABASE_URL}'. Falling back to sqlite:///:memory: for initialization purposes.")
-    DATABASE_URL = "sqlite:///:memory:"
+    # Railway 會在 build 時加上 RAILWAY_STATIC_BUILD=1 或沒有給 DATABASE_URL
+    if os.getenv("RAILWAY_STATIC_BUILD") == "1" or os.getenv("BUILD_PHASE") == "1":
+        print(f"⚠️ [database.py] Build stage or missing DATABASE_URL detected. Using dummy sqlite:///:memory: to pass import checks.")
+        DATABASE_URL = "sqlite:///:memory:"
+    else:
+        raise ValueError(f"❌ [Fatal] Invalid or missing DATABASE_URL at runtime: '{DATABASE_URL}'. Must be a valid postgresql:// connection string.")
 
 # ============================================================
 # 連接池配置（優化高併發性能，針對 Cloud Run 水平擴展）
