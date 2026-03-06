@@ -1,30 +1,39 @@
+# =============================================================================
+# King Jam AI - Railway 部署 Dockerfile
+# 適用於 Build Context = Repo 根目錄（無需設定 Root Directory）
+# =============================================================================
+
 FROM python:3.10-slim
 
 WORKDIR /app
 
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
-# 安裝編譯所需的系統依賴、FFmpeg 和 curl（健康檢查用）
+# 安裝系統套件
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends gcc libpq-dev ffmpeg curl \
+    && apt-get install -y --no-install-recommends \
+    gcc \
+    libpq-dev \
+    curl \
+    ca-certificates \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+# 安裝 Python 依賴（從 backend/ 子目錄）
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+# 複製 backend 應用程式代碼
+COPY backend/ .
 
-# 啟動命令（支援環境變數配置）
-# 開發模式: WORKERS=1, RELOAD=true (預設)
-# 高併發模式: WORKERS=4, RELOAD=false
-ENV WORKERS=1
-ENV RELOAD=true
+# 建立非 root 用戶
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
 
-# 使用啟動腳本支持多種模式
-CMD if [ "$RELOAD" = "true" ]; then \
-        uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload; \
-    else \
-        uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers $WORKERS; \
-    fi
+# 建立必要目錄
+RUN mkdir -p /app/static/uploads /app/static/videos /app/static/thumbnails
+
+EXPOSE 8080
+
+CMD ["python", "start.py"]
