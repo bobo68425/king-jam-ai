@@ -7,6 +7,10 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 # 注意：Docker 內部我們用 postgresql://... 但 SQLAlchemy 建議明確指定 driver
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://kingjam:kingjam_pass@db:5432/kingjam_db")
 
+# 修正 Railway 等平台預設提供的 postgres:// 為 SQLAlchemy 支援的 postgresql://
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
 # ============================================================
 # 連接池配置（優化高併發性能，針對 Cloud Run 水平擴展）
 # ============================================================
