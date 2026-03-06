@@ -360,63 +360,60 @@ async def generate_clips(
             description=f"V3 影片片段生成 ({request.model_preference})"
         )
 
-    # 使用 in-process job store 追蹤進度
+    # 使用 in-process job store 追蹤進度 (用於 fal 降級)
     if not hasattr(router, "_ltx_jobs"):
         router._ltx_jobs = {}
 
-    jobs = []
-    for i, scene in enumerate(request.scenes):
-        job_id = str(uuid.uuid4())
-        model_name = "fal" if use_fal_directly else "ltx-2"
-        router._ltx_jobs[job_id] = {"status": "pending", "video_url": None, "model": model_name}
-        jobs.append({"index": i, "request_id": job_id, "model": model_name, "status": "pending"})
-
-    async def _run_ltx(job_id: str, scene: dict, idx: int):
+    async def _submit_scene(scene: dict, idx: int):
         prompt = scene.get("visualPrompt", "")
         ref_image = scene.get("refImageUrl", None)
         audio_url_item = scene.get("audioUrl", None)
         duration_sec = max(3, min(10, scene.get("durationInFrames", 150) // 30))
+        
         try:
-            result = await ltx_generate_scene(
-                prompt=prompt, duration=duration_sec, aspect_ratio=request.aspect_ratio,
-                model_preference=request.model_preference, reference_image_url=ref_image,
-                audio_url=audio_url_item,
-            )
-            router._ltx_jobs[job_id] = {"status": "completed", "video_url": result.get("video_url"), "model": result.get("model", "ltx-2")}
-            logger.info(f"[LTX bg] 場景 {idx} 完成: {result.get('video_url', '')[:60]}")
+            if use_fal_directly:
+                job_id = str(uuid.uuid4())
+                router._ltx_jobs[job_id] = {"status": "pending", "video_url": None, "model": "fal"}
+                
+                async def _run_fal_bg():
+                    try:
+                        res = await fal_generate_scene(
+                            prompt=prompt, duration=duration_sec, aspect_ratio=request.aspect_ratio,
+                            model_preference=request.model_preference, reference_image_url=ref_image,
+                            audio_url=audio_url_item,
+                        )
+                        router._ltx_jobs[job_id] = {"status": "completed", "video_url": res.get("video_url"), "model": "fal"}
+                    except Exception as e:
+                        router._ltx_jobs[job_id] = {"status": "error", "video_url": None, "model": "fal", "error": str(e)}
+                
+                import asyncio
+                asyncio.create_task(_run_fal_bg())
+                return {"index": idx, "request_id": job_id, "model": "fal", "status": "pending"}
+            else:
+                result = await ltx_generate_scene(
+                    prompt=prompt, duration=duration_sec, aspect_ratio=request.aspect_ratio,
+                    model_preference=request.model_preference, reference_image_url=ref_image,
+                    audio_url=audio_url_item,
+                )
+                return {
+                    "index": idx, 
+                    "request_id": result.get("request_id"), 
+                    "model": result.get("model", "ltx-2"), 
+                    "status": "pending"
+                }
         except Exception as e:
-            logger.error(f"[LTX bg] 場景 {idx} 失敗: {e}")
-            router._ltx_jobs[job_id] = {"status": "error", "video_url": None, "model": "ltx-2", "error": str(e)}
-
-    async def _run_fal(job_id: str, scene: dict, idx: int):
-        prompt = scene.get("visualPrompt", "")
-        ref_image = scene.get("refImageUrl", None)
-        audio_url_item = scene.get("audioUrl", None)
-        duration_sec = max(3, min(10, scene.get("durationInFrames", 150) // 30))
-        try:
-            result = await fal_generate_scene(
-                prompt=prompt, duration=duration_sec, aspect_ratio=request.aspect_ratio,
-                model_preference=request.model_preference, reference_image_url=ref_image,
-                audio_url=audio_url_item,
-            )
-            router._ltx_jobs[job_id] = {"status": "completed", "video_url": result.get("video_url"), "model": result.get("model", "fal")}
-        except Exception as e:
-            logger.error(f"[fal bg] 場景 {idx} 失敗: {e}")
-            router._ltx_jobs[job_id] = {"status": "error", "video_url": None, "model": "fal", "error": str(e)}
+            logger.error(f"[Submit] 場景 {idx} 提交失敗: {e}")
+            return {"index": idx, "request_id": None, "model": "error", "status": "error", "error": str(e)}
 
     import asyncio
-    for i, (job, scene) in enumerate(zip(jobs, request.scenes)):
-        jid = job["request_id"]
-        if use_fal_directly:
-            asyncio.create_task(_run_fal(jid, scene, i))
-        else:
-            asyncio.create_task(_run_ltx(jid, scene, i))
+    tasks = [_submit_scene(scene, i) for i, scene in enumerate(request.scenes)]
+    jobs = await asyncio.gather(*tasks)
 
     engine = "fal.ai" if use_fal_directly else "LTX-2"
     return {
         "total": len(request.scenes),
-        "submitted": len(jobs),
-        "failed": 0,
+        "submitted": sum(1 for j in jobs if j.get("request_id")),
+        "failed": sum(1 for j in jobs if not j.get("request_id")),
         "engine": engine,
         "jobs": jobs,
     }
