@@ -11,6 +11,11 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://kingjam:kingjam_pass@db:5
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
+# 如果 DATABASE_URL 為空或無效，使用暫時的 SQLite 資料庫位址以讓 docker build 階段或尚未設定環境變數時可以通過 import
+if not DATABASE_URL or not DATABASE_URL.startswith(("postgresql://", "sqlite://", "mysql://")):
+    print(f"⚠️ [database.py] Invalid DATABASE_URL detected: '{DATABASE_URL}'. Falling back to sqlite:///:memory: for initialization purposes.")
+    DATABASE_URL = "sqlite:///:memory:"
+
 # ============================================================
 # 連接池配置（優化高併發性能，針對 Cloud Run 水平擴展）
 # ============================================================
@@ -19,17 +24,23 @@ MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "10"))    # 額外可創建的�
 POOL_TIMEOUT = int(os.getenv("DB_POOL_TIMEOUT", "30"))    # 等待連接的超時時間（秒）
 POOL_RECYCLE = int(os.getenv("DB_POOL_RECYCLE", "1800"))  # 連接回收時間（秒），防止連接過期
 
-# 建立資料庫引擎（使用 QueuePool 連接池）
-engine = create_engine(
-    DATABASE_URL,
-    poolclass=QueuePool,
-    pool_size=POOL_SIZE,           # 連接池保持的連接數
-    max_overflow=MAX_OVERFLOW,     # 超過 pool_size 後可額外創建的連接
-    pool_timeout=POOL_TIMEOUT,     # 獲取連接的等待超時
-    pool_recycle=POOL_RECYCLE,     # 自動回收超過此秒數的連接
-    pool_pre_ping=True,            # 使用前檢測連接是否有效
-    echo=False,                    # 設為 True 可查看 SQL 日誌（調試用）
-)
+# SQLite 不支援某些 pool 參數，需做判斷
+engine_kwargs = {
+    "echo": False
+}
+
+if DATABASE_URL.startswith("postgresql://"):
+    engine_kwargs.update({
+        "poolclass": QueuePool,
+        "pool_size": POOL_SIZE,
+        "max_overflow": MAX_OVERFLOW,
+        "pool_timeout": POOL_TIMEOUT,
+        "pool_recycle": POOL_RECYCLE,
+        "pool_pre_ping": True,
+    })
+
+# 建立資料庫引擎
+engine = create_engine(DATABASE_URL, **engine_kwargs)
 
 # 建立 Session 工廠 (之後每個 API request 都會從這裡拿一個 session)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
