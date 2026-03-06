@@ -57,6 +57,7 @@ import {
 import { format } from "date-fns";
 import { zhTW } from "date-fns/locale";
 import { ScheduleDialog, ScheduleContent } from "@/components/schedule-dialog";
+import { MediaViewerDialog } from "@/components/media-viewer-dialog";
 
 interface GenerationHistoryItem {
   id: number;
@@ -136,6 +137,20 @@ export default function HistoryPage() {
   // 排程對話框
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
   const [scheduleContent, setScheduleContent] = useState<ScheduleContent | null>(null);
+
+  // 媒體檢視器
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerMediaUrl, setViewerMediaUrl] = useState<string | null>(null);
+  const [viewerIsVideo, setViewerIsVideo] = useState(false);
+  const [viewerTitle, setViewerTitle] = useState("");
+
+  const handleOpenViewer = (url: string | null, isVideo: boolean, title: string) => {
+    if (!url) return;
+    setViewerMediaUrl(url);
+    setViewerIsVideo(isVideo);
+    setViewerTitle(title);
+    setViewerOpen(true);
+  };
 
   // 客戶端掛載後設定標記（避免 hydration 錯誤）
   useEffect(() => {
@@ -826,8 +841,8 @@ export default function HistoryPage() {
               size="sm"
               onClick={() => handleViewModeChange("grid")}
               className={`h-8 px-3 ${viewMode === "grid"
-                  ? "bg-indigo-600 text-white hover:bg-indigo-500"
-                  : "text-slate-400 hover:text-white hover:bg-slate-700"
+                ? "bg-indigo-600 text-white hover:bg-indigo-500"
+                : "text-slate-400 hover:text-white hover:bg-slate-700"
                 }`}
               title="格狀檢視"
             >
@@ -838,8 +853,8 @@ export default function HistoryPage() {
               size="sm"
               onClick={() => handleViewModeChange("list")}
               className={`h-8 px-3 ${viewMode === "list"
-                  ? "bg-indigo-600 text-white hover:bg-indigo-500"
-                  : "text-slate-400 hover:text-white hover:bg-slate-700"
+                ? "bg-indigo-600 text-white hover:bg-indigo-500"
+                : "text-slate-400 hover:text-white hover:bg-slate-700"
                 }`}
               title="列表檢視"
             >
@@ -1337,9 +1352,29 @@ export default function HistoryPage() {
                               )}
                               {childMediaUrl ? (
                                 isVideo ? (
-                                  <video src={childMediaUrl} controls className="w-full rounded-xl border border-slate-700" />
+                                  <div
+                                    className="relative group cursor-pointer overflow-hidden rounded-xl border border-slate-700 aspect-video bg-slate-800 flex items-center justify-center transition-all hover:border-indigo-500 hover:ring-2 hover:ring-indigo-500/20"
+                                    onClick={() => handleOpenViewer(childMediaUrl, true, child.input_params?.topic || child.input_params?.title || "影片預覽")}
+                                  >
+                                    <video src={childMediaUrl} className="w-full h-full object-cover" />
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-all duration-200">
+                                      <div className="bg-white/20 p-4 rounded-full backdrop-blur-sm transform group-hover:scale-110 shadow-lg">
+                                        <Play className="h-8 w-8 text-white fill-white ml-1" />
+                                      </div>
+                                    </div>
+                                  </div>
                                 ) : (
-                                  <img src={childMediaUrl} alt="預覽" className="w-full rounded-xl border border-slate-700 object-contain max-h-[400px] bg-slate-800" />
+                                  <div
+                                    className="relative group cursor-pointer overflow-hidden rounded-xl border border-slate-700 bg-slate-800 flex justify-center max-h-[400px] transition-all hover:border-indigo-500 hover:ring-2 hover:ring-indigo-500/20"
+                                    onClick={() => handleOpenViewer(childMediaUrl, false, child.input_params?.topic || child.input_params?.title || "圖片預覽")}
+                                  >
+                                    <img src={childMediaUrl} alt="預覽" className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-[1.03]" />
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-all duration-200">
+                                      <div className="bg-white/20 p-3 rounded-full backdrop-blur-sm shadow-lg transform group-hover:scale-110">
+                                        <Eye className="h-6 w-6 text-white" />
+                                      </div>
+                                    </div>
+                                  </div>
                                 )
                               ) : (
                                 <div className="w-full aspect-video rounded-xl bg-slate-800 flex flex-col items-center justify-center text-slate-500">
@@ -1495,8 +1530,8 @@ export default function HistoryPage() {
                                       );
                                     }}
                                     className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all border ${isSelected
-                                        ? "bg-indigo-500/20 border-indigo-500/50 text-indigo-300"
-                                        : "bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600"
+                                      ? "bg-indigo-500/20 border-indigo-500/50 text-indigo-300"
+                                      : "bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600"
                                       }`}
                                   >
                                     {getPlatformIcon(acc.platform)}
@@ -1597,6 +1632,15 @@ export default function HistoryPage() {
           setShowScheduleDialog(false);
           toast.success("排程已建立！");
         }}
+      />
+
+      {/* 媒體檢視器 */}
+      <MediaViewerDialog
+        open={viewerOpen}
+        onOpenChange={setViewerOpen}
+        mediaUrl={viewerMediaUrl}
+        isVideo={viewerIsVideo}
+        title={viewerTitle}
       />
     </div>
   );

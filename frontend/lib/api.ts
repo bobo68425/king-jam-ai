@@ -15,6 +15,13 @@ const AI_GENERATE_PATHS = [
   '/blog/generate',
 ];
 
+// LTX / v3 生成路徑需要超長 timeout（cold start + 生成約 5-8 分鐘）
+const LTX_LONG_TIMEOUT_PATHS = [
+  '/video/v3/api/generate-clips',
+  '/video/v3/api/generate-video',
+  '/video/v3/warmup-ltx',
+];
+
 // 建立 axios 實例
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -38,9 +45,12 @@ api.interceptors.request.use((config) => {
     delete config.headers['Content-Type'];
   }
 
-  // AI 生成端點使用更長的超時時間（120 秒）
+  // LTX / v3 end全生成端點使用 10 分鐘超時（cold start + 生成）
   const url = config.url || '';
-  if (AI_GENERATE_PATHS.some(path => url.includes(path))) {
+  if (LTX_LONG_TIMEOUT_PATHS.some(path => url.includes(path))) {
+    config.timeout = 600000; // 10 分鐘
+  } else if (AI_GENERATE_PATHS.some(path => url.includes(path))) {
+    // AI 生成端點使用更長的超時時間（180 秒）
     config.timeout = 180000;
   }
 

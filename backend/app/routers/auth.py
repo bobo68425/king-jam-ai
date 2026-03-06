@@ -692,3 +692,151 @@ def find_account(
         accounts=accounts,
         message=f"找到 {len(accounts)} 個帳號"
     )
+
+
+# ============================================================
+# LINE OAuth 登入
+# ============================================================
+
+class LineLoginRequest(BaseModel):
+    """LINE 登入請求（前端 callback 傳入）"""
+    code: str
+    redirect_uri: str
+    referral_code: Optional[str] = None
+
+
+@router.post("/line", response_model=Token)
+async def line_login(
+    request_data: LineLoginRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    完成 LINE Login OAuth 流程：
+    1. 用 code 換 access_token
+    2. 取得 LINE 用戶資料
+    3. 建立或更新本地 User
+    4. 回傳 JWT
+    """
+    import httpx
+
+    channel_id = os.getenv("LINE_LOGIN_CHANNEL_ID", "")
+    channel_secret = os.getenv("LINE_LOGIN_CHANNEL_SECRET", "")
+
+    if not channel_id or not channel_secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="LINE Login 尚未設定（缺少 LINE_LOGIN_CHANNEL_ID / LINE_LOGIN_CHANNEL_SECRET）"
+        )
+
+    # --- 1. 換 access_token ---
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            token_resp = await client.post(
+                "https://api.line.me/oauth2/v2.1/token",
+                data={
+                    "grant_type": "authorization_code",
+                    "code": request_data.code,
+                    "redirect_uri": request_data.redirect_uri,
+                    "client_id": channel_id,
+                    "client_secret": channel_secret,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+    except Exception as e:
+        logger.error(f"[LINE Login] Token exchange failed: {e}")
+        raise HTTPException(status_code=502, detail="無法連線至 LINE 服務，請稍後再試")
+
+    token_data = token_resp.json()
+    if "error" in token_data:
+        logger.error(f"[LINE Login] Token error: {token_data}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"LINE 授權失敗：{token_data.get('error_description', token_data['error'])}"
+        )
+
+    access_token = token_data.get("access_token")
+    if not access_token:
+        raise HTTPException(status_code=400, detail="LINE 未回傳 access_token")
+
+    # --- 2. 取得 LINE 用戶資料 ---
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            profile_resp = await client.get(
+                "https://api.line.me/v2/profile",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+    except Exception as e:
+        logger.error(f"[LINE Login] Profile fetch failed: {e}")
+        raise HTTPException(status_code=502, detail="無法取得 LINE 用戶資料")
+
+    if profile_resp.status_code != 200:
+        raise HTTPException(status_code=400, detail="LINE 用戶資料取得失敗")
+
+    profile = profile_resp.json()
+    line_user_id = profile.get("userId", "")
+    display_name = profile.get("displayName", "LINE User")
+    picture_url = profile.get("pictureUrl", "")
+
+    if not line_user_id:
+        raise HTTPException(status_code=400, detail="無法取得 LINE 用戶 ID")
+
+    # --- 3. 建立或更新本地 User ---
+    # 優先以 provider_id 查找（確保 LINE 用戶唯一）
+    user = db.query(User).filter(
+        User.provider == "line",
+        User.provider_id == line_user_id
+    ).first()
+
+    if not user:
+        # 嘗試以 email 查找（若 LINE profile 有 email 且之前用 email 註冊）
+        email = token_data.get("email") or f"line_{line_user_id}@line.user"
+        user = db.query(User).filter(User.email == email).first()
+
+        if not user:
+            # 新建 LINE 用戶
+            customer_id = generate_customer_id(db)
+            referral_code = generate_referral_code()
+            while db.query(User).filter(User.referral_code == referral_code).first():
+                referral_code = generate_referral_code()
+
+            user = User(
+                customer_id=customer_id,
+                email=email,
+                full_name=display_name,
+                avatar_url=picture_url,
+                provider="line",
+                provider_id=line_user_id,
+                referral_code=referral_code,
+                hashed_password=None,
+            )
+            db.add(user)
+            logger.info(f"[LINE Login] 新用戶建立: {line_user_id} ({display_name})")
+        else:
+            # 更新 provider 資訊
+            user.provider = "line"
+            user.provider_id = line_user_id
+    else:
+        # 更新頭像和名稱
+        user.full_name = display_name
+        if picture_url:
+            user.avatar_url = picture_url
+
+    # 處理推薦碼
+    if request_data.referral_code:
+        referrer = db.query(User).filter(
+            User.referral_code == request_data.referral_code,
+            User.id != user.id
+        ).first()
+        if referrer and not user.referred_by:
+            user.referred_by = referrer.id
+
+    db.commit()
+    db.refresh(user)
+
+    # --- 4. 回傳 JWT ---
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    jwt_token = create_access_token(
+        data={"sub": user.email}, expires_delta=access_token_expires
+    )
+    logger.info(f"[LINE Login] 登入成功: {line_user_id} ({display_name})")
+    return {"access_token": jwt_token, "token_type": "bearer"}

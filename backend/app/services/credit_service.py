@@ -36,10 +36,45 @@ from sqlalchemy import and_, func, text
 from sqlalchemy.exc import IntegrityError, OperationalError
 from decimal import Decimal
 import pytz
+import os
+import redis
+import socket
 
 from app.models import User, CreditTransaction, CreditPricing, GenerationHistory
 
 logger = logging.getLogger(__name__)
+
+# ============================================================
+# Upstash Redis 連線池設定 (Connection Pooling & Keep-Alive)
+# ============================================================
+def create_upstash_redis_client() -> Optional[redis.Redis]:
+    """建立具有 Connection Pooling 和 TCP Keep-Alive 的 Upstash Redis 客戶端"""
+    redis_url = os.getenv("UPSTASH_REDIS_URL")
+    if not redis_url:
+        return None
+        
+    try:
+        # 設定 TCP Keep-Alive 參數以防止連線被防火牆或代理切斷
+        socket_keepalive_options = {}
+        if hasattr(socket, 'TCP_KEEPIDLE'):
+            socket_keepalive_options[socket.TCP_KEEPIDLE] = 60
+            socket_keepalive_options[socket.TCP_KEEPINTVL] = 15
+            socket_keepalive_options[socket.TCP_KEEPCNT] = 4
+            
+        pool = redis.ConnectionPool.from_url(
+            redis_url,
+            max_connections=int(os.getenv("UPSTASH_REDIS_MAX_CONN", "50")),
+            socket_keepalive=True,
+            socket_keepalive_options=socket_keepalive_options,
+            decode_responses=True
+        )
+        return redis.Redis(connection_pool=pool)
+    except Exception as e:
+        logger.error(f"[Upstash] Redis 連線池初始化失敗: {e}")
+        return None
+
+# 全域 Upstash Redis 客戶端
+upstash_client = create_upstash_redis_client()
 
 
 # ============================================================
@@ -296,6 +331,13 @@ class FeatureCode(str, Enum):
     VEO_VIDEO_8S = "veo_video_8s"
     VEO_VIDEO_15S = "veo_video_15s"
     VEO_VIDEO_30S = "veo_video_30s"
+    
+    # GPU 影片生成（LTX-2, EchoMimic, GPT-SoVITS）
+    V3_LTX_VIDEO = "v3_ltx_video"                # LTX-2 文字/圖片生成影片
+    V3_ECHOMIMIC = "v3_echomimic"                # EchoMimic 數字人口播
+    V3_TTS = "v3_tts"                            # OpenAI TTS 語音合成
+    V3_VOICE_CLONE = "v3_voice_clone"            # GPT-SoVITS 聲音克隆
+    V3_AI_IMAGE = "v3_ai_image"                  # Replicate AI 圖像生成
 
 
 # 預設定價（資料庫未設定時的備用，需與引擎一致）
@@ -341,6 +383,18 @@ DEFAULT_PRICING: Dict[str, int] = {
     FeatureCode.VEO_VIDEO_8S: 150,
     FeatureCode.VEO_VIDEO_15S: 250,
     FeatureCode.VEO_VIDEO_30S: 400,
+    
+    # GPU 影片生成（1點 = NT$1，成本分析基準）
+    # LTX-2: GPU成本$0.008 ≈ NT$0.26/次 → 定價10點(NT$10) 毛利率~38x
+    FeatureCode.V3_LTX_VIDEO: 10,
+    # EchoMimic: GPU成本$0.003 ≈ NT$0.10/次 → 定價5點(NT$5) 毛利率~50x
+    FeatureCode.V3_ECHOMIMIC: 5,
+    # OpenAI TTS: 成本$0.001 ≈ NT$0.03/次 → 定價1點(NT$1) 毛利率~33x
+    FeatureCode.V3_TTS: 1,
+    # GPT-SoVITS: GPU成本$0.002 ≈ NT$0.065/次 → 定價2點(NT$2) 毛利率~31x
+    FeatureCode.V3_VOICE_CLONE: 2,
+    # Replicate 圖像: 成本$0.002 ≈ NT$0.065/張 → 定價1點(NT$1) 毛利率~15x
+    FeatureCode.V3_AI_IMAGE: 1,
 }
 
 
@@ -422,6 +476,30 @@ class CreditService:
     def __init__(self, db: Session):
         self.db = db
         self._pricing_cache: Dict[str, int] = {}
+        self._redis_client = upstash_client
+        
+    def sync_to_upstash(self, user_id: int, total_balance: int, category_balance: Optional[CategoryBalance] = None) -> bool:
+        """同步點數餘額至 Upstash Redis (用於前端即時顯示與高速讀取)"""
+        if not self._redis_client:
+            return False
+            
+        try:
+            key = f"user:{user_id}:credits"
+            pipeline = self._redis_client.pipeline()
+            pipeline.hset(key, "total", total_balance)
+            
+            if category_balance:
+                pipeline.hset(key, "promo", category_balance.promo)
+                pipeline.hset(key, "sub", category_balance.sub)
+                pipeline.hset(key, "paid", category_balance.paid)
+                pipeline.hset(key, "bonus", category_balance.bonus)
+                
+            pipeline.execute()
+            logger.debug(f"[Upstash] 成功同步用戶 #{user_id} 點數至 Redis")
+            return True
+        except Exception as e:
+            logger.error(f"[Upstash] 點數同步失敗: {e}")
+            return False
     
     # ==================== 查詢方法 ====================
     
@@ -1203,6 +1281,9 @@ class CreditService:
                 f"交易ID={transaction.id}"
             )
             
+            # 異步寫入 Upstash Redis
+            self.sync_to_upstash(user_id, new_balance, category_balance)
+            
             return CreditResult(
                 success=True,
                 balance=new_balance,
@@ -1370,6 +1451,9 @@ class CreditService:
             # 檢查是否需要發送低餘額提醒
             self._check_low_balance_alert(user_id, new_balance)
             
+            # 異步寫入 Upstash Redis
+            self.sync_to_upstash(user_id, new_balance, category_balance)
+            
             return CreditResult(
                 success=True,
                 balance=new_balance,
@@ -1499,6 +1583,9 @@ class CreditService:
                 f"交易ID={transaction.id}"
             )
             
+            # 異步寫入 Upstash Redis
+            self.sync_to_upstash(user_id, new_balance, category_balance)
+            
             return CreditResult(
                 success=True,
                 balance=new_balance,
@@ -1574,10 +1661,15 @@ class CreditService:
             
             logger.info(f"[Credit] 餘額同步完成：用戶 #{user_id}, 總計={total}")
             
+            category_balance = self.get_category_balance(user_id)
+            
+            # 異步寫入 Upstash Redis
+            self.sync_to_upstash(user_id, total, category_balance)
+            
             return CreditResult(
                 success=True,
                 balance=total,
-                category_balance=self.get_category_balance(user_id)
+                category_balance=category_balance
             )
             
         except Exception as e:

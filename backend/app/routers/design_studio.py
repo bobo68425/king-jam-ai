@@ -40,7 +40,7 @@ except ImportError:
 # AI 生圖品質配置
 AI_IMAGE_QUALITY = {
     "draft": {
-        "models": ["models/imagen-4.0-fast-generate-001", "models/gemini-2.0-flash-exp-image-generation"],
+        "models": ["models/imagen-4.0-fast-generate-001", "models/gemini-2.5-flash-exp-image-generation"],
         "cost": 5,
         "label": "快速草稿"
     },

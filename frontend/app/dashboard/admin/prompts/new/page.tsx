@@ -56,7 +56,7 @@ const GENERATION_TYPES = [
 ];
 
 const MODELS = {
-  copywriting: ["gpt-4o", "gpt-4o-mini", "gemini-2.0-flash", "gemini-1.5-pro"],
+  copywriting: ["gpt-4o", "gpt-4o-mini", "gemini-2.5-flash", "gemini-1.5-pro"],
   image: ["flux-schnell", "flux-dev", "dall-e-3", "imagen-3"],
   video: ["veo-2", "runway-gen3", "minimax"],
   tts: ["edge-tts", "elevenlabs", "azure-tts"],

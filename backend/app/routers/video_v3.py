@@ -19,7 +19,7 @@ import uuid
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -64,8 +64,8 @@ class RenderRequest(BaseModel):
 
 
 class FullGenerateRequest(BaseModel):
-    """全自動影片生成請求 — 支援 T2V / I2V / S2V / SadTalker 四種模式"""
-    mode: str = Field(default="t2v", description="生成模式: t2v / i2v / s2v / sadtalker")
+    """全自動影片生成請求 — 支援 T2V / I2V / S2V / SadTalker / EchoMimicV2 五種模式"""
+    mode: str = Field(default="t2v", description="生成模式: t2v / i2v / s2v / sadtalker / echomimic")
     script: str = Field(..., min_length=1, max_length=5000, description="影片腳本/主題")
     style_id: str = Field(default="tech_startup", description="模板 ID")
     voice: str = Field(default="alloy", description="配音語音")
@@ -324,94 +324,101 @@ async def generate_clips(
     current_user: User = Depends(get_current_user)
 ):
     """
-    批次提交場景到 fal.ai 生成 AI 影片片段
+    批次提交場景到 LTX-2 / fal.ai 生成 AI 影片片段
+
+    非陰塞架構：立即回傳 job_ids（status=pending），
+    LTX-2 在背景執行，前端用 /api/check-clips 輪詢取得結果。
     """
+    import os
     from app.services.video_v3.fal_service import generate_scene_clip as fal_generate_scene
     from app.services.video_v3.ltx_service import generate_scene_clip as ltx_generate_scene
-    
-    # 計算點數成本
+
+    fal_key_available = bool(os.getenv("FAL_KEY", "").strip())
     is_sadtalker = "sadtalker" in request.model_preference.lower()
+    use_fal_directly = is_sadtalker or "fal" in request.model_preference.lower()
+    if use_fal_directly and not fal_key_available:
+        raise HTTPException(
+            status_code=503,
+            detail="FAL_KEY 尚未設定，請在後台環境變數中設定 FAL_KEY（取得方式：https://fal.ai/dashboard/keys）"
+        )
+
+    # 計算點數成本
     feature_code = FeatureCode.V3_GENERATE_CLIP_SADTALKER if is_sadtalker else FeatureCode.V3_GENERATE_CLIP_STANDARD
-    
     credit_service = CreditService(db)
     cost_per_clip = credit_service.get_feature_cost(feature_code, current_user.tier)
     total_cost = cost_per_clip * len(request.scenes)
-    
+
     if credit_service.get_balance(current_user.id) < total_cost:
         raise HTTPException(status_code=402, detail=f"點數不足 (需要 {total_cost} 點，餘額不足)")
 
-    results = []
-    errors = []
-    
+    # 預先扣除點數
+    for _ in request.scenes:
+        consume_credits_manually(
+            db=db,
+            user=current_user,
+            feature_code=feature_code,
+            description=f"V3 影片片段生成 ({request.model_preference})"
+        )
+
+    # 使用 in-process job store 追蹤進度
+    if not hasattr(router, "_ltx_jobs"):
+        router._ltx_jobs = {}
+
+    jobs = []
     for i, scene in enumerate(request.scenes):
+        job_id = str(uuid.uuid4())
+        model_name = "fal" if use_fal_directly else "ltx-2"
+        router._ltx_jobs[job_id] = {"status": "pending", "video_url": None, "model": model_name}
+        jobs.append({"index": i, "request_id": job_id, "model": model_name, "status": "pending"})
+
+    async def _run_ltx(job_id: str, scene: dict, idx: int):
+        prompt = scene.get("visualPrompt", "")
+        ref_image = scene.get("refImageUrl", None)
+        audio_url_item = scene.get("audioUrl", None)
+        duration_sec = max(3, min(10, scene.get("durationInFrames", 150) // 30))
         try:
-            prompt = scene.get("visualPrompt", "")
-            ref_image = scene.get("refImageUrl", None)
-            audio_url = scene.get("audioUrl", None)
-            duration_sec = max(3, min(10, scene.get("durationInFrames", 150) // 30))
-            
-            if is_sadtalker or "fal" in request.model_preference.lower():
-                result = await fal_generate_scene(
-                    prompt=prompt,
-                    duration=duration_sec,
-                    aspect_ratio=request.aspect_ratio,
-                    model_preference=request.model_preference,
-                    reference_image_url=ref_image,
-                    audio_url=audio_url,
-                )
-            else:
-                try:
-                    result = await ltx_generate_scene(
-                        prompt=prompt,
-                        duration=duration_sec,
-                        aspect_ratio=request.aspect_ratio,
-                        model_preference=request.model_preference,
-                        reference_image_url=ref_image,
-                        audio_url=audio_url,
-                    )
-                except Exception as e:
-                    logger.warning(f"[Dual-Engine batch] 場景 {i} LTX 失敗，降級為 Fal.ai: {e}")
-                    result = await fal_generate_scene(
-                        prompt=prompt,
-                        duration=duration_sec,
-                        aspect_ratio=request.aspect_ratio,
-                        model_preference=request.model_preference,
-                        reference_image_url=ref_image,
-                        audio_url=audio_url,
-                    )
-            
-            # 扣除單一片段點數
-            consume_credits_manually(
-                db=db,
-                user=current_user,
-                feature_code=feature_code,
-                description=f"V3 影片片段生成 ({request.model_preference})"
+            result = await ltx_generate_scene(
+                prompt=prompt, duration=duration_sec, aspect_ratio=request.aspect_ratio,
+                model_preference=request.model_preference, reference_image_url=ref_image,
+                audio_url=audio_url_item,
             )
-            
-            results.append({
-                "index": i,
-                "request_id": result["request_id"],
-                "model": result["model"],
-                "status": "queued",
-            })
-            logger.info(f"[v3 batch] 場景 {i} 已提交: {result['request_id']}")
-            
+            router._ltx_jobs[job_id] = {"status": "completed", "video_url": result.get("video_url"), "model": result.get("model", "ltx-2")}
+            logger.info(f"[LTX bg] 場景 {idx} 完成: {result.get('video_url', '')[:60]}")
         except Exception as e:
-            logger.error(f"[v3 batch] 場景 {i} 提交失敗: {e}")
-            errors.append({"index": i, "error": str(e)})
-            results.append({
-                "index": i,
-                "request_id": None,
-                "model": None,
-                "status": "error",
-                "error": str(e),
-            })
-    
+            logger.error(f"[LTX bg] 場景 {idx} 失敗: {e}")
+            router._ltx_jobs[job_id] = {"status": "error", "video_url": None, "model": "ltx-2", "error": str(e)}
+
+    async def _run_fal(job_id: str, scene: dict, idx: int):
+        prompt = scene.get("visualPrompt", "")
+        ref_image = scene.get("refImageUrl", None)
+        audio_url_item = scene.get("audioUrl", None)
+        duration_sec = max(3, min(10, scene.get("durationInFrames", 150) // 30))
+        try:
+            result = await fal_generate_scene(
+                prompt=prompt, duration=duration_sec, aspect_ratio=request.aspect_ratio,
+                model_preference=request.model_preference, reference_image_url=ref_image,
+                audio_url=audio_url_item,
+            )
+            router._ltx_jobs[job_id] = {"status": "completed", "video_url": result.get("video_url"), "model": result.get("model", "fal")}
+        except Exception as e:
+            logger.error(f"[fal bg] 場景 {idx} 失敗: {e}")
+            router._ltx_jobs[job_id] = {"status": "error", "video_url": None, "model": "fal", "error": str(e)}
+
+    import asyncio
+    for i, (job, scene) in enumerate(zip(jobs, request.scenes)):
+        jid = job["request_id"]
+        if use_fal_directly:
+            asyncio.create_task(_run_fal(jid, scene, i))
+        else:
+            asyncio.create_task(_run_ltx(jid, scene, i))
+
+    engine = "fal.ai" if use_fal_directly else "LTX-2"
     return {
         "total": len(request.scenes),
-        "submitted": len([r for r in results if r["status"] == "queued"]),
-        "failed": len(errors),
-        "jobs": results,
+        "submitted": len(jobs),
+        "failed": 0,
+        "engine": engine,
+        "jobs": jobs,
     }
 
 
@@ -421,11 +428,15 @@ async def check_clips(
     current_user: User = Depends(get_current_user)
 ):
     """
-    批次查詢 fal.ai 片段生成狀態
+    批次查詢片段生成狀態
+    - LTX-2 背景任務：從 in-process job store 取得結果
+    - fal.ai：呼叫 fal_check_status
     """
     from app.services.video_v3.fal_service import check_scene_status as fal_check_status
-    from app.services.video_v3.ltx_service import check_scene_status as ltx_check_status
-    
+
+    if not hasattr(router, "_ltx_jobs"):
+        router._ltx_jobs = {}
+
     statuses = []
     for job in request.jobs:
         rid = job.get("request_id")
@@ -434,16 +445,24 @@ async def check_clips(
             statuses.append({"request_id": rid, "status": "error", "error": "missing request_id"})
             continue
         try:
-            if "ltx" in model.lower():
-                status = await ltx_check_status(rid, model)
-            else:
+            if rid in router._ltx_jobs:
+                stored = router._ltx_jobs[rid]
+                statuses.append({
+                    "request_id": rid,
+                    "status": stored["status"],
+                    "video_url": stored.get("video_url"),
+                    "model": stored.get("model", "ltx-2"),
+                })
+            elif "fal" in model.lower():
                 status = await fal_check_status(rid, model)
-            statuses.append(status)
+                statuses.append(status)
+            else:
+                statuses.append({"request_id": rid, "status": "pending", "video_url": None})
         except Exception as e:
             statuses.append({"request_id": rid, "status": "error", "error": str(e)})
-    
+
     all_done = all(s.get("status") in ("completed", "error", "COMPLETED") for s in statuses)
-    
+
     return {
         "all_done": all_done,
         "statuses": statuses,
@@ -587,37 +606,74 @@ async def generate_video_api(
 ]"""
         user_prompt = f"主題文字：{request.script}"
     
-    # ====== 呼叫 Gemini AI ======
-    try:
-        import google.generativeai as genai
-        genai.configure(api_key=GEMINI_KEY)
-        model = genai.GenerativeModel('gemini-2.0-flash')
-        
-        response = model.generate_content(
-            [system_prompt, user_prompt],
-            generation_config=genai.GenerationConfig(
-                temperature=0.8,
-                max_output_tokens=3000,
-            ),
-        )
-        
-        raw_text = response.text.strip()
-        # 清理 markdown code block
-        if raw_text.startswith("```"):
-            raw_text = raw_text.split("\n", 1)[1] if "\n" in raw_text else raw_text[3:]
-        if raw_text.endswith("```"):
-            raw_text = raw_text[:-3].strip()
-        if raw_text.startswith("json"):
-            raw_text = raw_text[4:].strip()
-        
-        ai_scenes = json.loads(raw_text)
-        
-    except json.JSONDecodeError as e:
-        logger.error(f"[v3] Gemini JSON 解析失敗: {e}, raw: {raw_text[:200]}")
-        raise HTTPException(status_code=500, detail=f"AI 回應格式錯誤: {str(e)}")
-    except Exception as e:
-        logger.error(f"[v3] Gemini 生成失敗: {e}")
-        raise HTTPException(status_code=500, detail=f"AI 生成失敗: {str(e)}")
+    # ====== 呼叫 Gemini AI (含 429 重試機制) ======
+    import asyncio
+    import google.generativeai as genai
+    genai.configure(api_key=GEMINI_KEY)
+
+    # 重試設定：3 次嘗試，指數退避，最後一次降級到 flash-lite
+    _RETRY_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash", "gemini-1.5-flash-8b"]
+    _RETRY_DELAYS = [5, 15, 30]          # 秒
+    _RATE_LIMIT_CODES = {"429", "resource_exhausted", "resourceexhausted"}
+
+    raw_text = ""
+    ai_scenes = None
+    last_error: Exception | None = None
+
+    for attempt, (model_name, delay) in enumerate(zip(_RETRY_MODELS, _RETRY_DELAYS), start=1):
+        try:
+            _model = genai.GenerativeModel(model_name)
+            response = _model.generate_content(
+                [system_prompt, user_prompt],
+                generation_config=genai.GenerationConfig(
+                    temperature=0.8,
+                    max_output_tokens=3000,
+                ),
+            )
+
+            raw_text = response.text.strip()
+            # 清理 markdown code block
+            if raw_text.startswith("```"):
+                raw_text = raw_text.split("\n", 1)[1] if "\n" in raw_text else raw_text[3:]
+            if raw_text.endswith("```"):
+                raw_text = raw_text[:-3].strip()
+            if raw_text.startswith("json"):
+                raw_text = raw_text[4:].strip()
+
+            ai_scenes = json.loads(raw_text)
+            break  # 成功 → 跳出重試迴圈
+
+        except json.JSONDecodeError as e:
+            logger.error(f"[v3] Gemini JSON 解析失敗 (attempt {attempt}): {e}, raw: {raw_text[:200]}")
+            raise HTTPException(status_code=500, detail=f"AI 回應格式錯誤: {str(e)}")
+
+        except Exception as e:
+            err_str = str(e).lower()
+            is_rate_limit = any(code in err_str for code in _RATE_LIMIT_CODES)
+
+            if is_rate_limit and attempt < len(_RETRY_MODELS):
+                logger.warning(
+                    f"[v3] Gemini 429 配額超限 (attempt {attempt}/{len(_RETRY_MODELS)})，"
+                    f"{delay}s 後使用 {_RETRY_MODELS[attempt]} 重試..."
+                )
+                await asyncio.sleep(delay)
+                last_error = e
+                continue
+            else:
+                last_error = e
+                break
+
+    if ai_scenes is None:
+        # 所有重試皆失敗
+        err_str = str(last_error).lower() if last_error else ""
+        is_rate_limit = any(code in err_str for code in _RATE_LIMIT_CODES)
+        logger.error(f"[v3] Gemini 生成最終失敗: {last_error}")
+        if is_rate_limit:
+            raise HTTPException(
+                status_code=429,
+                detail="AI 配額暫時超出限制，請稍後再試（通常 1 分鐘後恢復）"
+            )
+        raise HTTPException(status_code=500, detail=f"AI 生成失敗: {str(last_error)}")
     
     # ====== 將 AI 生成結果轉換為標準格式 ======
     fps = 30
@@ -693,3 +749,324 @@ async def generate_video_api(
         },
     }
 
+
+@router.post("/warmup")
+async def warmup_ltx_inference(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Warm-up the LTX-2 Cloud Run GPU inference service.
+
+    Called by the frontend when the user starts typing a prompt,
+    giving the L4 GPU 20-30 seconds to load models before the real request arrives.
+    """
+    import os
+    import httpx
+
+    ltx_url = os.getenv("LTX_INFERENCE_URL", "http://localhost:8080")
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(f"{ltx_url}/warmup")
+            return {"status": "ok", "ltx_response": resp.json()}
+    except Exception as e:
+        # Warmup failures are silent — don't let this block the user
+        logger.info(f"[LTX Warmup] ping failed (normal if cold): {e}")
+        return {"status": "warming_up", "message": "Warm-up ping sent"}
+
+
+@router.post("/warmup-echomimic")
+async def warmup_echomimic(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    預熱 EchoMimicV2 Cloud Run GPU 推理服務。
+    前端在用戶選擇數字人模式 / 上傳 Avatar 圖片時觸發。
+    """
+    import os
+    import httpx
+
+    echomimic_url = os.getenv("ECHOMIMIC_INFERENCE_URL", "http://localhost:8081")
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(f"{echomimic_url}/warmup")
+            return {"status": "ok", "echomimic_response": resp.json()}
+    except Exception as e:
+        logger.info(f"[EchoMimic Warmup] ping failed (normal if cold): {e}")
+        return {"status": "warming_up", "message": "Warm-up ping sent to EchoMimicV2"}
+
+
+# ─────────────────────────────────────────────────────────────
+# GPT-SoVITS 語音克隆
+# ─────────────────────────────────────────────────────────────
+
+from fastapi import Form as FastAPIForm, UploadFile as FastAPIUploadFile, File as FastAPIFile
+
+
+@router.post("/warmup-sovits")
+async def warmup_sovits(
+    current_user: User = Depends(get_current_user)
+):
+    """預熱 GPT-SoVITS 語音克隆服務（冷啟動預熱）。"""
+    import os
+    import httpx
+
+    sovits_url = os.getenv("GPT_SOVITS_URL", "http://localhost:8082")
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(f"{sovits_url}/warmup")
+            return {"status": "ok", "sovits_response": resp.json()}
+    except Exception as e:
+        logger.info(f"[GPT-SoVITS Warmup] ping failed (normal if cold): {e}")
+        return {"status": "warming_up", "message": "Warm-up ping sent to GPT-SoVITS"}
+
+
+@router.post("/voice-clone")
+async def voice_clone(
+    reference_audio: FastAPIUploadFile = FastAPIFile(...),
+    reference_text: str = FastAPIForm(""),
+    target_text: str = FastAPIForm(...),
+    language: str = FastAPIForm("zh"),
+    speed: float = FastAPIForm(1.0),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    GPT-SoVITS 零樣本語音克隆。
+    上傳 5~30 秒參考音頻 + 目標文字 → 回傳克隆語音 URL（上傳 GCS）。
+    """
+    import os
+    import httpx
+    import uuid
+    from app.services.cloud_storage import cloud_storage
+
+    sovits_url = os.getenv("GPT_SOVITS_URL", "http://localhost:8082")
+
+    # 扣除點數（使用 TTS 點數代替，後續可新增專用 feature code）
+    consume_result = consume_credits_manually(
+        db=db,
+        user=current_user,
+        feature_code=FeatureCode.V3_TTS,
+        description="語音克隆（GPT-SoVITS）"
+    )
+    if not consume_result["success"]:
+        raise HTTPException(status_code=402, detail=consume_result.get("error", "點數不足"))
+
+    # 讀取參考音頻
+    audio_bytes = await reference_audio.read()
+    if len(audio_bytes) < 1000:
+        raise HTTPException(status_code=400, detail="參考音頻太短，請上傳 5 秒以上的音頻")
+
+    # 轉發到 GPT-SoVITS 微服務
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(
+                f"{sovits_url}/clone",
+                files={"reference_audio": (reference_audio.filename, audio_bytes, reference_audio.content_type)},
+                data={
+                    "reference_text": reference_text,
+                    "target_text": target_text,
+                    "language": language,
+                    "speed": str(speed),
+                },
+            )
+            if resp.status_code != 200:
+                raise HTTPException(status_code=502, detail=f"GPT-SoVITS 錯誤: {resp.text}")
+
+            cloned_audio_bytes = resp.content
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"GPT-SoVITS 服務無法連線: {e}")
+
+    # 上傳克隆音頻到 Cloud Storage
+    try:
+        audio_url = await cloud_storage.upload_bytes(
+            data=cloned_audio_bytes,
+            file_type="audio",
+            suffix=".wav",
+            user_id=str(current_user.id),
+            content_type="audio/wav",
+        )
+        return {"url": audio_url, "status": "ok"}
+    except Exception as e:
+        logger.warning(f"GCS upload failed, returning base64: {e}")
+        import base64
+        encoded = base64.b64encode(cloned_audio_bytes).decode()
+        return {"audio_base64": encoded, "content_type": "audio/wav", "status": "ok_no_storage"}
+
+
+# ============================================================
+# Q3：ComfyUI / AI 圖像工坊（Replicate API）
+# ============================================================
+
+COMFYUI_WORKFLOWS = [
+    {
+        "id": "text2img-fast",
+        "name": "✨ 文字快速生圖",
+        "description": "輸入文字描述，快速生成 AI 圖像（SD-Lightning 4步）",
+        "inputs": ["prompt", "negative_prompt"],
+        "replicate_model": "bytedance/sdxl-lightning-4step:5f24084160c9089501c1b3545d9be3c27883ae2239b6f412990e82d4a6210f8f",
+        "cost_per_run": "$0.001",
+    },
+    {
+        "id": "img2img-style",
+        "name": "🎨 圖片風格轉換",
+        "description": "上傳圖片，轉換成指定藝術風格",
+        "inputs": ["prompt", "image_url", "strength"],
+        "replicate_model": "stability-ai/stable-diffusion-img2img:15a3689ee13b0d2616e98820eca31d4af4a36b21823518aa831dd79d43e7f83",
+        "cost_per_run": "$0.002",
+    },
+    {
+        "id": "portrait-enhance",
+        "name": "👤 人像美化",
+        "description": "自動修復、提升人像圖片品質",
+        "inputs": ["image_url", "version"],
+        "replicate_model": "tencentarc/gfpgan:9283608cc6b7be6b65a8e44983db012355f829a539ad48d9d76f66a79dd21ca",
+        "cost_per_run": "$0.001",
+    },
+    {
+        "id": "bg-remove",
+        "name": "✂️ 一鍵去背",
+        "description": "自動移除圖片背景，保留主體",
+        "inputs": ["image_url"],
+        "replicate_model": "cjwbw/rembg:fb8af171cfa1616ddcf1242c093f9c46bcada5ad4cf6f2fbe8b81b330ec5c003",
+        "cost_per_run": "$0.001",
+    },
+]
+
+
+@router.get("/comfyui/workflows")
+async def get_comfyui_workflows(
+    current_user: User = Depends(get_current_user),
+):
+    """回傳可用的 AI 圖像工坊 Workflow 列表"""
+    return {"workflows": COMFYUI_WORKFLOWS}
+
+
+class ComfyUIRunRequest(BaseModel):
+    workflow_id: str
+    prompt: Optional[str] = None
+    negative_prompt: Optional[str] = "blurry, bad quality, distorted, ugly"
+    image_url: Optional[str] = None
+    strength: Optional[float] = 0.8
+    version: Optional[str] = "v1.4"
+
+
+@router.post("/comfyui/run")
+async def run_comfyui_workflow(
+    request: ComfyUIRunRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    執行 AI 圖像工坊 Workflow（Replicate API）
+    回傳生成的圖片 URL（GCS 或 Replicate 直接 URL）
+    """
+    import replicate
+    import os as _os
+
+    replicate_token = _os.getenv("REPLICATE_API_TOKEN", "")
+    if not replicate_token:
+        raise HTTPException(status_code=503, detail="Replicate API 尚未設定")
+
+    # 找到對應 workflow
+    workflow = next((w for w in COMFYUI_WORKFLOWS if w["id"] == request.workflow_id), None)
+    if not workflow:
+        raise HTTPException(status_code=400, detail=f"找不到 workflow: {request.workflow_id}")
+
+    # 扣除點數（每次執行扣 1 點）
+    if current_user.credits < 1:
+        raise HTTPException(status_code=402, detail="點數不足，請購買點數")
+    current_user.credits -= 1
+    db.commit()
+
+    try:
+        client = replicate.Client(api_token=replicate_token)
+
+        # 依 workflow 組建 input
+        if request.workflow_id == "text2img-fast":
+            model_input = {
+                "prompt": request.prompt or "a beautiful landscape",
+                "negative_prompt": request.negative_prompt or "",
+                "num_inference_steps": 4,
+                "width": 1024,
+                "height": 1024,
+            }
+        elif request.workflow_id == "img2img-style":
+            if not request.image_url:
+                raise HTTPException(status_code=400, detail="此 workflow 需要上傳圖片")
+            model_input = {
+                "prompt": request.prompt or "artistic style",
+                "image": request.image_url,
+                "strength": request.strength or 0.8,
+                "negative_prompt": request.negative_prompt or "",
+            }
+        elif request.workflow_id == "portrait-enhance":
+            if not request.image_url:
+                raise HTTPException(status_code=400, detail="此 workflow 需要上傳圖片")
+            model_input = {
+                "img": request.image_url,
+                "version": request.version or "v1.4",
+                "scale": 2,
+            }
+        elif request.workflow_id == "bg-remove":
+            if not request.image_url:
+                raise HTTPException(status_code=400, detail="此 workflow 需要上傳圖片")
+            model_input = {
+                "image": request.image_url,
+            }
+        else:
+            raise HTTPException(status_code=400, detail="未知的 workflow")
+
+        # 呼叫 Replicate
+        model_id = workflow["replicate_model"]
+        logger.info(f"[ComfyUI] Running {request.workflow_id} for user {current_user.id}")
+        output = client.run(model_id, input=model_input)
+
+        # 取得輸出 URL
+        if isinstance(output, list):
+            output_url = str(output[0]) if output else None
+        else:
+            output_url = str(output) if output else None
+
+        if not output_url:
+            raise HTTPException(status_code=500, detail="Replicate 未回傳輸出")
+
+        # 嘗試上傳到 GCS
+        try:
+            import httpx as _httpx
+            async with _httpx.AsyncClient(timeout=60) as hclient:
+                img_response = await hclient.get(output_url)
+            if img_response.status_code == 200:
+                from google.cloud import storage as _storage
+                from datetime import datetime as _dt
+                import uuid as _uuid
+                gcs_client = _storage.Client()
+                bucket = gcs_client.bucket("king-jam-ai-videos")
+                filename = f"comfyui/{current_user.id}/{_dt.utcnow().strftime('%Y%m%d_%H%M%S')}_{_uuid.uuid4().hex[:8]}.png"
+                blob = bucket.blob(filename)
+                blob.upload_from_string(img_response.content, content_type="image/png")
+                blob.make_public()
+                output_url = blob.public_url
+        except Exception as upload_err:
+            logger.warning(f"[ComfyUI] GCS upload failed, using Replicate URL: {upload_err}")
+
+        logger.info(f"[ComfyUI] {request.workflow_id} success: {output_url}")
+        return {
+            "status": "ok",
+            "workflow_id": request.workflow_id,
+            "output_url": output_url,
+            "credits_remaining": current_user.credits,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        # 退還點數
+        current_user.credits += 1
+        db.commit()
+        logger.error(f"[ComfyUI] Workflow {request.workflow_id} failed: {e}")
+        raise HTTPException(status_code=500, detail=f"生成失敗：{str(e)}")

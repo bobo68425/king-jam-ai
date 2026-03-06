@@ -41,7 +41,7 @@ ImageQuality = Literal["draft", "standard", "premium"]
 
 QUALITY_CONFIG = {
     "draft": {
-        "models": ["models/imagen-4.0-fast-generate-001", "models/gemini-2.0-flash-exp-image-generation"],
+        "models": ["models/imagen-4.0-fast-generate-001", "models/gemini-2.5-flash-exp-image-generation"],
         "quality": "quick draft",
         "cost": 5
     },

@@ -1044,7 +1044,7 @@ class Prompt(Base):
     
     # 適用模型 (JSON 陣列)
     supported_models = Column(JSON, default=list)
-    # 例如：["gpt-4o", "gemini-2.0-flash", "gemini-1.5-pro"]
+    # 例如：["gpt-4o", "gemini-2.5-flash", "gemini-1.5-pro"]
     # 例如：["flux-schnell", "flux-dev", "dall-e-3"]
     
     # 預設模型

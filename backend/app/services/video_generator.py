@@ -642,7 +642,7 @@ class VideoGeneratorService:
             img_client = vertexai_client or genai_client
             imagen_models = [
                 "models/imagen-4.0-fast-generate-001",
-                "models/gemini-2.0-flash-exp-image-generation",
+                "models/gemini-2.5-flash-exp-image-generation",
             ]
             
             for model_name in imagen_models:
@@ -1662,7 +1662,7 @@ Format: Authentic photography aesthetic
             
             imagen_models = [
                 "models/imagen-4.0-fast-generate-001",
-                "models/gemini-2.0-flash-exp-image-generation",
+                "models/gemini-2.5-flash-exp-image-generation",
                 "models/imagen-4.0-generate-001",
             ]
             

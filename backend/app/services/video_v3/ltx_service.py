@@ -1,18 +1,45 @@
 """
-LTX Video 影片片段生成服務
-======================
-使用 LTX API 生成 AI 影片片段，並透過 Celery 轉為非同步
-支持模型: LTX-2 (Text-to-Video, Image-to-Video)
+LTX-2 影片片段生成服務 (非阻塞模式)
+=================================================
+LTX Cloud Run 端點 (新架構):
+  POST {LTX_INFERENCE_URL}/v1/text-to-video   → 立即回傳 { task_id, status: "processing" }
+  POST {LTX_INFERENCE_URL}/v1/image-to-video  → 立即回傳 { task_id, status: "processing" }
+  GET  {LTX_INFERENCE_URL}/v1/status/{task_id} → 輪詢結果 { status, video_url }
+
+呼叫流程:
+  1. POST → 取得 task_id
+  2. 輪詢 /v1/status 直到 status=completed 或 error
+  3. 回傳 { request_id, model, status: "completed", video_url }
 """
 
 import os
+import asyncio
 import logging
+import uuid
 from typing import Optional, Dict, Any
 
-from app.celery_app import celery_app
-from celery.result import AsyncResult
+import httpx
 
 logger = logging.getLogger(__name__)
+
+LTX_INFERENCE_URL = os.getenv("LTX_INFERENCE_URL", "http://localhost:8080")
+# 單次 status poll 的 timeout（秒）
+LTX_POLL_TIMEOUT = int(os.getenv("LTX_POLL_TIMEOUT", "10"))
+# 最長等待生成完成的時間（秒）: cold start (30s) + model load (3min) + generation (5min)
+LTX_MAX_WAIT_SECONDS = int(os.getenv("LTX_MAX_WAIT_SECONDS", "900"))
+LTX_POLL_INTERVAL = int(os.getenv("LTX_POLL_INTERVAL", "10"))  # poll 間隔（秒）
+
+
+def _resolve_resolution(aspect_ratio: str) -> str:
+    # 降低解析度以節省 50% 成本與時間 (適用於 TikTok/Reels 等被嚴重壓縮的平台)
+    # LTX 要求長寬必須是 8 的倍數
+    mapping = {
+        "9:16": "480x854",
+        "16:9": "854x480",
+        "1:1":  "768x768",
+    }
+    return mapping.get(aspect_ratio, "480x854")
+
 
 async def generate_scene_clip(
     prompt: str = "",
@@ -24,82 +51,129 @@ async def generate_scene_clip(
     audio_url: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    委託 Celery 工作節點非同步生成 LTX 影片片段
-    """
-    from app.tasks.video_tasks import generate_ltx_video_task
-    
-    # 比例轉換為 LTX 支援的分辨率
-    # 參考: 9:16 = 720x1280, 16:9 = 1280x720, 1:1 = 1024x1024
-    resolution = "1280x720"
-    if aspect_ratio == "9:16":
-        resolution = "720x1280"
-    elif aspect_ratio == "1:1":
-        resolution = "1024x1024"
+    非阻塞呼叫 LTX Cloud Run 生成影片。
 
+    步驟:
+      1. POST /v1/text-to-video → 立即取得 task_id
+      2. 輪詢 GET /v1/status/{task_id} 直到完成
+      3. 回傳 { request_id, model, status, video_url }
+    """
     model = "ltx-2-pro" if "pro" in model_preference.lower() else "ltx-2"
-    
-    # 發送任務到 Celery 的 queue_video
-    task = generate_ltx_video_task.apply_async(
-        kwargs={
+    resolution = _resolve_resolution(aspect_ratio)
+    job_id = str(uuid.uuid4())
+
+    if reference_image_url:
+        endpoint = f"{LTX_INFERENCE_URL}/v1/image-to-video"
+        payload: Dict[str, Any] = {
             "prompt": prompt,
-            "duration": duration,
             "model": model,
+            "duration": duration,
             "resolution": resolution,
-            "image_url": reference_image_url
+            "image_uri": reference_image_url,
         }
-    )
-    
-    logger.info(f"[LTX] 任務已提交: model={model}, request_id={task.id}")
-    
-    return {
-        "request_id": task.id,
-        "model": model,
-        "status": "queued",
-    }
+    else:
+        endpoint = f"{LTX_INFERENCE_URL}/v1/text-to-video"
+        payload = {
+            "prompt": prompt,
+            "model": model,
+            "duration": duration,
+            "resolution": resolution,
+        }
+
+    logger.info(f"[LTX] Submitting task: job={job_id}, model={model}")
+
+    async with httpx.AsyncClient(timeout=httpx.Timeout(connect=60.0, read=30.0, write=30.0, pool=5.0)) as client:
+        # ── Step 1: Submit ──────────────────────────────────────────
+        resp = await client.post(endpoint, json=payload)
+        if resp.status_code != 200:
+            raise ValueError(f"LTX submit error: HTTP {resp.status_code} - {resp.text[:300]}")
+
+        data = resp.json()
+        task_id = data.get("task_id")
+
+        if not task_id:
+            # 舊版 LTX 可能直接回傳 binary MP4（相容）
+            content_type = resp.headers.get("content-type", "")
+            if "video" in content_type or "octet-stream" in content_type:
+                video_url = await _upload_video_bytes(resp.content, job_id)
+                return {"request_id": job_id, "model": model, "status": "completed", "video_url": video_url}
+            raise ValueError(f"LTX: no task_id in response: {data}")
+
+        logger.info(f"[LTX] task_id={task_id}, polling /v1/status/{task_id}")
+
+        # ── Step 2: Poll ────────────────────────────────────────────
+        elapsed = 0
+        status_url = f"{LTX_INFERENCE_URL}/v1/status/{task_id}"
+        while elapsed < LTX_MAX_WAIT_SECONDS:
+            await asyncio.sleep(LTX_POLL_INTERVAL)
+            elapsed += LTX_POLL_INTERVAL
+
+            try:
+                status_resp = await client.get(status_url, timeout=LTX_POLL_TIMEOUT)
+                if status_resp.status_code == 200:
+                    status_data = status_resp.json()
+                    status = status_data.get("status", "processing")
+
+                    if status == "completed":
+                        video_url = status_data.get("video_url")
+                        if not video_url:
+                            raise ValueError(f"LTX completed but no video_url: {status_data}")
+                        logger.info(f"[LTX] ✅ task_id={task_id} completed: {video_url[:60]}")
+                        return {
+                            "request_id": task_id,
+                            "model": model,
+                            "status": "completed",
+                            "video_url": video_url,
+                        }
+                    elif status == "error":
+                        err = status_data.get("error", "unknown error")
+                        raise ValueError(f"LTX generation failed: {err}")
+
+                    logger.info(f"[LTX] task_id={task_id} still processing ({elapsed}s elapsed)")
+
+            except httpx.TimeoutException:
+                logger.warning(f"[LTX] poll timeout at {elapsed}s, retrying...")
+                continue
+
+        raise ValueError(f"LTX generation timed out after {LTX_MAX_WAIT_SECONDS}s (task_id={task_id})")
+
+
+async def _upload_video_bytes(video_data: bytes, job_id: str) -> str:
+    """(Compat) Upload binary MP4 from old-style LTX response to GCS."""
+    import asyncio
+    import tempfile
+
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as f:
+            f.write(video_data)
+            tmp_path = f.name
+
+        def _upload_sync():
+            from app.services.cloud_storage import cloud_storage
+            return cloud_storage.upload_file(file_path=tmp_path, user_id=0, file_type="videos")
+
+        result = await asyncio.to_thread(_upload_sync)
+        if result.get("success"):
+            return result["url"]
+        return f"/static/videos/ltx_{job_id}.mp4"
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
 
 
 async def check_scene_status(request_id: str, model_id: str) -> Dict[str, Any]:
     """
-    查詢 Celery 任務狀態並取得結果
+    LTX 狀態查詢（相容介面）。
+    實際追蹤是在 kingjam-api 的 in-memory job store 完成。
     """
-    res = AsyncResult(request_id, app=celery_app)
-    
-    status = res.state
-    logger.info(f"[LTX] 狀態查詢: {request_id} → {status}")
-    
-    if status == "SUCCESS":
-        result_data = res.result
-        video_url = None
-        if isinstance(result_data, dict) and result_data.get("success"):
-            video_url = result_data.get("video_url")
-            
-        if video_url:
-            logger.info(f"[LTX] ✅ 影片生成完成: {video_url[:100]}")
-            
-        return {
-            "request_id": request_id,
-            "status": "completed",
-            "video_url": video_url,
-        }
-        
-    elif status == "FAILURE":
-        return {
-            "request_id": request_id,
-            "status": "failed",
-            "error": str(res.info),
-        }
-    
-    # PENDING / STARTED / RETRY 等其他狀態統一轉為全小寫
-    return {
-        "request_id": request_id,
-        "status": status.lower() if status else "queued",
-    }
+    return {"request_id": request_id, "status": "pending", "video_url": None}
 
 
 async def handle_webhook(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    LTX Webhook 處理 (目前若未使用，僅提供相容介面)
-    """
     request_id = payload.get("request_id", "")
     status = payload.get("status", "")
     return {"request_id": request_id, "status": status.lower()}

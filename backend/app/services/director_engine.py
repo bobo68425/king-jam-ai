@@ -313,7 +313,7 @@ class DirectorEngine:
     """
     
     def __init__(self):
-        self.model = genai.GenerativeModel('gemini-2.0-flash') if GOOGLE_GEMINI_KEY else None
+        self.model = genai.GenerativeModel('gemini-2.5-flash') if GOOGLE_GEMINI_KEY else None
     
     async def generate_video_script(
         self,
@@ -586,21 +586,49 @@ class DirectorEngine:
 """
     
     async def _call_gemini(self, system_prompt: str, user_prompt: str) -> str:
-        """調用 Gemini API"""
+        """調用 Gemini API（含 429 重試機制）"""
         import asyncio
-        
+
         full_prompt = f"{system_prompt}\n\n---\n\n{user_prompt}"
-        
-        response = await asyncio.to_thread(
-            self.model.generate_content,
-            full_prompt,
-            generation_config=genai.GenerationConfig(
-                temperature=0.7,
-                max_output_tokens=4096,
-            )
-        )
-        
-        return response.text
+
+        # 重試設定：3 次嘗試，最後一次降級到 flash-lite
+        _RETRY_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash", "gemini-1.5-flash-8b"]
+        _RETRY_DELAYS = [5, 15, 30]   # 秒
+        _RATE_LIMIT_CODES = {"429", "resource_exhausted", "resourceexhausted"}
+
+        last_error: Exception | None = None
+
+        for attempt, (model_name, delay) in enumerate(zip(_RETRY_MODELS, _RETRY_DELAYS), start=1):
+            try:
+                model = genai.GenerativeModel(model_name)
+                response = await asyncio.to_thread(
+                    model.generate_content,
+                    full_prompt,
+                    generation_config=genai.GenerationConfig(
+                        temperature=0.7,
+                        max_output_tokens=4096,
+                    )
+                )
+                return response.text
+
+            except Exception as e:
+                err_str = str(e).lower()
+                is_rate_limit = any(code in err_str for code in _RATE_LIMIT_CODES)
+
+                if is_rate_limit and attempt < len(_RETRY_MODELS):
+                    print(
+                        f"[DirectorEngine] Gemini 429 配額超限 (attempt {attempt}/{len(_RETRY_MODELS)})，"
+                        f"{delay}s 後使用 {_RETRY_MODELS[attempt]} 重試..."
+                    )
+                    await asyncio.sleep(delay)
+                    last_error = e
+                    continue
+                else:
+                    last_error = e
+                    break
+
+        # 所有重試皆失敗 → 交給呼叫端 fallback
+        raise last_error
     
     def _parse_response(
         self,

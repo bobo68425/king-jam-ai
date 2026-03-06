@@ -462,7 +462,7 @@ class StoryboardService:
         if self.genai_client:
             try:
                 # 使用 Imagen 4.0 模型
-                model = self.genai_client.GenerativeModel('gemini-2.0-flash-exp')
+                model = self.genai_client.GenerativeModel('gemini-2.5-flash-exp')
                 
                 thumbnail_prompt = f"""
 Create a simple storyboard sketch illustration:

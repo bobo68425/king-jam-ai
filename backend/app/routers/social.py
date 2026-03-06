@@ -104,7 +104,7 @@ PLATFORM_CONFIG = {
 
 # 品質配置
 QUALITY_CONFIG = {
-    "draft": {"models": ["models/imagen-4.0-fast-generate-001", "models/gemini-2.0-flash-exp-image-generation"], "quality": "quick draft"},
+    "draft": {"models": ["models/imagen-4.0-fast-generate-001", "models/gemini-2.5-flash-exp-image-generation"], "quality": "quick draft"},
     "standard": {"models": ["models/gemini-2.5-flash-image", "models/imagen-4.0-generate-001"], "quality": "high quality"},
     "premium": {"models": ["models/gemini-3-pro-image-preview", "models/imagen-4.0-ultra-generate-001", "models/imagen-4.0-generate-001"], "quality": "4K ultra"},
 }
@@ -377,7 +377,7 @@ Hashtag：{info['hashtag']}
     if not GOOGLE_GEMINI_KEY:
         return generate_fallback_caption(topic, platform, tone, keywords, product_info)
     
-    for model_name in ["models/gemini-2.5-flash", "models/gemini-2.0-flash", "models/gemini-flash-latest"]:
+    for model_name in ["models/gemini-2.5-flash", "models/gemini-2.5-flash", "models/gemini-flash-latest"]:
         try:
             model = genai.GenerativeModel(model_name)
             response = await model.generate_content_async(prompt)
@@ -689,7 +689,7 @@ async def suggest_fields(
 {{"keywords": "...", "image_prompt": "...", "product_info": "..."}}"""
 
     try:
-        for model_name in ["models/gemini-2.5-flash", "models/gemini-2.0-flash", "models/gemini-flash-latest"]:
+        for model_name in ["models/gemini-2.5-flash", "models/gemini-2.5-flash", "models/gemini-flash-latest"]:
             try:
                 model = genai.GenerativeModel(model_name)
                 response = await asyncio.wait_for(asyncio.to_thread(model.generate_content, prompt), timeout=30.0)
