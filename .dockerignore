@@ -1,0 +1,39 @@
+# Exclude large SQL backups
+*.sql
+*.sql.gz
+*.dump
+backups/
+kingjam_slim.sql
+Cloud_SQL_Export_*.sql
+
+# Exclude non-backend directories
+frontend/
+ltx-video-inference/
+echomimic-inference/
+gpt-sovits-inference/
+video-engine/
+docs/
+deploy/
+scripts/
+credentials/
+secrets/
+.docker_data/
+
+# Exclude large images and media
+*.png
+*.jpg
+*.jpeg
+*.icns
+*.iconset/
+
+# Git and CI
+.git/
+.github/
+.cursor/
+
+# Logs and temp files
+*.log
+*.tmp
+
+# Only include backend/
+!backend/
