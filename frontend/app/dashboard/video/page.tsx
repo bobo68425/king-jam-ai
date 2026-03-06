@@ -631,7 +631,7 @@ export default function VideoPage() {
       return;
     }
     setV3VideoGenerating(true);
-    setV3VideoProgress("提交場景到 fal.ai...");
+    setV3VideoProgress("提交場景到 AI 影片引擎...");
     setV3VideoJobs([]);
 
     try {
