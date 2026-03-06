@@ -31,14 +31,15 @@ LTX_POLL_INTERVAL = int(os.getenv("LTX_POLL_INTERVAL", "10"))  # poll 間隔（�
 
 
 def _resolve_resolution(aspect_ratio: str) -> str:
-    # 降低解析度以節省 50% 成本與時間 (適用於 TikTok/Reels 等被嚴重壓縮的平台)
-    # LTX 要求長寬必須是 8 的倍數
+    # 降低解析度以大幅縮短生成時間 (約 2-3 分鐘 -> 1 分鐘)
+    # 如需更高畫質，可調整為 480x854 / 854x480 / 768x768
+    # LTX 要求長寬必須是 32 的倍數
     mapping = {
-        "9:16": "480x854",
-        "16:9": "854x480",
-        "1:1":  "768x768",
+        "9:16": "320x576",
+        "16:9": "576x320",
+        "1:1":  "512x512",
     }
-    return mapping.get(aspect_ratio, "480x854")
+    return mapping.get(aspect_ratio, "320x576")
 
 
 async def generate_scene_clip(
