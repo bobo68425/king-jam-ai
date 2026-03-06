@@ -101,43 +101,16 @@ async def generate_scene_clip(
                 return {"request_id": job_id, "model": model, "status": "completed", "video_url": video_url}
             raise ValueError(f"LTX: no task_id in response: {data}")
 
-        logger.info(f"[LTX] task_id={task_id}, polling /v1/status/{task_id}")
+        logger.info(f"[LTX] task_id={task_id} generated, returning immediately to allow frontend polling.")
 
-        # ── Step 2: Poll ────────────────────────────────────────────
-        elapsed = 0
-        status_url = f"{LTX_INFERENCE_URL}/v1/status/{task_id}"
-        while elapsed < LTX_MAX_WAIT_SECONDS:
-            await asyncio.sleep(LTX_POLL_INTERVAL)
-            elapsed += LTX_POLL_INTERVAL
-
-            try:
-                status_resp = await client.get(status_url, timeout=LTX_POLL_TIMEOUT)
-                if status_resp.status_code == 200:
-                    status_data = status_resp.json()
-                    status = status_data.get("status", "processing")
-
-                    if status == "completed":
-                        video_url = status_data.get("video_url")
-                        if not video_url:
-                            raise ValueError(f"LTX completed but no video_url: {status_data}")
-                        logger.info(f"[LTX] ✅ task_id={task_id} completed: {video_url[:60]}")
-                        return {
-                            "request_id": task_id,
-                            "model": model,
-                            "status": "completed",
-                            "video_url": video_url,
-                        }
-                    elif status == "error":
-                        err = status_data.get("error", "unknown error")
-                        raise ValueError(f"LTX generation failed: {err}")
-
-                    logger.info(f"[LTX] task_id={task_id} still processing ({elapsed}s elapsed)")
-
-            except httpx.TimeoutException:
-                logger.warning(f"[LTX] poll timeout at {elapsed}s, retrying...")
-                continue
-
-        raise ValueError(f"LTX generation timed out after {LTX_MAX_WAIT_SECONDS}s (task_id={task_id})")
+        # ── Step 2: Return immediately ──────────────────────────────
+        # 不在這裡 blocking poll，直接回傳 task_id, 讓 _run_ltx (或者 polling endpoint) 去處理
+        return {
+            "request_id": task_id,
+            "model": model,
+            "status": "pending",
+            "video_url": None,
+        }
 
 
 async def _upload_video_bytes(video_data: bytes, job_id: str) -> str:

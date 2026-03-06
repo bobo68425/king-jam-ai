@@ -429,39 +429,54 @@ async def check_clips(
 ):
     """
     批次查詢片段生成狀態
-    - LTX-2 背景任務：從 in-process job store 取得結果
+    - LTX-2 背景任務：不使用 router._ltx_jobs，直接向 Modal API 輪詢 status。
     - fal.ai：呼叫 fal_check_status
     """
     from app.services.video_v3.fal_service import check_scene_status as fal_check_status
-
-    if not hasattr(router, "_ltx_jobs"):
-        router._ltx_jobs = {}
+    import httpx
+    import os
+    
+    LTX_INFERENCE_URL = os.getenv("LTX_INFERENCE_URL", "http://localhost:8080")
 
     statuses = []
-    for job in request.jobs:
-        rid = job.get("request_id")
-        model = job.get("model", "")
-        if not rid:
-            statuses.append({"request_id": rid, "status": "error", "error": "missing request_id"})
-            continue
-        try:
-            if rid in router._ltx_jobs:
-                stored = router._ltx_jobs[rid]
-                statuses.append({
-                    "request_id": rid,
-                    "status": stored["status"],
-                    "video_url": stored.get("video_url"),
-                    "model": stored.get("model", "ltx-2"),
-                })
-            elif "fal" in model.lower():
-                status = await fal_check_status(rid, model)
-                statuses.append(status)
-            else:
-                statuses.append({"request_id": rid, "status": "pending", "video_url": None})
-        except Exception as e:
-            statuses.append({"request_id": rid, "status": "error", "error": str(e)})
+    
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        for job in request.jobs:
+            rid = job.get("request_id")
+            model = job.get("model", "")
+            if not rid:
+                statuses.append({"request_id": rid, "status": "error", "error": "missing request_id"})
+                continue
+            
+            try:
+                if "fal" in model.lower():
+                    status = await fal_check_status(rid, model)
+                    statuses.append(status)
+                elif "ltx" in model.lower():
+                    # 向 Modal 請求擷取狀態
+                    try:
+                        resp = await client.get(f"{LTX_INFERENCE_URL}/v1/status/{rid}")
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            status_val = data.get("status", "pending")
+                            
+                            statuses.append({
+                                "request_id": rid,
+                                "status": status_val,
+                                "video_url": data.get("video_url"),
+                                "model": model,
+                            })
+                        else:
+                            statuses.append({"request_id": rid, "status": "pending", "video_url": None, "model": model})
+                    except Exception as e:
+                        logger.warning(f"LTX Poll Error for {rid}: {e}")
+                        statuses.append({"request_id": rid, "status": "pending", "video_url": None, "model": model})
+                else:
+                    statuses.append({"request_id": rid, "status": "pending", "video_url": None})
+            except Exception as e:
+                statuses.append({"request_id": rid, "status": "error", "error": str(e)})
 
-    all_done = all(s.get("status") in ("completed", "error", "COMPLETED") for s in statuses)
+    all_done = all(s.get("status") in ("completed", "error", "COMPLETED", "ERROR", "failed", "FAILED") for s in statuses)
 
     return {
         "all_done": all_done,

@@ -652,7 +652,7 @@ export default function VideoPage() {
       }
 
       let attempts = 0;
-      const maxAttempts = 60;
+      const maxAttempts = 180; // 5 min -> 15 min to accommodate LTX rendering
       const pollInterval = 5000;
 
       while (attempts < maxAttempts) {
