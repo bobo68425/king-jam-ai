@@ -1,6 +1,6 @@
 [build]
 builder = "dockerfile"
-dockerfilePath = "Dockerfile.prod"
+dockerfilePath = "backend/Dockerfile.prod"
 
 [deploy]
 startCommand = "gunicorn --bind :$PORT --workers 2 --threads 4 --timeout 120 --keep-alive 5 -k uvicorn.workers.UvicornWorker app.main:app"
