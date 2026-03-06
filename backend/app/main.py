@@ -423,7 +423,22 @@ def _auto_init_db():
         """))
         db.commit()
 
-        # ── 6. notifications 表: 新增 priority 欄位 ──
+        # ── 6. notifications 表: 建立與新增 priority 欄位 ──
+        db.execute(text("""
+            CREATE TABLE IF NOT EXISTS notifications (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                notification_type VARCHAR(20) NOT NULL DEFAULT 'system',
+                title VARCHAR(200) NOT NULL,
+                message TEXT NOT NULL,
+                data JSONB,
+                is_read BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                read_at TIMESTAMPTZ,
+                priority VARCHAR(20) NOT NULL DEFAULT 'general'
+            );
+        """))
+        db.commit()
         db.execute(text("""
             DO $$
             BEGIN
@@ -640,8 +655,24 @@ def init_db_endpoint():
             db.rollback()
             results.append(f"users.prepaid_sub error: {e}")
 
-        # notifications.priority
+        # notifications (建立資料表 + 確保 priority 欄位)
         try:
+            db.execute(text("""
+                CREATE TABLE IF NOT EXISTS notifications (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    notification_type VARCHAR(20) NOT NULL DEFAULT 'system',
+                    title VARCHAR(200) NOT NULL,
+                    message TEXT NOT NULL,
+                    data JSONB,
+                    is_read BOOLEAN DEFAULT FALSE,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    read_at TIMESTAMPTZ,
+                    priority VARCHAR(20) NOT NULL DEFAULT 'general'
+                );
+            """))
+            db.commit()
+            
             db.execute(text("""
                 DO $$
                 BEGIN
