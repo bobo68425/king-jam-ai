@@ -21,10 +21,25 @@ origins = [
     "https://www.kingjam.app",
     "http://kingjam.app",
     "http://www.kingjam.app",
+    "https://kingjam-frontend-wck4tgzywa-de.a.run.app",  # Cloud Run staging
+    "https://kingjam-api-wck4tgzywa-de.a.run.app",       # Cloud Run API (internal)
 ]
+
+import sentry_sdk
 
 app = FastAPI(title="King Jam AI API", version="1.0.6")  # Instagram Login, Meta Webhook
 
+# ============================================================
+# Sentry 錯誤監控初始化
+# ============================================================
+sentry_dsn = os.getenv("SENTRY_DSN")
+if sentry_dsn:
+    sentry_sdk.init(
+        dsn=sentry_dsn,
+        traces_sample_rate=0.2,
+        profiles_sample_rate=0.2,
+    )
+    logger.info("[Sentry] ✅ 已成功初始化 Sentry 錯誤監控")
 
 def _cors_headers(origin: str):
     """回傳 CORS 標頭，確保錯誤回應也能被前端讀取"""
@@ -584,23 +599,63 @@ def init_db_endpoint():
         results.append("orders ok")
 
         # payment_logs
-        db.execute(text("""
-            CREATE TABLE IF NOT EXISTS payment_logs (
-                id SERIAL PRIMARY KEY,
-                order_id INTEGER NOT NULL REFERENCES orders(id),
-                action VARCHAR(50) NOT NULL,
-                status_before VARCHAR(20),
-                status_after VARCHAR(20),
-                provider VARCHAR(20),
-                provider_response JSONB,
-                message TEXT,
-                extra_data JSONB,
-                ip_address VARCHAR(45),
-                created_at TIMESTAMPTZ DEFAULT NOW()
-            );
-        """))
-        db.commit()
-        results.append("payment_logs ok")
+        try:
+            db.execute(text("""
+                CREATE TABLE IF NOT EXISTS payment_logs (
+                    id SERIAL PRIMARY KEY,
+                    order_id INTEGER NOT NULL REFERENCES orders(id),
+                    action VARCHAR(50) NOT NULL,
+                    status_before VARCHAR(20),
+                    status_after VARCHAR(20),
+                    provider VARCHAR(20),
+                    provider_response JSONB,
+                    message TEXT,
+                    extra_data JSONB,
+                    ip_address VARCHAR(45),
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+            """))
+            db.commit()
+            results.append("payment_logs ok")
+        except Exception as e:
+            db.rollback()
+            results.append(f"payment_logs error: {e}")
+
+        # users.prepaid_sub
+        try:
+            db.execute(text("""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='users' AND column_name='prepaid_sub_months_remaining') THEN
+                        ALTER TABLE users ADD COLUMN prepaid_sub_months_remaining INTEGER DEFAULT 0;
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='users' AND column_name='prepaid_sub_credits_per_month') THEN
+                        ALTER TABLE users ADD COLUMN prepaid_sub_credits_per_month INTEGER DEFAULT 0;
+                    END IF;
+                END $$;
+            """))
+            db.commit()
+            results.append("users.prepaid_sub ok")
+        except Exception as e:
+            db.rollback()
+            results.append(f"users.prepaid_sub error: {e}")
+
+        # notifications.priority
+        try:
+            db.execute(text("""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='notifications' AND column_name='priority') THEN
+                        ALTER TABLE notifications ADD COLUMN priority VARCHAR(20) NOT NULL DEFAULT 'general';
+                        CREATE INDEX IF NOT EXISTS idx_notification_priority ON notifications(priority);
+                    END IF;
+                END $$;
+            """))
+            db.commit()
+            results.append("notifications.priority ok")
+        except Exception as e:
+            db.rollback()
+            results.append(f"notifications.priority error: {e}")
 
         row = db.execute(text("SELECT count(*) FROM subscription_plans")).fetchone()
         plan_count = row[0] if row else 0
