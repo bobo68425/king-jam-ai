@@ -34,18 +34,8 @@ USER appuser
 # 建立必要目錄
 RUN mkdir -p /app/static/uploads /app/static/videos /app/static/thumbnails
 
-# Railway 啟動命令（使用 $PORT 環境變數）
-CMD exec gunicorn \
-    --bind :${PORT:-8080} \
-    --workers 2 \
-    --threads 4 \
-    --timeout 120 \
-    --keep-alive 5 \
-    --max-requests 1000 \
-    --max-requests-jitter 50 \
-    --graceful-timeout 30 \
-    --access-logfile - \
-    --error-logfile - \
-    --capture-output \
-    -k uvicorn.workers.UvicornWorker \
-    app.main:app
+# 暴露端口
+EXPOSE 8080
+
+# Railway 啟動命令
+CMD ["/bin/sh", "-c", "exec gunicorn --bind :${PORT:-8080} --workers 1 --threads 4 --timeout 120 --keep-alive 5 --access-logfile - --error-logfile - --capture-output -k uvicorn.workers.UvicornWorker app.main:app"]
