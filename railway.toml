@@ -1,6 +1,6 @@
 [build]
 builder = "dockerfile"
-dockerfilePath = "backend/Dockerfile.railway"
+dockerfilePath = "Dockerfile.railway"
 
 [deploy]
 startCommand = "gunicorn --bind :$PORT --workers 2 --threads 4 --timeout 120 --keep-alive 5 -k uvicorn.workers.UvicornWorker app.main:app"
