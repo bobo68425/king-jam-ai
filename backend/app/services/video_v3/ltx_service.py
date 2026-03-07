@@ -50,6 +50,8 @@ async def generate_scene_clip(
     webhook_url: Optional[str] = None,
     reference_image_url: Optional[str] = None,
     audio_url: Optional[str] = None,
+    quality_prompt: str = "",
+    negative_prompt: str = "",
 ) -> Dict[str, Any]:
     """
     非阻塞呼叫 LTX Cloud Run 生成影片。
@@ -63,11 +65,19 @@ async def generate_scene_clip(
     resolution = _resolve_resolution(aspect_ratio)
     job_id = str(uuid.uuid4())
 
+    # 自動加上質量提示詞與強制寫入 Negative Prompt
+    enhanced_prompt = prompt.strip()
+    if quality_prompt:
+        if enhanced_prompt and not enhanced_prompt.endswith(","):
+            enhanced_prompt += ", "
+        enhanced_prompt += quality_prompt
+
     if reference_image_url:
         endpoint = f"{LTX_INFERENCE_URL}/v1/image-to-video"
         payload: Dict[str, Any] = {
             "user_id": 1,
-            "prompt": prompt,
+            "prompt": enhanced_prompt,
+            "negative_prompt": negative_prompt,
             "model": model,
             "duration": duration,
             "resolution": resolution,
@@ -77,7 +87,8 @@ async def generate_scene_clip(
         endpoint = f"{LTX_INFERENCE_URL}/v1/text-to-video"
         payload = {
             "user_id": 1,
-            "prompt": prompt,
+            "prompt": enhanced_prompt,
+            "negative_prompt": negative_prompt,
             "model": model,
             "duration": duration,
             "resolution": resolution,

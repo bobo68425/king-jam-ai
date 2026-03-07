@@ -266,8 +266,12 @@ async def upload_tts_audio(audio_path: str) -> Optional[str]:
                 original_filename=os.path.basename(audio_path),
             )
             if result.get("success"):
-                return result["url"]
+                return result.get("url")
+            else:
+                logger.error(f"[TTS] 雲端上傳失敗回傳錯誤: {result.get('error')}")
+                raise Exception(f"雲端空間拒絕上傳: {result.get('error')}")
+        else:
+            raise Exception("尚未設定雲端空間 (Cloud Storage 未配置)")
     except Exception as e:
         logger.warning(f"[TTS] 音頻上傳失敗: {e}")
-    
-    return None
+        raise

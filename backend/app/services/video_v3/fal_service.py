@@ -71,6 +71,8 @@ async def generate_scene_clip(
     webhook_url: Optional[str] = None,
     reference_image_url: Optional[str] = None,
     audio_url: Optional[str] = None,
+    quality_prompt: str = "",
+    negative_prompt: str = "",
 ) -> Dict[str, Any]:
     """
     異步生成 AI 影片片段
@@ -119,10 +121,19 @@ async def generate_scene_clip(
             elif "kling" in model_id:
                 model_id = FAL_MODELS["kling_img2vid"]
         
+        # 自動加上質量提示詞與強制寫入 Negative Prompt
+        enhanced_prompt = prompt.strip()
+        if quality_prompt:
+            if enhanced_prompt and not enhanced_prompt.endswith(","):
+                enhanced_prompt += ", "
+            enhanced_prompt += quality_prompt
+
         # 構建模型特定請求參數 (fal.ai 各模型 schema 不同)
         input_data: Dict[str, Any] = {
-            "prompt": prompt,
+            "prompt": enhanced_prompt,
         }
+        if negative_prompt:
+            input_data["negative_prompt"] = negative_prompt
         
         if "wan" in model_id:
             # Wan 2.1: 支持 num_frames, resolution, aspect_ratio

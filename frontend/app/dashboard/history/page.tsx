@@ -746,31 +746,12 @@ export default function HistoryPage() {
       return;
     }
 
-    // 如果是 base64 或普通 URL，開新視窗顯示
-    const newWindow = window.open("", "_blank");
-    if (newWindow) {
-      const isVideo = item.generation_type === "short_video" || url.includes("video");
-
-      newWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>${title}</title>
-          <style>
-            body { margin: 0; padding: 20px; background: #0f172a; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-            img, video { max-width: 100%; max-height: 90vh; border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
-          </style>
-        </head>
-        <body>
-          ${isVideo
-          ? `<video src="${url}" controls autoplay style="max-width: 100%;"></video>`
-          : `<img src="${url}" alt="${title}" />`
-        }
-        </body>
-        </html>
-      `);
-    }
+    // 如果有媒體連結，直接使用 Lightbox 預覽
+    const isVideo = item.generation_type === "short_video" || url.includes(".mp4") || url.includes("video");
+    handleOpenViewer(url, isVideo, title);
   };
+
+
 
   const filteredHistory = history.filter(item => {
     if (!searchQuery) return true;
@@ -997,8 +978,13 @@ export default function HistoryPage() {
                         if (mediaUrl) {
                           if (mediaItem.generation_type === "short_video") {
                             return (
-                              <div className="w-full h-full flex items-center justify-center bg-purple-500/10">
-                                <Play className="h-10 w-10 text-purple-400" />
+                              <div className="relative w-full h-full group/thumb">
+                                <video src={mediaUrl} className="w-full h-full object-cover" />
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover/thumb:bg-black/40 transition-colors">
+                                  <div className="bg-white/20 p-3 rounded-full backdrop-blur-md transform group-hover/thumb:scale-110 transition-transform">
+                                    <Play className="h-8 w-8 text-white fill-white" />
+                                  </div>
+                                </div>
                               </div>
                             );
                           }
@@ -1006,7 +992,7 @@ export default function HistoryPage() {
                             <img
                               src={mediaUrl}
                               alt="縮圖"
-                              className="w-full h-full object-cover"
+                              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                               onError={(e) => { e.currentTarget.style.display = "none"; }}
                             />
                           );
@@ -1124,10 +1110,14 @@ export default function HistoryPage() {
                             {(() => {
                               const mediaUrl = getMediaUrl(mediaItem);
                               if (mediaUrl && mediaItem.generation_type !== "short_video") {
-                                return <img src={mediaUrl} alt="縮圖" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />;
+                                return <img src={mediaUrl} alt="縮圖" className="w-full h-full object-cover" />;
                               }
                               if (mediaUrl && mediaItem.generation_type === "short_video") {
-                                return <div className="w-full h-full flex items-center justify-center bg-purple-500/20"><Play className="h-4 w-4 text-purple-400" /></div>;
+                                return (
+                                  <div className="w-full h-full flex items-center justify-center bg-indigo-500/10">
+                                    <Play className="h-4 w-4 text-indigo-400 fill-indigo-400/30" />
+                                  </div>
+                                );
                               }
                               return <div className="w-full h-full flex items-center justify-center">{getTypeIcon(item.generation_type)}</div>;
                             })()}
@@ -1641,6 +1631,9 @@ export default function HistoryPage() {
         mediaUrl={viewerMediaUrl}
         isVideo={viewerIsVideo}
         title={viewerTitle}
+        onDownload={() => {
+          if (selectedItem) handleDownload(selectedItem);
+        }}
       />
     </div>
   );

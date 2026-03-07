@@ -28,6 +28,7 @@ from app.models import User
 from app.routers.auth import get_current_user
 from app.services.credit_service import FeatureCode, CreditService
 from app.services.credit_decorators import consume_credits_manually
+from app.services.prompt_loader import load_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -209,29 +210,39 @@ async def generate_tts(
         upload_tts_audio,
     )
     
-    result = await generate_tts_with_timestamps(
-        text=request.text,
-        voice=request.voice,
-        model=request.model,
-        speed=request.speed,
-    )
-    
-    # 上傳音頻到雲端
-    audio_url = await upload_tts_audio(result.audio_path)
-    
-    # 轉換為 SubtitleCue 格式
-    subtitle_cues = timestamps_to_subtitle_cues(
-        result.timestamps,
-        fps=request.fps,
-    )
-    
-    return {
-        "audio_url": audio_url or f"/static/audio/{result.audio_path.split('/')[-1]}",
-        "duration": result.duration,
-        "voice": result.voice,
-        "subtitle_cues": subtitle_cues,
-        "timestamps_count": len(result.timestamps),
-    }
+    try:
+        result = await generate_tts_with_timestamps(
+            text=request.text,
+            voice=request.voice,
+            model=request.model,
+            speed=request.speed,
+        )
+        
+        # 上傳音頻到雲端
+        audio_url = await upload_tts_audio(result.audio_path)
+        
+        # 轉換為 SubtitleCue 格式
+        subtitle_cues = timestamps_to_subtitle_cues(
+            result.timestamps,
+            fps=request.fps,
+        )
+        
+        if not audio_url:
+            logger.error(f"[TTS] 音頻上傳雲端失敗，無法進行合成。本地路徑: {result.audio_path}")
+            raise HTTPException(status_code=500, detail="語音配音上傳雲端失敗，請檢查儲存服務設定。")
+
+        return {
+            "audio_url": audio_url,
+            "duration": result.duration,
+            "voice": result.voice,
+            "subtitles": subtitle_cues,
+            "timestamps_count": len(result.timestamps),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[TTS] 生成發生錯誤: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"TTS配音生成失敗: {str(e)}")
 
 
 @router.post("/render")
@@ -256,13 +267,16 @@ async def submit_render(
     if not consume_result["success"]:
         raise HTTPException(status_code=402, detail=consume_result.get("error", "點數不足以合成影片"))
 
-    result = await submit_render_job(
-        props=request.props,
-        output_format=request.output_format,
-        quality=request.quality,
-    )
-    
-    return result
+    try:
+        result = await submit_render_job(
+            props=request.props,
+            output_format=request.output_format,
+            quality=request.quality,
+        )
+        return result
+    except Exception as e:
+        logger.error(f"[Render] 提交渲染失敗: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"提交雲端渲染失敗，請聯繫管理員。內部錯誤: {str(e)}")
 
 
 @router.get("/status/{job_id}")
@@ -364,6 +378,18 @@ async def generate_clips(
     if not hasattr(router, "_ltx_jobs"):
         router._ltx_jobs = {}
 
+    # 獲取質量與負面提示詞
+    quality_prompt_res = await load_prompt(
+        db=db,
+        slug="short-video-v3-quality",
+        variables={},
+        user=current_user,
+        fallback="masterpiece, best quality, highly detailed, ultra-realistic, cinematic, 8k resolution, perfect anatomy"
+    )
+    # 假設 load_prompt 的回傳沒有處理 negative_fallback，我們在這裡做保底
+    q_prompt = quality_prompt_res.positive
+    n_prompt = quality_prompt_res.negative if hasattr(quality_prompt_res, 'negative') and quality_prompt_res.negative else "(deformed iris, deformed pupils, semi-realistic, cgi, 3d, render, sketch, cartoon, drawing, anime:1.4), text, close up, cropped, out of frame, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck"
+
     async def _submit_scene(scene: dict, idx: int):
         prompt = scene.get("visualPrompt", "")
         ref_image = scene.get("refImageUrl", None)
@@ -381,6 +407,8 @@ async def generate_clips(
                             prompt=prompt, duration=duration_sec, aspect_ratio=request.aspect_ratio,
                             model_preference=request.model_preference, reference_image_url=ref_image,
                             audio_url=audio_url_item,
+                            quality_prompt=q_prompt,
+                            negative_prompt=n_prompt,
                         )
                         router._ltx_jobs[job_id] = {"status": "completed", "video_url": res.get("video_url"), "model": "fal"}
                     except Exception as e:
@@ -394,6 +422,8 @@ async def generate_clips(
                     prompt=prompt, duration=duration_sec, aspect_ratio=request.aspect_ratio,
                     model_preference=request.model_preference, reference_image_url=ref_image,
                     audio_url=audio_url_item,
+                    quality_prompt=q_prompt,
+                    negative_prompt=n_prompt,
                 )
                 return {
                     "index": idx, 
@@ -517,57 +547,60 @@ async def generate_video_api(
     if not GEMINI_KEY:
         raise HTTPException(status_code=500, detail="GOOGLE_GEMINI_KEY 未設定")
     
-    # ====== 根據模式構建不同的 Gemini Prompt ======
+    # ====== 根據模式從 Prompt 管理中心獲取或構建不同的 Gemini Prompt ======
+    variables = {
+        "scenes_count": request.scenes_count,
+        "style_id": request.style_id,
+        "duration": request.duration,
+        "aspect_ratio": request.aspect_ratio,
+    }
+
     if mode == "i2v":
         # 圖片生成影片模式
-        system_prompt = f"""你是一位專業的影片動態導演。
-用戶會給你一段描述，以及一張參考圖片的概念。
-請基於這張圖片，生成 {request.scenes_count} 個場景的短影音腳本，讓圖片「動起來」。
+        prompt_res = await load_prompt(
+            db=db,
+            slug="short-video-v3-i2v",
+            variables=variables,
+            user=current_user,
+            fallback="""你是一位專業的影片動態導演。用戶會給你一段描述，以及一張參考圖片的概念。請基於這張圖片，生成 {{scenes_count}} 個場景的短影音腳本，讓圖片「動起來」。
 
 重要規則：
 - 每個場景應該呈現圖片中不同角度、不同動態的變化
 - visualPrompt 必須包含 "reference image" 的元素描述
 - 動態應該自然流暢，像電影鏡頭掃描一張照片
+- **人像維持原則**：人物必須具備正常的解剖學特徵（如：恰好兩隻手臂、兩條腿、一個頭）。
+- **禁止幻象**：嚴禁生成多肢體、斷頭、或分裂的人像描述。
+- **高品質渲染詞**：在 visualPrompt 加入如 "cinematic lighting", "high detail", "stable motion", "8k resolution" 等詞彙。
 
-每個場景需要包含：
-- narration: 旁白文字 (中文，15-30字)
-- visualPrompt: 英文 AI 影片提示詞 (描述從圖片衍生的動態畫面)
-- cameraMove: 運鏡方式 (pan-left / pan-right / zoom-in / zoom-out / dolly-forward / static / tilt-up / orbit)
-- transition: 轉場效果 (fade / slide-left / slide-right / zoom-in / dissolve)
-- type: 場景類型 (hook / story / demo / cta)
-
-風格模板: {request.style_id}
-影片總長: {request.duration} 秒
-比例: {request.aspect_ratio}
-
-嚴格以 JSON 陣列格式回覆，不要加其他文字。"""
+每個場景需要包含：narration, visualPrompt, cameraMove, transition, type。
+風格模板: {{style_id}}, 總長: {{duration}}s, 比例: {{aspect_ratio}}
+嚴格以 JSON 陣列格式回覆。"""
+        )
+        system_prompt = prompt_res.positive
         ref_note = f"\n參考圖片 URL: {request.ref_image_url}" if request.ref_image_url else ""
         user_prompt = f"描述：{request.script}{ref_note}"
         
     elif mode == "s2v":
         # 語音驅動影片模式
-        system_prompt = f"""你是一位專業的語音驅動影片導演。
-用戶會給你一段語音/對話的描述，請生成 {request.scenes_count} 個場景的短影音腳本。
+        prompt_res = await load_prompt(
+            db=db,
+            slug="short-video-v3-s2v",
+            variables=variables,
+            user=current_user,
+            fallback="""你是一位專業的語音驅動影片導演。用戶會給你一段語音/對話的描述，請生成 {{scenes_count}} 個場景的短影音腳本。
 
 重要規則：
 - 旁白文字即為語音內容，需要自然朗讀感
 - visualPrompt 要包含角色的表情、動作、口型同步效果
-- 場景應該配合語音情緒變化（激動→平靜→高潮）
-- 包含 "speaking", "lip sync", "facial expression" 等關鍵詞
+- 場景應該配合語音情緒變化
+- **人物完整性**：確保人物四肢健全，比例正確，嚴禁多肢或畸形描述。
+- **背景穩定**：背景應維持連貫，避免閃爍或不自然的空間扭曲。
 
-每個場景需要包含：
-- narration: 語音旁白文字 (中文，20-40字，對話式)
-- visualPrompt: 英文 AI 影片提示詞 (強調表情、口型同步、肢體語言)
-- cameraMove: 運鏡方式 (pan-left / pan-right / zoom-in / zoom-out / dolly-forward / static / tilt-up / orbit)
-- transition: 轉場效果 (fade / slide-left / slide-right / zoom-in / dissolve)
-- type: 場景類型 (hook / story / demo / cta)
-- emotion: 情緒標籤 (excited / calm / serious / happy / dramatic)
-
-風格模板: {request.style_id}
-影片總長: {request.duration} 秒
-比例: {request.aspect_ratio}
-
-嚴格以 JSON 陣列格式回覆，不要加其他文字。"""
+每個場景需要包含：narration, visualPrompt, cameraMove, transition, type, emotion。
+風格模板: {{style_id}}, 總長: {{duration}}s, 比例: {{aspect_ratio}}
+嚴格以 JSON 陣列格式回覆。"""
+        )
+        system_prompt = prompt_res.positive
         user_prompt = f"語音主題：{request.script}"
         
     elif mode == "sadtalker":
@@ -591,31 +624,24 @@ async def generate_video_api(
         user_prompt = f"播報主題：{request.script}"
         
     else:
-        # T2V 文字生成影片模式（原有邏輯）
-        system_prompt = f"""你是一位專業的短影音導演與編劇。
-用戶會給你一段文字主題，請將它轉化為 {request.scenes_count} 個場景的短影音腳本。
+        # T2V 文字生成影片模式
+        prompt_res = await load_prompt(
+            db=db,
+            slug="short-video-v3-t2v",
+            variables=variables,
+            user=current_user,
+            fallback="""你是一位專業的短影音導演與編劇。用戶會給你一段文字主題，請將它轉化為 {{scenes_count}} 個場景的短影音腳本。
 
-每個場景需要包含：
-- narration: 旁白文字 (中文，15-30字，適合配音朗讀)
-- visualPrompt: 英文的 AI 影片生成提示詞 (描述畫面，含鏡頭運動)
-- cameraMove: 運鏡方式 (pan-left / pan-right / zoom-in / zoom-out / dolly-forward / static / tilt-up / orbit)
-- transition: 轉場效果 (fade / slide-left / slide-right / zoom-in / dissolve)
-- type: 場景類型 (hook / problem / solution / benefit / cta / story / demo)
+重要規則：
+- **解剖學正確**：人物必須具備正常的生理結構，嚴禁多手、多腳、斷頭、或身體撕裂。
+- **電影級質感**：在 visualPrompt 中始終包含 "Hyper-realistic", "Cinematic 8k", "Highly detailed anatomy", "Perfect limbs" 等核心提示。
+- **動態穩定性**：描述清晰、合理的物理運動。
 
-風格模板: {request.style_id}
-影片總長: {request.duration} 秒
-比例: {request.aspect_ratio}
-
-嚴格以 JSON 陣列格式回覆，不要加其他文字。範例：
-[
-  {{
-    "narration": "你是否也曾為此困擾？",
-    "visualPrompt": "Cinematic close-up of a person looking frustrated at a computer screen, warm lighting, shallow depth of field, dolly forward",
-    "cameraMove": "dolly-forward", 
-    "transition": "fade",
-    "type": "hook"
-  }}
-]"""
+每個場景需要包含：narration, visualPrompt, cameraMove, transition, type。
+風格模板: {{style_id}}, 總長: {{duration}}s, 比例: {{aspect_ratio}}
+嚴格以 JSON 陣列格式回覆。"""
+        )
+        system_prompt = prompt_res.positive
         user_prompt = f"主題文字：{request.script}"
     
     # ====== 呼叫 Gemini AI (含 429 重試機制) ======

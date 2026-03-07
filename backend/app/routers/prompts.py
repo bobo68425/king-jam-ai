@@ -587,3 +587,124 @@ async def rate_usage(
     if not success:
         raise HTTPException(status_code=404, detail="Usage log not found")
     return {"message": "Rating submitted successfully"}
+@router.post("/seed/v3")
+async def seed_v3_prompts(
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """
+    註冊短影音 3.0 相關的系統 Prompt
+    """
+    from app.services.prompt_service import prompt_service
+    
+    results = []
+    
+    # 1. Short Video 3.0 - Text to Video Background Prompt
+    v3_t2v = await prompt_service.create_prompt(
+        db=db,
+        name="Short Video 3.0 (T2V) Background",
+        category="video_prompt",
+        generation_type="video",
+        description="精準控制短影片 3.0 的場景生成與解剖學正確性",
+        positive_template="""你是一位專業的短影音導演與編劇。用戶會給你一段文字主題，請將它轉化為 {{scenes_count}} 個場景的短影音腳本。
+
+重要規則：
+- **解剖學正確**：人物必須具備正常的生理結構，嚴禁多手、多腳、斷頭、或身體撕裂。
+- **電影級質感**：在 visualPrompt 中始終包含 "Hyper-realistic", "Cinematic 8k", "Highly detailed anatomy", "Perfect limbs" 等核心提示。
+- **動態穩定性**：描述清晰、合理的物理運動。
+
+每個場景需要包含：narration, visualPrompt, cameraMove, transition, type。
+風格模板: {{style_id}}, 總長: {{duration}}s, 比例: {{aspect_ratio}}
+嚴格以 JSON 陣列格式回覆。""",
+        variables=[
+            {"name": "scenes_count", "label": "場景數量", "type": "number", "default": 3},
+            {"name": "style_id", "label": "風格模板", "type": "text", "default": "cinematic"},
+            {"name": "duration", "label": "影片總長", "type": "number", "default": 15},
+            {"name": "aspect_ratio", "label": "比例", "type": "text", "default": "9:16"}
+        ],
+        slug="short-video-v3-t2v",
+        is_system=True,
+        created_by=current_admin.id
+    )
+    results.append(v3_t2v.name)
+
+    # 2. Short Video 3.0 - Image to Video Background Prompt
+    v3_i2v = await prompt_service.create_prompt(
+        db=db,
+        name="Short Video 3.0 (I2V) Background",
+        category="video_prompt",
+        generation_type="video",
+        description="以參考圖片為核心的短影片 3.0 生成邏輯",
+        positive_template="""你是一位專業的影片動態導演。用戶會給你一段描述，以及一張參考圖片的概念。請基於這張圖片，生成 {{scenes_count}} 個場景的短影音腳本，讓圖片「動起來」。
+
+重要規則：
+- 每個場景應該呈現圖片中不同角度、不同動態的變化
+- visualPrompt 必須包含 "reference image" 的元素描述
+- 動態應該自然流暢，像電影鏡頭掃描一張照片
+- **人像維持原則**：人物必須具備正常的解剖學特徵（如：恰好兩隻手臂、兩條腿、一個頭）。
+- **禁止幻象**：嚴禁生成多肢體、斷頭、或分裂的人像描述。
+- **高品質渲染詞**：在 visualPrompt 加入如 "cinematic lighting", "high detail", "stable motion", "8k resolution" 等詞彙。
+
+每個場景需要包含：narration, visualPrompt, cameraMove, transition, type。
+風格模板: {{style_id}}, 總長: {{duration}}s, 比例: {{aspect_ratio}}
+嚴格以 JSON 陣列格式回覆。""",
+        variables=[
+            {"name": "scenes_count", "label": "場景數量", "type": "number", "default": 3},
+            {"name": "style_id", "label": "風格模板", "type": "text", "default": "cinematic"},
+            {"name": "duration", "label": "影片總長", "type": "number", "default": 15},
+            {"name": "aspect_ratio", "label": "比例", "type": "text", "default": "9:16"}
+        ],
+        slug="short-video-v3-i2v",
+        is_system=True,
+        created_by=current_admin.id
+    )
+    results.append(v3_i2v.name)
+
+    # 3. Short Video 3.0 - Speech to Video Background Prompt
+    v3_s2v = await prompt_service.create_prompt(
+        db=db,
+        name="Short Video 3.0 (S2V) Background",
+        category="video_prompt",
+        generation_type="video",
+        description="以語音為驅動的短影片 3.0 生成邏輯",
+        positive_template="""你是一位專業的語音驅動影片導演。用戶會給你一段語音/對話的描述，請生成 {{scenes_count}} 個場景的短影音腳本。
+
+重要規則：
+- 旁白文字即為語音內容，需要自然朗讀感
+- visualPrompt 要包含角色的表情、動作、口型同步效果
+- 場景應該配合語音情緒變化
+- **人物完整性**：確保人物四肢健全，比例正確，嚴禁多肢或畸形描述。
+- **背景穩定**：背景應維持連貫，避免閃爍或不自然的空間扭曲。
+
+每個場景需要包含：narration, visualPrompt, cameraMove, transition, type, emotion。
+風格模板: {{style_id}}, 總長: {{duration}}s, 比例: {{aspect_ratio}}
+嚴格以 JSON 陣列格式回覆。""",
+        variables=[
+            {"name": "scenes_count", "label": "場景數量", "type": "number", "default": 3},
+            {"name": "style_id", "label": "風格模板", "type": "text", "default": "cinematic"},
+            {"name": "duration", "label": "影片總長", "type": "number", "default": 15},
+            {"name": "aspect_ratio", "label": "比例", "type": "text", "default": "9:16"}
+        ],
+        slug="short-video-v3-s2v",
+        is_system=True,
+        created_by=current_admin.id
+    )
+    results.append(v3_s2v.name)
+
+    # 4. Short Video 3.0 - Quality Modifiers
+    v3_quality = await prompt_service.create_prompt(
+        db=db,
+        name="Short Video 3.0 Quality Modifiers",
+        category="video_prompt",
+        generation_type="video",
+        description="強制注入於所有 V3 影片生成的質量詞與負面詞",
+        positive_template="masterpiece, best quality, highly detailed, ultra-realistic, cinematic, 8k resolution, perfect anatomy",
+        negative_template="(deformed iris, deformed pupils, semi-realistic, cgi, 3d, render, sketch, cartoon, drawing, anime:1.4), text, close up, cropped, out of frame, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck",
+        variables=[],
+        slug="short-video-v3-quality",
+        is_system=True,
+        created_by=current_admin.id
+    )
+    results.append(v3_quality.name)
+
+    return {"status": "ok", "seeded": results}

@@ -463,6 +463,14 @@ export default function VideoPage() {
   const [v3SynthesisProgress, setV3SynthesisProgress] = useState("");
   const [v3Synthesizing, setV3Synthesizing] = useState(false);
   const [v3FinalVideoUrl, setV3FinalVideoUrl] = useState<string | null>(null);
+  const [isV3Canceling, setIsV3Canceling] = useState(false);
+  const v3CancelRef = useRef(false);
+
+  const handleCancelV3 = () => {
+    v3CancelRef.current = true;
+    setIsV3Canceling(true);
+    toast.info("正在停止生成，請稍候...");
+  };
 
   const handleV3SynthesizeVideo = async () => {
     if (v3Scenes.length === 0 || !v3Scenes.every((s: any) => s.videoUrl)) {
@@ -472,6 +480,8 @@ export default function VideoPage() {
     setV3Synthesizing(true);
     setV3SynthesisProgress("生成語音旁白...");
     setV3FinalVideoUrl(null);
+    v3CancelRef.current = false;
+    setIsV3Canceling(false);
     try {
       // 1. 生成配音與字幕
       const fullText = v3Scenes.map((s: any) => s.narration).join(" ");
@@ -540,6 +550,15 @@ export default function VideoPage() {
       // 4. 輪詢狀態
       let attempts = 0;
       while (attempts < 120) {
+        if (v3CancelRef.current) {
+          toast.error("合成已中斷");
+          setV3SynthesisProgress("已暫停/取消合成");
+          setV3Synthesizing(false);
+          setIsV3Canceling(false);
+          v3CancelRef.current = false;
+          return;
+        }
+
         attempts++;
         await new Promise(r => setTimeout(r, 5000));
         const statusRes = await api.get(`/video/v3/render/status/${jobId}`);
@@ -583,7 +602,8 @@ export default function VideoPage() {
         }
       }
     } catch (err: any) {
-      toast.error("影片合成失敗: " + (err.message || ""));
+      const msg = err.response?.data?.detail || err.message || "";
+      toast.error(`影片合成失敗: ${msg}`);
       setV3SynthesisProgress("❌ 合成失敗");
     } finally {
       setV3Synthesizing(false);
@@ -633,6 +653,8 @@ export default function VideoPage() {
     setV3VideoGenerating(true);
     setV3VideoProgress("提交場景到 AI 影片引擎...");
     setV3VideoJobs([]);
+    v3CancelRef.current = false;
+    setIsV3Canceling(false);
 
     try {
       const clipRes = await api.post("/video/v3/api/generate-clips", {
@@ -656,6 +678,15 @@ export default function VideoPage() {
       const pollInterval = 5000;
 
       while (attempts < maxAttempts) {
+        if (v3CancelRef.current) {
+          toast.error("影片生成已中斷");
+          setV3VideoProgress("已暫停/取消生成");
+          setV3VideoGenerating(false);
+          setIsV3Canceling(false);
+          v3CancelRef.current = false;
+          return;
+        }
+
         attempts++;
         setV3VideoProgress(`影片生成中... (${attempts * 5}s)`);
         await new Promise(r => setTimeout(r, pollInterval));
@@ -665,9 +696,17 @@ export default function VideoPage() {
             jobs: validJobs.map((j: any) => ({ request_id: j.request_id, model: j.model })),
           });
 
+          console.log("[Video Generation] Polling API Response:", statusRes.data);
+
           const statuses = statusRes.data.statuses || [];
           const completed = statuses.filter((s: any) => s.status === "completed" || s.status === "COMPLETED").length;
-          setV3VideoProgress(`影片生成中... ${completed}/${validJobs.length} 完成`);
+          const isQueuing = statuses.some((s: any) => s.status === "queuing");
+
+          if (isQueuing) {
+            setV3VideoProgress("排隊等待 GPU 中... (冷啟動約 30s)");
+          } else {
+            setV3VideoProgress(`影片生成中... ${completed}/${validJobs.length} 完成`);
+          }
 
           const updatedScenes = [...v3Scenes];
           statuses.forEach((s: any, idx: number) => {
@@ -4478,17 +4517,34 @@ export default function VideoPage() {
                         {v3VideoProgress}
                       </div>
                     )}
-                    <Button
-                      className="w-full bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 rounded-xl py-5 font-medium disabled:opacity-50"
-                      onClick={handleV3GenerateVideo}
-                      disabled={v3VideoGenerating || v3Scenes.length === 0}
-                    >
-                      {v3VideoGenerating ? (
-                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> 影片生成中...</>
-                      ) : (
-                        <><ArrowRight className="w-4 h-4 mr-2" /> 第 2 步：生成 AI 影片素材</>
-                      )}
-                    </Button>
+                    {v3VideoGenerating ? (
+                      <div className="flex gap-2 w-full mt-2">
+                        <Button
+                          className="flex-1 bg-slate-800 text-white border border-slate-700 rounded-xl py-5 font-medium disabled:opacity-50"
+                          disabled
+                        >
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" /> 影片生成中...
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          className="bg-red-500/20 text-red-400 hover:bg-red-500/30 hover:text-red-300 border border-red-500/30 rounded-xl py-5 px-6"
+                          onClick={handleCancelV3}
+                          disabled={isV3Canceling}
+                          title="暫停/取消生成"
+                        >
+                          {isV3Canceling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Pause className="w-4 h-4" />}
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        className="w-full bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 rounded-xl py-5 font-medium disabled:opacity-50 mt-2"
+                        onClick={handleV3GenerateVideo}
+                        disabled={v3Scenes.length === 0}
+                      >
+                        <ArrowRight className="w-4 h-4 mr-2" /> 第 2 步：生成 AI 影片素材
+                      </Button>
+                    )}
 
                     {/* 合成最終影片按鈕 */}
                     {v3SynthesisProgress && (
@@ -4497,17 +4553,34 @@ export default function VideoPage() {
                         {v3SynthesisProgress}
                       </div>
                     )}
-                    <Button
-                      className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl py-5 font-medium shadow-lg shadow-purple-500/20 disabled:opacity-50 mt-2"
-                      onClick={handleV3SynthesizeVideo}
-                      disabled={v3Synthesizing || v3Scenes.length === 0 || !v3Scenes.every(s => s.videoUrl)}
-                    >
-                      {v3Synthesizing ? (
-                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> 雲端合成中...</>
-                      ) : (
-                        <><Play className="w-4 h-4 mr-2" /> 第 3 步：合成最終配音與影片</>
-                      )}
-                    </Button>
+                    {v3Synthesizing ? (
+                      <div className="flex gap-2 w-full mt-2">
+                        <Button
+                          className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 opacity-70 text-white rounded-xl py-5 font-medium shadow-lg shadow-purple-500/20 disabled:opacity-50"
+                          disabled
+                        >
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" /> 雲端合成中...
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          className="bg-red-500/20 text-red-400 hover:bg-red-500/30 hover:text-red-300 border border-red-500/30 rounded-xl py-5 px-6"
+                          onClick={handleCancelV3}
+                          disabled={isV3Canceling}
+                          title="暫停/取消合成"
+                        >
+                          {isV3Canceling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Pause className="w-4 h-4" />}
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl py-5 font-medium shadow-lg shadow-purple-500/20 disabled:opacity-50 mt-2"
+                        onClick={handleV3SynthesizeVideo}
+                        disabled={v3Scenes.length === 0 || !v3Scenes.every(s => s.videoUrl)}
+                      >
+                        <Play className="w-4 h-4 mr-2" /> 第 3 步：合成最終配音與影片
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>
