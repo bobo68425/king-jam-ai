@@ -16,6 +16,20 @@ RENDER_SERVICE_URL = os.getenv(
     "https://kingjam-video-renderer-811364632967.asia-east1.run.app"
 )
 
+def _get_gcp_auth_headers() -> Dict[str, str]:
+    """若呼叫的對象是受 IAM 保護的 Cloud Run 服務，則嘗試取得並帶上 ID Token。"""
+    headers = {}
+    if "run.app" in RENDER_SERVICE_URL:
+        try:
+            import google.auth.transport.requests
+            import google.oauth2.id_token
+            req = google.auth.transport.requests.Request()
+            token = google.oauth2.id_token.fetch_id_token(req, RENDER_SERVICE_URL)
+            headers["Authorization"] = f"Bearer {token}"
+        except Exception as e:
+            logger.warning(f"[RenderClient] OIDC ID Token 獲取失敗 (可能未設定憑證或不需要 IAM): {e}")
+    return headers
+
 
 async def submit_render_job(
     props: Dict[str, Any],
@@ -45,6 +59,7 @@ async def submit_render_job(
         response = await client.post(
             f"{RENDER_SERVICE_URL}/render",
             json=payload,
+            headers=_get_gcp_auth_headers(),
         )
         response.raise_for_status()
         result = response.json()
@@ -65,7 +80,8 @@ async def check_render_status(job_id: str) -> Dict[str, Any]:
     
     async with httpx.AsyncClient(timeout=10.0) as client:
         response = await client.get(
-            f"{RENDER_SERVICE_URL}/status/{job_id}"
+            f"{RENDER_SERVICE_URL}/status/{job_id}",
+            headers=_get_gcp_auth_headers(),
         )
         response.raise_for_status()
         return response.json()
@@ -88,7 +104,10 @@ async def download_rendered_video(job_id: str) -> Optional[str]:
     video_url = f"{RENDER_SERVICE_URL}{status['videoUrl']}"
     
     async with httpx.AsyncClient(timeout=120.0) as client:
-        response = await client.get(video_url)
+        # 如果下載影片的路徑也是受保護的端點 (不含網域)，則需要帶上 token
+        # 通常影片產生後會有公開 URL，或者此處直接帶上 token 亦無妨
+        req_headers = _get_gcp_auth_headers() if "run.app" in video_url else {}
+        response = await client.get(video_url, headers=req_headers)
         response.raise_for_status()
         
         with tempfile.NamedTemporaryFile(
