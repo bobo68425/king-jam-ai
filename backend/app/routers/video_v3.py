@@ -869,12 +869,13 @@ async def generate_video_api(
                 [system_prompt, user_prompt],
                 generation_config=genai.GenerationConfig(
                     temperature=0.8,
-                    max_output_tokens=3000,
+                    max_output_tokens=8192,
+                    response_mime_type="application/json",
                 ),
             )
 
             raw_text = response.text.strip()
-            # 清理 markdown code block
+            # 清理 markdown code block (以防萬一 response_mime_type 沒完全生效)
             if raw_text.startswith("```"):
                 raw_text = raw_text.split("\n", 1)[1] if "\n" in raw_text else raw_text[3:]
             if raw_text.endswith("```"):
@@ -887,7 +888,14 @@ async def generate_video_api(
 
         except json.JSONDecodeError as e:
             logger.error(f"[v3] Gemini JSON 解析失敗 (attempt {attempt}): {e}, raw: {raw_text[:200]}")
-            raise HTTPException(status_code=500, detail=f"AI 回應格式錯誤: {str(e)}")
+            last_error = e
+            if attempt < len(_RETRY_MODELS):
+                logger.warning(f"[v3] JSON解析失敗，{delay}s 後重試...")
+                import asyncio
+                await asyncio.sleep(delay)
+                continue
+            else:
+                break
 
         except Exception as e:
             err_str = str(e).lower()
@@ -898,6 +906,7 @@ async def generate_video_api(
                     f"[v3] Gemini 429 配額超限 (attempt {attempt}/{len(_RETRY_MODELS)})，"
                     f"{delay}s 後使用 {_RETRY_MODELS[attempt]} 重試..."
                 )
+                import asyncio
                 await asyncio.sleep(delay)
                 last_error = e
                 continue
