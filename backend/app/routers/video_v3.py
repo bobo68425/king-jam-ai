@@ -578,6 +578,10 @@ async def generate_clips(
             logger.error(f"[Submit] 場景 {idx} 提交失敗: {e}")
             return {"index": idx, "request_id": None, "model": "error", "status": "error", "error": str(e)}
 
+    import asyncio
+    tasks = [_submit_scene(scene, i) for i, scene in enumerate(request.scenes)]
+    jobs = await asyncio.gather(*tasks)
+
     # 將新任務寫入 GenerationHistory
     try:
         from app.models import GenerationHistory
