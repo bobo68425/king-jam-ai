@@ -273,15 +273,59 @@ async def submit_render(
             output_format=request.output_format,
             quality=request.quality,
         )
+        
+        # 建立初始處理中紀錄
+        try:
+            from app.models import GenerationHistory
+            job_id = result.get("jobId") or result.get("id")
+            if job_id:
+                history = GenerationHistory(
+                    user_id=current_user.id,
+                    generation_type="short_video_v3",
+                    status="processing",
+                    input_params={
+                        "output_format": request.output_format,
+                        "quality": request.quality,
+                    },
+                    output_data={
+                        "render_job_id": job_id,
+                        "props": request.props,
+                    },
+                    credits_used=consume_result.get("cost", 0)
+                )
+                db.add(history)
+                db.commit()
+        except Exception as e:
+            logger.error(f"[Render] 無法建立初始歷史紀錄: {e}")
+            
         return result
     except Exception as e:
         logger.error(f"[Render] 提交渲染失敗: {e}", exc_info=True)
+        # 建立失敗紀錄
+        try:
+            from app.models import GenerationHistory
+            history = GenerationHistory(
+                user_id=current_user.id,
+                generation_type="short_video_v3",
+                status="failed",
+                error_message=str(e),
+                input_params={
+                    "output_format": request.output_format,
+                    "quality": request.quality,
+                },
+                credits_used=consume_result.get("cost", 0)
+            )
+            db.add(history)
+            db.commit()
+        except Exception:
+            pass
         raise HTTPException(status_code=500, detail=f"提交雲端渲染失敗，請聯繫管理員。內部錯誤: {str(e)}")
 
 
 @router.get("/status/{job_id}")
 async def get_render_status(
     job_id: str,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -289,7 +333,43 @@ async def get_render_status(
     """
     from app.services.video_v3.render_client import check_render_status
     
-    return await check_render_status(job_id)
+    result = await check_render_status(job_id)
+    
+    # 如果完成，更新歷史紀錄
+    if result.get("status") in ["done", "error"]:
+        try:
+            from app.models import GenerationHistory
+            from app.services.video_v3.render_client import RENDER_SERVICE_URL
+            
+            # 使用迴圈比對 processing 的紀錄
+            histories = db.query(GenerationHistory).filter(
+                GenerationHistory.user_id == current_user.id,
+                GenerationHistory.generation_type == "short_video_v3",
+                GenerationHistory.status == "processing"
+            ).all()
+            
+            target_history = None
+            for h in histories:
+                if h.output_data and h.output_data.get("render_job_id") == job_id:
+                    target_history = h
+                    break
+                    
+            if target_history:
+                if result.get("status") == "done":
+                    target_history.status = "completed"
+                    video_url = result.get("videoUrl")
+                    if video_url:
+                        target_history.media_cloud_url = f"{RENDER_SERVICE_URL}{video_url}"
+                else:
+                    target_history.status = "failed"
+                    target_history.error_message = result.get("error", "渲染失敗")
+                
+                db.commit()
+        except Exception as e:
+            logger.error(f"[RenderStatus] 更新歷史紀錄失敗: {e}")
+            db.rollback()
+            
+    return result
 
 
 @router.post("/webhook/fal")

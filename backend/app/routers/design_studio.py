@@ -286,9 +286,51 @@ Technical specs: {aspect} aspect ratio, high resolution, no text or watermarks i
                         b64 = base64.b64encode(image_bytes).decode("utf-8")
                         print(f"[Design Studio AI] 模型 {model_name} 成功生成圖片")
                         
+                        # 上傳到雲端儲存 R2
+                        image_url = None
+                        try:
+                            from app.services.cloud_storage import cloud_storage
+                            upload_res = cloud_storage.upload_bytes(
+                                data=image_bytes,
+                                user_id=current_user.id,
+                                file_type="images",
+                                filename=f"ai_image_{uuid.uuid4().hex[:8]}.png",
+                                content_type="image/png"
+                            )
+                            if upload_res.get("success"):
+                                image_url = upload_res.get("url")
+                        except Exception as e:
+                            print(f"[Design Studio AI] 圖片上傳雲端失敗: {e}")
+                            
+                        # 儲存生成紀錄
+                        try:
+                            from app.models import GenerationHistory
+                            history = GenerationHistory(
+                                user_id=current_user.id,
+                                generation_type="social_image",
+                                status="completed",
+                                input_params={
+                                    "prompt": request.prompt,
+                                    "style": request.style,
+                                    "quality": request.quality,
+                                    "width": request.width,
+                                    "height": request.height,
+                                },
+                                output_data={
+                                    "prompt_used": final_prompt,
+                                    "model_used": model_name,
+                                },
+                                media_cloud_url=image_url,
+                                credits_used=cost,
+                            )
+                            db.add(history)
+                            db.commit()
+                        except Exception as e:
+                            print(f"[Design Studio AI] 儲存歷史紀錄失敗: {e}")
+                        
                         return GenerateImageResponse(
                             success=True,
-                            image=f"data:image/png;base64,{b64}",
+                            image=image_url or f"data:image/png;base64,{b64}",
                             prompt_used=final_prompt,
                             cost=cost,
                             width=request.width,
