@@ -37,35 +37,150 @@ async def submit_render_job(
     quality: str = "medium",
 ) -> Dict[str, Any]:
     """
-    提交渲染任務到 Cloud Run
+    執行本地 FFmpeg 渲染 (取代原本的 Cloud Run Remotion 渲染)
     
     Args:
-        props: ShortVideoProps (JSON 格式)
-        output_format: mp4 / webm
+        props: ShortVideoProps (JSON 格式)，包含 scenes, tts_url, bgm 等
+        output_format: mp4 
         quality: low / medium / high
     
     Returns:
-        { "jobId": str, "status": "queued" }
+        { "jobId": str, "status": "done", "videoUrl": "..." }
     """
     import httpx
+    import asyncio
+    import tempfile
+    from pathlib import Path
+    from app.services.cloud_storage import cloud_storage
+
+    logger.info(f"[RenderClient] 開始本地 FFmpeg 渲染: quality={quality}, format={output_format}")
+
+    # 解析 props
+    scenes = props.get("scenes", [])
+    music_url = props.get("music", {}).get("url")
+    tts_url = props.get("tts", {}).get("url")
     
-    payload = {
-        "props": props,
-        "outputFormat": output_format,
-        "quality": quality,
-    }
-    
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.post(
-            f"{RENDER_SERVICE_URL}/render",
-            json=payload,
-            headers=_get_gcp_auth_headers(),
+    # 創建暫存資料夾
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        
+        # 1. 下載所有素材
+        async with httpx.AsyncClient() as client:
+            # 下載背景音樂
+            local_bgm = None
+            if music_url:
+                local_bgm = temp_path / "bgm.mp3"
+                resp = await client.get(music_url)
+                if resp.status_code == 200:
+                    local_bgm.write_bytes(resp.content)
+            
+            # 下載配音
+            local_tts = None
+            if tts_url:
+                local_tts = temp_path / "tts.mp3"
+                resp = await client.get(tts_url)
+                if resp.status_code == 200:
+                    local_tts.write_bytes(resp.content)
+            
+            # 下載影片片段
+            video_clips = []
+            for i, scene in enumerate(scenes):
+                clip_url = scene.get("media", {}).get("url")
+                if clip_url:
+                    clip_path = temp_path / f"scene_{i}.mp4"
+                    resp = await client.get(clip_url)
+                    if resp.status_code == 200:
+                        clip_path.write_bytes(resp.content)
+                        video_clips.append(str(clip_path))
+        
+        if not video_clips:
+            logger.error("[RenderClient] 錯誤: 沒有成功下載任何影片片段。")
+            raise Exception("No video clips available to render.")
+
+        # 2. 合併影片片段
+        concat_file = temp_path / "concat.txt"
+        with open(concat_file, "w") as f:
+            for clip in video_clips:
+                f.write(f"file '{clip}'\n")
+        
+        merged_video = temp_path / "merged.mp4"
+        cmd_merge = [
+            "ffmpeg", "-y", "-f", "concat", "-safe", "0",
+            "-i", str(concat_file), "-c", "copy", str(merged_video)
+        ]
+        
+        proc_merge = await asyncio.create_subprocess_exec(*cmd_merge, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        await proc_merge.communicate()
+        
+        if not merged_video.exists():
+            raise Exception("Failed to merge video clips.")
+
+        # 3. 混合音訊
+        final_video = temp_path / "final.mp4"
+        audio_inputs = []
+        filter_complex = ""
+
+        # 第一個輸入是影片
+        audio_inputs.extend(["-i", str(merged_video)])
+        
+        if local_tts and local_bgm:
+            audio_inputs.extend(["-i", str(local_tts), "-i", str(local_bgm)])
+            filter_complex = "[1:a]volume=1.0[tts];[2:a]volume=0.3[bgm];[tts][bgm]amix=inputs=2:duration=longest[aout]"
+        elif local_tts:
+            audio_inputs.extend(["-i", str(local_tts)])
+            filter_complex = "[1:a]volume=1.0[aout]"
+        elif local_bgm:
+            audio_inputs.extend(["-i", str(local_bgm)])
+            filter_complex = "[1:a]volume=0.3[aout]"
+
+        if filter_complex:
+            cmd_mix = [
+                "ffmpeg", "-y", *audio_inputs,
+                "-filter_complex", filter_complex,
+                "-map", "0:v:0", "-map", "[aout]",
+                "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest",
+                str(final_video)
+            ]
+        else:
+            cmd_mix = [
+                "ffmpeg", "-y", *audio_inputs,
+                "-c:v", "copy", "-c:a", "aac", "-shortest",
+                str(final_video)
+            ]
+            
+        proc_mix = await asyncio.create_subprocess_exec(*cmd_mix, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        stdout, stderr = await proc_mix.communicate()
+
+        if proc_mix.returncode != 0:
+            logger.error(f"[RenderClient] 混音失敗，使用原始無聲合併影片: {stderr.decode()[:200]}")
+            import shutil
+            shutil.copy(str(merged_video), str(final_video))
+            
+        # 4. 上傳到 R2
+        import uuid
+        job_id = f"local-render-{uuid.uuid4().hex[:8]}"
+        object_name = f"videos/v3/render/{job_id}.mp4"
+        
+        with open(final_video, "rb") as f:
+            video_data = f.read()
+            
+        r2_url = await cloud_storage.upload_bytes(
+            video_data,
+            object_name,
+            content_type="video/mp4"
         )
-        response.raise_for_status()
-        result = response.json()
-    
-    logger.info(f"[RenderClient] 渲染任務已提交: {result}")
-    return result
+        
+        if not r2_url:
+            raise Exception("Failed to upload final video to cloud storage.")
+            
+        logger.info(f"[RenderClient] 渲染完成，已上傳至: {r2_url}")
+        
+        return {
+            "jobId": job_id,
+            "status": "done",
+            "videoUrl": r2_url,
+            "durationMs": 0 # Not calculated
+        }
 
 
 async def check_render_status(job_id: str) -> Dict[str, Any]:
