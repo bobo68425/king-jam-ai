@@ -187,6 +187,30 @@ async def generate_scene(
                 reference_image_url=request.reference_image_url,
             )
     
+    # 建立處理中的歷史紀錄
+    try:
+        from app.models import GenerationHistory
+        history = GenerationHistory(
+            user_id=current_user.id,
+            generation_type="video_clip",
+            status="processing",
+            input_params={
+                "prompt": request.prompt,
+                "duration": request.duration,
+                "aspect_ratio": request.aspect_ratio,
+                "model_preference": request.model_preference
+            },
+            output_data={
+                "request_id": result.get("request_id"),
+                "model": result.get("model")
+            },
+            credits_used=consume_result.get("cost", 0)
+        )
+        db.add(history)
+        db.commit()
+    except Exception as e:
+        logger.error(f"[Scene Generate] 無法建立歷史紀錄: {e}")
+
     return {
         "request_id": result["request_id"],
         "model": result["model"],
@@ -198,6 +222,7 @@ async def generate_scene(
 @router.post("/tts")
 async def generate_tts(
     request: TTSRequest,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -230,6 +255,26 @@ async def generate_tts(
         if not audio_url:
             logger.error(f"[TTS] 音頻上傳雲端失敗，無法進行合成。本地路徑: {result.audio_path}")
             raise HTTPException(status_code=500, detail="語音配音上傳雲端失敗，請檢查儲存服務設定。")
+
+        # 建立歷史紀錄
+        try:
+            from app.models import GenerationHistory
+            history = GenerationHistory(
+                user_id=current_user.id,
+                generation_type="tts",
+                status="completed",
+                input_params={
+                    "text": request.text[:100] + "..." if len(request.text) > 100 else request.text,
+                    "voice": request.voice,
+                    "model": request.model
+                },
+                media_cloud_url=audio_url,
+                credits_used=0 # TODO: TTS point consumption is handled in credit service
+            )
+            db.add(history)
+            db.commit()
+        except Exception as e:
+            logger.error(f"[TTS] 無法建立歷史紀錄: {e}")
 
         return {
             "audio_url": audio_url,
@@ -389,6 +434,24 @@ async def fal_webhook(request: Request):
     payload = await request.json()
     result = await handle_webhook(payload)
     
+    # 更新歷史紀錄 (如果在 hook 內能取得 user_id 或 request_id 的話)
+    req_id = payload.get("request_id")
+    if req_id and result.get("video_url"):
+        try:
+            from app.database import SessionLocal
+            from app.models import GenerationHistory
+            db = SessionLocal()
+            # 尋找 processing 中，並且 output_data 包含此 request_id 的紀錄
+            # 為了效能，通常這需要在 handle_webhook 內處理，但在這裡也可以用 filter 查找
+            # (此處假設我們有辦法找到對應紀錄，因為 SQLite JSON 查詢比較複雜，
+            # 我們會依賴前端輪詢 `/check-clips` 及時更新紀錄，這裡作為備用)
+            pass
+        except Exception as e:
+            logger.error(f"[Hook] History update error: {e}")
+        finally:
+            if 'db' in locals():
+                db.close()
+
     # TODO: 更新 Redis 狀態，推送 SSE 通知前端
     logger.info(f"[v3 Webhook] fal.ai 回調: {result}")
     
@@ -515,9 +578,32 @@ async def generate_clips(
             logger.error(f"[Submit] 場景 {idx} 提交失敗: {e}")
             return {"index": idx, "request_id": None, "model": "error", "status": "error", "error": str(e)}
 
-    import asyncio
-    tasks = [_submit_scene(scene, i) for i, scene in enumerate(request.scenes)]
-    jobs = await asyncio.gather(*tasks)
+    # 將新任務寫入 GenerationHistory
+    try:
+        from app.models import GenerationHistory
+        # 分別為每個 scene 建立 history
+        for idx, job in enumerate(jobs):
+            if job.get("request_id"):
+                history = GenerationHistory(
+                    user_id=current_user.id,
+                    generation_type="video_clip",
+                    status="processing",
+                    input_params={
+                        "prompt": request.scenes[idx].get("visualPrompt", ""),
+                        "duration": max(3, min(10, request.scenes[idx].get("durationInFrames", 150) // 30)),
+                        "aspect_ratio": request.aspect_ratio,
+                        "model_preference": request.model_preference
+                    },
+                    output_data={
+                        "request_id": job.get("request_id"),
+                        "model": job.get("model")
+                    },
+                    credits_used=cost_per_clip
+                )
+                db.add(history)
+        db.commit()
+    except Exception as e:
+        logger.error(f"[Generate Clips] 建立歷史紀錄失敗: {e}")
 
     engine = "fal.ai" if use_fal_directly else "LTX-2"
     return {
@@ -532,6 +618,7 @@ async def generate_clips(
 @router.post("/api/check-clips")
 async def check_clips(
     request: CheckClipsRequest,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -582,6 +669,39 @@ async def check_clips(
                     statuses.append({"request_id": rid, "status": "pending", "video_url": None})
             except Exception as e:
                 statuses.append({"request_id": rid, "status": "error", "error": str(e)})
+
+    # 更新歷史紀錄
+    try:
+        from app.models import GenerationHistory
+        # 一次查詢所有該用戶 processing 的視頻片段任務
+        processing_histories = db.query(GenerationHistory).filter(
+            GenerationHistory.user_id == current_user.id,
+            GenerationHistory.generation_type == "video_clip",
+            GenerationHistory.status == "processing"
+        ).all()
+        
+        has_updates = False
+        for status_res in statuses:
+            rid = status_res.get("request_id")
+            s = status_res.get("status")
+            if s in ["completed", "error", "COMPLETED", "ERROR", "failed", "FAILED"]:
+                # 找到對應的 history
+                for h in processing_histories:
+                    if h.output_data and h.output_data.get("request_id") == rid:
+                        if s in ["completed", "COMPLETED"]:
+                            h.status = "completed"
+                            h.media_cloud_url = status_res.get("video_url")
+                        else:
+                            h.status = "failed"
+                            h.error_message = status_res.get("error", "生成失敗")
+                        has_updates = True
+                        break
+                        
+        if has_updates:
+            db.commit()
+    except Exception as e:
+        logger.error(f"[Check Clips] 更新歷史紀錄失敗: {e}")
+        db.rollback()
 
     all_done = all(s.get("status") in ("completed", "error", "COMPLETED", "ERROR", "failed", "FAILED") for s in statuses)
 
