@@ -319,7 +319,7 @@ async def submit_render(
             quality=request.quality,
         )
         
-        # 建立初始處理中紀錄
+        # 建立初始處理中/完成紀錄 (因為本地是同步的)
         try:
             from app.models import GenerationHistory
             job_id = result.get("jobId") or result.get("id")
@@ -327,7 +327,7 @@ async def submit_render(
                 history = GenerationHistory(
                     user_id=current_user.id,
                     generation_type="short_video_v3",
-                    status="processing",
+                    status="completed" if job_id.startswith("local-render-") else "processing",
                     input_params={
                         "output_format": request.output_format,
                         "quality": request.quality,
@@ -336,6 +336,7 @@ async def submit_render(
                         "render_job_id": job_id,
                         "props": request.props,
                     },
+                    media_cloud_url=result.get("videoUrl") if job_id.startswith("local-render-") else None,
                     credits_used=consume_result.get("cost", 0)
                 )
                 db.add(history)
@@ -374,10 +375,47 @@ async def get_render_status(
     current_user: User = Depends(get_current_user)
 ):
     """
-    查詢 Cloud Run 渲染狀態任務狀態
+    查詢 Cloud Run / 本地 渲染任務狀態
     """
     from app.services.video_v3.render_client import check_render_status
     
+    # 判斷是否為本地渲染任務 (同步完成)
+    if job_id.startswith("local-render-"):
+        # 本地渲染已經是同步完成，我們從資料庫裡撈出剛剛那筆處理中的紀錄
+        from app.models import GenerationHistory
+        histories = db.query(GenerationHistory).filter(
+            GenerationHistory.user_id == current_user.id,
+            GenerationHistory.generation_type == "short_video_v3",
+            GenerationHistory.status == "processing"
+        ).order_by(GenerationHistory.created_at.desc()).all()
+        
+        target_history = None
+        for h in histories:
+            if h.output_data and h.output_data.get("render_job_id") == job_id:
+                target_history = h
+                break
+                
+        if target_history:
+            # 本地的 videoUrl 就是 R2 URL，這應該在 /render 時就塞好，如果沒有，就用它本來的
+            video_url = target_history.media_cloud_url or ""
+            target_history.status = "completed"
+            db.commit()
+            
+            return {
+                "jobId": job_id,
+                "status": "done",
+                "progress": 1,
+                "videoUrl": video_url,
+                "durationMs": 0
+            }
+        else:
+            return {
+                "jobId": job_id,
+                "status": "error",
+                "error": "找不到對應的本地渲染紀錄"
+            }
+            
+    # 否則走原本的 Cloud Run 檢查邏智
     result = await check_render_status(job_id)
     
     # 如果完成，更新歷史紀錄
