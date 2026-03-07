@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+# OPENAI_API_KEY 移到函數內動態獲取，避免模組載入時就固定
 
 # 語音選項
 VOICES = {
@@ -146,14 +146,15 @@ async def generate_tts_with_timestamps(
     """
     import httpx
     
-    if not OPENAI_API_KEY:
+    openai_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not openai_key:
         raise ValueError("OPENAI_API_KEY 環境變數未設定")
     
     actual_speed = SPEED_MAP.get(speed, 1.0)
     
     # 方法 1: 使用 OpenAI API 直接生成音頻
     headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Authorization": f"Bearer {openai_key}",
         "Content-Type": "application/json",
     }
     
