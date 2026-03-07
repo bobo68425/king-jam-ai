@@ -35,11 +35,11 @@ def _resolve_resolution(aspect_ratio: str) -> str:
     # 如需更高畫質，可調整為 480x854 / 854x480 / 768x768
     # LTX 要求長寬必須是 32 的倍數
     mapping = {
-        "9:16": "320x576",
-        "16:9": "576x320",
-        "1:1":  "512x512",
+        "9:16": "480x864",
+        "16:9": "864x480",
+        "1:1":  "768x768",
     }
-    return mapping.get(aspect_ratio, "320x576")
+    return mapping.get(aspect_ratio, "480x864")
 
 
 async def generate_scene_clip(
