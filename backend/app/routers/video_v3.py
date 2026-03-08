@@ -34,6 +34,20 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/video/v3", tags=["Video V3 Engine"])
 
+@router.get("/debug-gemini")
+def debug_gemini():
+    import google.generativeai as genai
+    import os
+    key = os.getenv("GOOGLE_GEMINI_KEY", "")
+    if not key:
+        return {"error": "No key"}
+    genai.configure(api_key=key)
+    try:
+        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        return {"models": list(models)}
+    except Exception as e:
+        return {"error": str(e)}
+
 
 # ============================================================
 # Request / Response Models
