@@ -48,6 +48,21 @@ def debug_gemini():
     except Exception as e:
         return {"error": str(e)}
 
+@router.get("/debug-openai")
+async def debug_openai():
+    import os
+    key = os.getenv("OPENAI_API_KEY", "")
+    if not key:
+        return {"error": "No OPENAI_API_KEY in environment"}
+    try:
+        from openai import AsyncOpenAI
+        client = AsyncOpenAI(api_key=key)
+        res = await client.models.list()
+        # just return the first 5 model ids
+        return {"status": "ok", "models": [m.id for m in res.data[:5]]}
+    except Exception as e:
+        return {"error": str(e)}
+
 
 # ============================================================
 # Request / Response Models
