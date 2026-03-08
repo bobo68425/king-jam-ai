@@ -63,6 +63,22 @@ async def debug_openai():
     except Exception as e:
         return {"error": str(e)}
 
+@router.get("/debug-modal")
+async def debug_modal():
+    try:
+        import modal
+        job_store = modal.Dict.from_name("kingjam-ltx-video", "ltx-video-jobs", create_if_missing=True)
+        fails = []
+        for k in reversed(list(job_store.keys())):
+            res = job_store.get(k)
+            if res.get("status") == "failed":
+                fails.append({"id": k, "error": res.get("error")})
+            if len(fails) >= 5:
+                break
+        return {"failed_jobs": fails}
+    except Exception as e:
+        return {"error": str(e)}
+
 
 # ============================================================
 # Request / Response Models
