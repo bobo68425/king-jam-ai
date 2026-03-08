@@ -906,7 +906,7 @@ async def generate_video_api(
     genai.configure(api_key=GEMINI_KEY)
 
     # 重試設定：3 次嘗試，指數退避，最後一次降級到 flash-lite
-    _RETRY_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash", "gemini-1.5-flash-8b"]
+    _RETRY_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash", "gemini-1.5-flash"]
     _RETRY_DELAYS = [5, 15, 30]          # 秒
     _RATE_LIMIT_CODES = {"429", "resource_exhausted", "resourceexhausted"}
 

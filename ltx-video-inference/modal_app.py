@@ -49,7 +49,7 @@ class VideoRequest(BaseModel):
     resolution: Optional[str] = "480x864" # 提高預設解析度提升畫質
     image_uri: Optional[str] = None
     negative_prompt: Optional[str] = "distorted anatomy, extra limbs, malformed limbs, multiple heads, mangled hands, missing fingers, malformed body, severed head, decapitated, splitting human, duplicate body parts, stretching, blurry, low quality, jittery, flickering, watermark, text, signature, lowres, ugly, deformed arms, deformed legs, disjointed limbs, floating limbs, unnatural movement"
-    num_inference_steps: Optional[int] = 35 # 從 20 提高到 35 提升細節清晰度
+    num_inference_steps: Optional[int] = 70 # 從 35 提高到 70 提升細節清晰度
 
 
 @app.cls(
@@ -155,7 +155,7 @@ class LTXVideoInference:
             if self.t2v_pipe is None:
                 print(f"[LTX-Modal] 載入 T2V Pipeline from {self.current_model_path}...")
                 self.t2v_pipe = LTXPipeline.from_pretrained(self.current_model_path, **self._kwargs)
-                self.t2v_pipe.enable_model_cpu_offload()
+                self.t2v_pipe.enable_sequential_cpu_offload()
                 self.t2v_pipe.vae.enable_tiling()
                 self.t2v_pipe.vae.enable_slicing()
             return self.t2v_pipe
@@ -170,7 +170,7 @@ class LTXVideoInference:
             if self.i2v_pipe is None:
                 print(f"[LTX-Modal] 載入 I2V Pipeline from {self.current_model_path}...")
                 self.i2v_pipe = LTXImageToVideoPipeline.from_pretrained(self.current_model_path, **self._kwargs)
-                self.i2v_pipe.enable_model_cpu_offload()
+                self.i2v_pipe.enable_sequential_cpu_offload()
                 self.i2v_pipe.vae.enable_tiling()
                 self.i2v_pipe.vae.enable_slicing()
             return self.i2v_pipe
@@ -204,6 +204,13 @@ class LTXVideoInference:
             if req.image_uri:
                 pipe = self._get_pipe("i2v")
                 init_image = load_image(req.image_uri)
+                
+                # IMPORTANT: Resize the loaded reference image to match the video resolution.
+                # If we feed an arbitrary large image (like an iPhone 4k photo) to the VAE,
+                # it will instantly cause a CUDA Out-Of-Memory exception on a 24GB A10G.
+                import PIL.Image
+                init_image = init_image.resize((width, height), resample=PIL.Image.LANCZOS)
+                
                 video = pipe(
                     image=init_image,
                     prompt=req.prompt,
