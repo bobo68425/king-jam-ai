@@ -981,16 +981,48 @@ async def generate_video_api(
                 break
 
     if ai_scenes is None:
-        # 所有重試皆失敗
+        # Gemini 所有重試皆失敗，嘗試 Fallback 至 OpenAI gpt-4o-mini
+        openai_key = os.getenv("OPENAI_API_KEY")
+        if openai_key:
+            logger.warning("[v3] Gemini 生成失敗，嘗試 fallback 至 OpenAI gpt-4o-mini...")
+            try:
+                from openai import AsyncOpenAI
+                client = AsyncOpenAI(api_key=openai_key)
+                oai_response = await client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    max_tokens=4000,
+                    temperature=0.8
+                )
+                raw_text = oai_response.choices[0].message.content.strip()
+                # 清理 markdown code block
+                if raw_text.startswith("```"):
+                    raw_text = raw_text.split("\n", 1)[1] if "\n" in raw_text else raw_text[3:]
+                if raw_text.endswith("```"):
+                    raw_text = raw_text[:-3].strip()
+                if raw_text.startswith("json"):
+                    raw_text = raw_text[4:].strip()
+                
+                ai_scenes = json.loads(raw_text)
+                logger.info(f"[v3] OpenAI fallback 成功，獲取 {len(ai_scenes)} 個場景")
+            except Exception as oai_e:
+                logger.error(f"[v3] OpenAI fallback 失敗: {str(oai_e)}")
+                pass
+
+    if ai_scenes is None or len(ai_scenes) == 0:
+        # 所有重試與 fallback 皆失敗
         err_str = str(last_error).lower() if last_error else ""
         is_rate_limit = any(code in err_str for code in _RATE_LIMIT_CODES)
-        logger.error(f"[v3] Gemini 生成最終失敗: {last_error}")
+        logger.error(f"[v3] AI 生成腳本最終失敗: {last_error}")
         if is_rate_limit:
             raise HTTPException(
                 status_code=429,
-                detail="AI 配額暫時超出限制，請稍後再試（通常 1 分鐘後恢復）"
+                detail="AI 內容生成配額暫時超出限制，請稍後再試（或切換引擎）"
             )
-        raise HTTPException(status_code=500, detail=f"AI 生成失敗: {str(last_error)}")
+        raise HTTPException(status_code=500, detail=f"AI 生成腳本失敗: {str(last_error)}")
     
     # ====== 將 AI 生成結果轉換為標準格式 ======
     fps = 30
