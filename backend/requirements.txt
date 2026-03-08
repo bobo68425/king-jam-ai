@@ -18,6 +18,7 @@ kombu>=5.3.0
 google-generativeai>=0.3.2
 google-genai>=1.0.0
 openai>=1.12.0
+modal>=0.64.0
 
 # 影片生成相關
 Pillow>=10.0.0
