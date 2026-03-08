@@ -574,47 +574,61 @@ async def generate_clips(
     async def _submit_scene(scene: dict, idx: int):
         prompt = scene.get("visualPrompt", "")
         ref_image = scene.get("refImageUrl", None)
+        if ref_image and ref_image.startswith("/"):
+            ref_image = f"https://api.kingjam.app{ref_image}"
+            
         audio_url_item = scene.get("audioUrl", None)
+        if audio_url_item and audio_url_item.startswith("/"):
+            audio_url_item = f"https://api.kingjam.app{audio_url_item}"
+            
         duration_sec = max(3, min(10, scene.get("durationInFrames", 150) // 30))
         
         try:
             if use_fal_directly:
-                job_id = str(uuid.uuid4())
-                router._ltx_jobs[job_id] = {"status": "pending", "video_url": None, "model": "fal"}
-                
-                async def _run_fal_bg():
-                    try:
-                        res = await fal_generate_scene(
-                            prompt=prompt, duration=duration_sec, aspect_ratio=request.aspect_ratio,
-                            model_preference=request.model_preference, reference_image_url=ref_image,
-                            audio_url=audio_url_item,
-                            quality_prompt=q_prompt,
-                            negative_prompt=n_prompt,
-                        )
-                        router._ltx_jobs[job_id] = {"status": "completed", "video_url": res.get("video_url"), "model": "fal"}
-                    except Exception as e:
-                        router._ltx_jobs[job_id] = {"status": "error", "video_url": None, "model": "fal", "error": str(e)}
-                
-                import asyncio
-                asyncio.create_task(_run_fal_bg())
-                return {"index": idx, "request_id": job_id, "model": "fal", "status": "pending"}
+                try:
+                    res = await fal_generate_scene(
+                        prompt=prompt, duration=duration_sec, aspect_ratio=request.aspect_ratio,
+                        model_preference=request.model_preference, reference_image_url=ref_image,
+                        audio_url=audio_url_item,
+                        quality_prompt=q_prompt,
+                        negative_prompt=n_prompt,
+                    )
+                    return {
+                        "index": idx,
+                        "request_id": res.get("request_id"),
+                        "model": "fal",
+                        "status": "pending"
+                    }
+                except Exception as e:
+                    logger.error(f"[V3] fal.ai scene {idx} error: {e}")
+                    return {"index": idx, "request_id": f"err_{idx}", "model": "error", "status": "error", "error": str(e)}
             else:
-                result = await ltx_generate_scene(
+                # 嘗試使用 LTX-2 進行生成
+                res = await ltx_generate_scene(
                     prompt=prompt, duration=duration_sec, aspect_ratio=request.aspect_ratio,
                     model_preference=request.model_preference, reference_image_url=ref_image,
                     audio_url=audio_url_item,
                     quality_prompt=q_prompt,
                     negative_prompt=n_prompt,
                 )
+                
+                job_id = res.get("request_id")
+                if job_id:
+                    router._ltx_jobs[job_id] = {
+                        "status": res.get("status", "pending"), 
+                        "video_url": res.get("video_url"), 
+                        "model": res.get("model", "ltx-2")
+                    }
                 return {
                     "index": idx, 
-                    "request_id": result.get("request_id"), 
-                    "model": result.get("model", "ltx-2"), 
+                    "request_id": res.get("request_id"), 
+                    "model": res.get("model", "ltx-2"), 
                     "status": "pending"
                 }
+
         except Exception as e:
-            logger.error(f"[Submit] 場景 {idx} 提交失敗: {e}")
-            return {"index": idx, "request_id": None, "model": "error", "status": "error", "error": str(e)}
+            logger.error(f"[V3] Submit scene {idx} completely failed: {e}")
+            return {"index": idx, "request_id": f"err_{idx}", "model": "error", "status": "error", "error": str(e)}
 
     import asyncio
     tasks = [_submit_scene(scene, i) for i, scene in enumerate(request.scenes)]
