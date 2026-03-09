@@ -49,7 +49,8 @@ class VideoRequest(BaseModel):
     resolution: Optional[str] = "480x864" # 提高預設解析度提升畫質
     image_uri: Optional[str] = None
     negative_prompt: Optional[str] = "distorted anatomy, extra limbs, malformed limbs, multiple heads, mangled hands, missing fingers, malformed body, severed head, decapitated, splitting human, duplicate body parts, stretching, blurry, low quality, jittery, flickering, watermark, text, signature, lowres, ugly, deformed arms, deformed legs, disjointed limbs, floating limbs, unnatural movement"
-    num_inference_steps: Optional[int] = 70 # 從 35 提高到 70 提升細節清晰度
+    num_inference_steps: Optional[int] = 50 # 50 是 LTX 平衡畫質與速度的最佳值
+    seed: Optional[int] = None
 
 
 @app.cls(
@@ -199,7 +200,11 @@ class LTXVideoInference:
             
             num_frames = req.duration * 24
             num_frames = (num_frames // 8) * 8 + 1
-            generator = torch.Generator(device="cpu").manual_seed(42)
+            
+            import random
+            actual_seed = req.seed if req.seed is not None else random.randint(0, 2147483647)
+            print(f"[LTX-Modal] [{task_id}] Using seed: {actual_seed}")
+            generator = torch.Generator(device="cpu").manual_seed(actual_seed)
 
             if req.image_uri:
                 pipe = self._get_pipe("i2v")
@@ -215,10 +220,11 @@ class LTXVideoInference:
                 init_image = PIL.Image.open(io.BytesIO(resp.content)).convert("RGB")
                 
                 # IMPORTANT: Resize the loaded reference image to match the video resolution.
-                # If we feed an arbitrary large image (like an iPhone 4k photo) to the VAE,
-                # it will instantly cause a CUDA Out-Of-Memory exception on a 24GB A10G.
-                import PIL.Image
-                init_image = init_image.resize((width, height), resample=PIL.Image.LANCZOS)
+                # Use ImageOps.pad to perform a letterbox resize that PRESERVES the original 
+                # aspect ratio WITHOUT cropping (adds black bars). This ensures the subject's 
+                # head/feet are never cut off by an aggressive center-crop.
+                import PIL.ImageOps
+                init_image = PIL.ImageOps.pad(init_image, (width, height), method=PIL.Image.LANCZOS, color=(0, 0, 0))
                 
                 video = pipe(
                     image=init_image,

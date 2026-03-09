@@ -17,6 +17,7 @@ RUN apt-get update \
     libpq-dev \
     curl \
     ca-certificates \
+    ffmpeg \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

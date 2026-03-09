@@ -118,6 +118,20 @@ async def upload_media(
     }
 
 
+@router.get("/test-r2")
+async def test_r2_connection():
+    try:
+        import os
+        from app.services.cloud_storage import cloud_storage
+        key = os.getenv("R2_ACCESS_KEY_ID", "none")
+        mask = key[:4] + "***" if len(key) > 4 else key
+        
+        test_key = "videos/1/2026/03/4a664326_035435.mp4"
+        cloud_storage.client.head_object(Bucket=cloud_storage.bucket_name, Key=test_key)
+        return {"status": "ok", "key_prefix": mask, "endpoint": os.getenv("R2_ENDPOINT_URL")}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "key_prefix": mask, "endpoint": os.getenv("R2_ENDPOINT_URL")}
+
 @router.get("/media/{filename}")
 async def get_media(filename: str):
     """獲取上傳的媒體文件"""
