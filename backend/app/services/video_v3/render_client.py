@@ -65,57 +65,77 @@ async def submit_render_job(
         temp_path = Path(temp_dir)
         
         # 1. 下載所有素材
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
             # 下載背景音樂
             local_bgm = None
             if music_url:
                 local_bgm = temp_path / "bgm.mp3"
-                resp = await client.get(music_url, headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"})
-                if resp.status_code == 200:
-                    local_bgm.write_bytes(resp.content)
+                try:
+                    resp = await client.get(music_url, headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"})
+                    if resp.status_code == 200:
+                        local_bgm.write_bytes(resp.content)
+                        logger.info(f"[RenderClient] BGM 下載成功: {len(resp.content)} bytes")
+                except Exception as e:
+                    logger.error(f"[RenderClient] BGM 下載失敗: {e}")
             
             # 下載配音
             local_tts = None
             if tts_url:
                 local_tts = temp_path / "tts.mp3"
-                resp = await client.get(tts_url, headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"})
-                if resp.status_code == 200:
-                    local_tts.write_bytes(resp.content)
+                try:
+                    resp = await client.get(tts_url, headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"})
+                    if resp.status_code == 200:
+                        local_tts.write_bytes(resp.content)
+                        logger.info(f"[RenderClient] TTS 下載成功: {len(resp.content)} bytes")
+                except Exception as e:
+                    logger.error(f"[RenderClient] TTS 下載失敗: {e}")
             
             # 下載影片片段
             video_clips = []
             for i, scene in enumerate(scenes):
-                clip_url = scene.get("media", {}).get("url")
-                if clip_url:
-                    clip_path = temp_path / f"scene_{i}.mp4"
-                    
-                    # R2 Proxy Download: 如果是我們自己的的 R2 或 API 網域，改用 boto3 S3 下載以穿透 Cloudflare 防火牆
-                    if "r2.dev" in clip_url or "cloudflarestorage.com" in clip_url:
-                        from urllib.parse import urlparse
-                        try:
-                            parsed = urlparse(clip_url)
-                            # 從 /videos/1/2026/03/... 擷取 S3 Key (移除 leading slash)
-                            path_parts = parsed.path.strip("/").split("/")
-                            if "kingjam-media" in path_parts:
-                                path_parts.remove("kingjam-media")
-                            s3_key = "/".join(path_parts)
-                            
-                            logger.info(f"[RenderClient] 偵測到 R2 內部連結，改用 boto3 下載: {s3_key}")
-                            from app.services.cloud_storage import cloud_storage
-                            s3_obj = cloud_storage.client.get_object(Bucket=cloud_storage.bucket_name, Key=s3_key)
-                            clip_path.write_bytes(s3_obj['Body'].read())
-                            video_clips.append(str(clip_path))
-                            continue
-                        except Exception as e:
-                            logger.error(f"[RenderClient] 內部 S3 下載失敗，回退 httpx: {e}")
-                    
-                    # 外部連結 (如 fal.ai 或 fallback) 仍使用 httpx
+                clip_url = scene.get("videoUrl") or scene.get("media", {}).get("url")
+                if not clip_url:
+                    logger.warning(f"[RenderClient] Scene {i} 缺少 videoUrl/media.url，跳過")
+                    continue
+                logger.info(f"[RenderClient] 正在下載 Scene {i}: {clip_url}")
+                clip_path = temp_path / f"scene_{i}.mp4"
+                
+                # R2 Proxy Download
+                if "r2.dev" in clip_url or "cloudflarestorage.com" in clip_url or "kingjam" in clip_url:
+                    from urllib.parse import urlparse
+                    try:
+                        parsed = urlparse(clip_url)
+                        # R2 S3 key should be everything after the domain
+                        # e.g. /videos/user_id/2026/03/filename.mp4
+                        # 有些連結可能包含 bucket name 在 path 開頭，我們嘗試偵測並移除
+                        s3_key = parsed.path.lstrip("/")
+                        bucket_name = os.getenv("R2_BUCKET_NAME", "kingjam-media")
+                        
+                        if s3_key.startswith(f"{bucket_name}/"):
+                            s3_key = s3_key[len(bucket_name)+1:]
+                        
+                        logger.info(f"[RenderClient] Scene {i} 偵測到內部連結，嘗試 Boto3 下載 (Bucket: {bucket_name}, Key: {s3_key})")
+                        from app.services.cloud_storage import cloud_storage
+                        s3_obj = cloud_storage.client.get_object(Bucket=bucket_name, Key=s3_key)
+                        clip_path.write_bytes(s3_obj['Body'].read())
+                        video_clips.append(str(clip_path))
+                        logger.info(f"[RenderClient] Scene {i} Boto3 下載成功 (Size: {len(clip_path.read_bytes())} bytes)")
+                        continue
+                    except Exception as e:
+                        logger.warning(f"[RenderClient] Scene {i} Boto3 下載失敗 (Key: {s3_key if 's3_key' in locals() else 'unknown'}), 回退 HTTP: {e}")
+                
+                # HTTP Download (Fallback)
+                try:
+                    logger.info(f"[RenderClient] Scene {i} 嘗試 HTTP 下載: {clip_url}")
                     resp = await client.get(clip_url, headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"})
                     if resp.status_code == 200:
                         clip_path.write_bytes(resp.content)
                         video_clips.append(str(clip_path))
+                        logger.info(f"[RenderClient] Scene {i} HTTP 下載成功: {len(resp.content)} bytes")
                     else:
-                        logger.error(f"[RenderClient] 影片 HTTP 下載失敗 ({resp.status_code}): {clip_url[:100]}")
+                        logger.error(f"[RenderClient] Scene {i} HTTP 下載失敗 ({resp.status_code}): {clip_url[:150]}")
+                except Exception as e:
+                    logger.error(f"[RenderClient] Scene {i} HTTP 下載異常: {e}")
         
         if not video_clips:
             logger.error("[RenderClient] 錯誤: 沒有成功下載任何影片片段。")
