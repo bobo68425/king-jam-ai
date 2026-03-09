@@ -89,8 +89,23 @@ async def upload_media(
             os.remove(file_path)
         raise HTTPException(status_code=500, detail=f"保存文件失敗: {str(e)}")
     
-    # 構建 URL
+    # 構建 URL (預設本地端)
     url = f"/upload/media/{filename}"
+    
+    # 嘗試將檔案上傳至 Cloudflare R2 以實現跨部署持久化
+    try:
+        from app.services.cloud_storage import upload_image_to_cloud, upload_video_to_cloud
+        if content_type in ALLOWED_IMAGE_TYPES:
+            r2_res = upload_image_to_cloud(file_path, current_user.id, delete_local=False)
+            if r2_res.get("success"):
+                url = r2_res.get("url")
+        else: # Video or Audio
+            r2_res = upload_video_to_cloud(file_path, current_user.id, delete_local=False)
+            if r2_res.get("success"):
+                url = r2_res.get("url")
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[Upload] R2 備份上傳失敗: {e}")
     
     # 確定媒體類型
     media_type = "image" if content_type in ALLOWED_IMAGE_TYPES else "audio" if content_type in ALLOWED_AUDIO_TYPES else "video"
