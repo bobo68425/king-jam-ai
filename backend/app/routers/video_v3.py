@@ -610,74 +610,61 @@ async def generate_clips(
         slug="short-video-v3-quality",
         variables={},
         user=current_user,
-        fallback="masterpiece, best quality, highly detailed, ultra-realistic, cinematic, 8k resolution, perfect anatomy"
+        fallback="masterpiece, best quality, highly detailed, ultra-realistic, cinematic, 8k resolution, perfect anatomy, high fidelity, sharp focus, volumetric lighting, photorealistic, RAW photo"
     )
     # 假設 load_prompt 的回傳沒有處理 negative_fallback，我們在這裡做保底
     q_prompt = quality_prompt_res.positive
-    n_prompt = quality_prompt_res.negative if hasattr(quality_prompt_res, 'negative') and quality_prompt_res.negative else "(deformed iris, deformed pupils, semi-realistic, cgi, 3d, render, sketch, cartoon, drawing, anime:1.4), text, close up, cropped, out of frame, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck"
+    n_prompt = quality_prompt_res.negative if hasattr(quality_prompt_res, 'negative') and quality_prompt_res.negative else "(deformed iris, deformed pupils, semi-realistic, cgi, 3d, render, sketch, cartoon, drawing, anime:1.4), text, close up, cropped, out of frame, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck, blurry, jittery, flickering, grainy, pixelated"
 
-    async def _submit_scene(scene: dict, idx: int):
-        prompt = scene.get("visualPrompt", "")
-        ref_image = scene.get("refImageUrl", None)
-        if ref_image and ref_image.startswith("/"):
-            ref_image = f"https://api.kingjam.app{ref_image}"
+    # --- 提交生成任務 (模式判斷) ---
+    # 如果只有一個場景，或者多個場景但都是 fal.ai (不支援串聯)，則退回原有的並行產生。
+    # 但為了最高彈性，我們把 King Jam LTX-2 的多場景全數轉為背景順序生成，以確保畫面最高品質銜接！
+    
+    if use_fal_directly:
+        async def _submit_scene_fal(scene: dict, idx: int):
+            prompt = scene.get("visualPrompt", "")
+            ref_image = scene.get("refImageUrl", None)
+            if ref_image and ref_image.startswith("/"):
+                ref_image = f"https://api.kingjam.app{ref_image}"
+            audio_url_item = scene.get("audioUrl", None)
+            if audio_url_item and audio_url_item.startswith("/"):
+                audio_url_item = f"https://api.kingjam.app{audio_url_item}"
+            duration_sec = max(3, min(10, scene.get("durationInFrames", 150) // 30))
             
-        audio_url_item = scene.get("audioUrl", None)
-        if audio_url_item and audio_url_item.startswith("/"):
-            audio_url_item = f"https://api.kingjam.app{audio_url_item}"
-            
-        duration_sec = max(3, min(10, scene.get("durationInFrames", 150) // 30))
-        
-        try:
-            if use_fal_directly:
-                try:
-                    res = await fal_generate_scene(
-                        prompt=prompt, duration=duration_sec, aspect_ratio=request.aspect_ratio,
-                        model_preference=request.model_preference, reference_image_url=ref_image,
-                        audio_url=audio_url_item,
-                        quality_prompt=q_prompt,
-                        negative_prompt=n_prompt,
-                    )
-                    return {
-                        "index": idx,
-                        "request_id": res.get("request_id"),
-                        "model": "fal",
-                        "status": "pending"
-                    }
-                except Exception as e:
-                    logger.error(f"[V3] fal.ai scene {idx} error: {e}")
-                    return {"index": idx, "request_id": f"err_{idx}", "model": "error", "status": "error", "error": str(e)}
-            else:
-                # 嘗試使用 LTX-2 進行生成
-                res = await ltx_generate_scene(
+            try:
+                res = await fal_generate_scene(
                     prompt=prompt, duration=duration_sec, aspect_ratio=request.aspect_ratio,
                     model_preference=request.model_preference, reference_image_url=ref_image,
-                    audio_url=audio_url_item,
-                    quality_prompt=q_prompt,
-                    negative_prompt=n_prompt,
+                    audio_url=audio_url_item, quality_prompt=q_prompt, negative_prompt=n_prompt,
                 )
-                
-                job_id = res.get("request_id")
-                if job_id:
-                    router._ltx_jobs[job_id] = {
-                        "status": res.get("status", "pending"), 
-                        "video_url": res.get("video_url"), 
-                        "model": res.get("model", "ltx-2")
-                    }
-                return {
-                    "index": idx, 
-                    "request_id": res.get("request_id"), 
-                    "model": res.get("model", "ltx-2"), 
-                    "status": "pending"
-                }
+                return {"index": idx, "request_id": res.get("request_id"), "model": "fal", "status": "pending"}
+            except Exception as e:
+                return {"index": idx, "request_id": f"err_{idx}", "model": "error", "status": "error", "error": str(e)}
 
-        except Exception as e:
-            logger.error(f"[V3] Submit scene {idx} completely failed: {e}")
-            return {"index": idx, "request_id": f"err_{idx}", "model": "error", "status": "error", "error": str(e)}
-
-    import asyncio
-    tasks = [_submit_scene(scene, i) for i, scene in enumerate(request.scenes)]
-    jobs = await asyncio.gather(*tasks)
+        import asyncio
+        tasks = [_submit_scene_fal(scene, i) for i, scene in enumerate(request.scenes)]
+        jobs = await asyncio.gather(*tasks)
+    else:
+        # LTX-2 Autoregressive Sequential Generation (順序推衍)
+        # 為什麼要序列化？因為要確保 場景 N 的起始幀 = 場景 N-1 的結束幀！
+        virtual_jobs = []
+        for i in range(len(request.scenes)):
+            v_job_id = f"ltx_seq_{uuid.uuid4().hex[:8]}_{i}"
+            virtual_jobs.append(v_job_id)
+            router._ltx_jobs[v_job_id] = {
+                "status": "pending",
+                "video_url": None,
+                "model": "ltx-2"
+            }
+        
+        # 啟動背景任務進行順序生成
+        import asyncio
+        asyncio.create_task(_run_sequential_scenes(
+            request.scenes, virtual_jobs, request, current_user.id, 
+            q_prompt, n_prompt, cost_per_clip
+        ))
+        
+        jobs = [{"index": i, "request_id": jid, "model": "ltx-2", "status": "pending"} for i, jid in enumerate(virtual_jobs)]
 
     # 將新任務寫入 GenerationHistory
     try:
@@ -732,6 +719,8 @@ async def check_clips(
     import os
     
     LTX_INFERENCE_URL = os.getenv("LTX_INFERENCE_URL", "http://localhost:8080")
+    if "run.app" in LTX_INFERENCE_URL:
+        LTX_INFERENCE_URL = "https://bobo68425--kingjam-ltx-video-api.modal.run"
 
     statuses = []
     
@@ -741,6 +730,20 @@ async def check_clips(
             model = job.get("model", "")
             if not rid:
                 statuses.append({"request_id": rid, "status": "error", "error": "missing request_id"})
+                continue
+            
+            # 攔截虛擬狀態 (Autoregressive Tracking)
+            if rid.startswith("ltx_seq_"):
+                vinfo = router._ltx_jobs.get(rid)
+                if vinfo:
+                    statuses.append({
+                        "request_id": rid,
+                        "status": vinfo["status"],
+                        "video_url": vinfo.get("video_url"),
+                        "model": "ltx-2"
+                    })
+                else:
+                    statuses.append({"request_id": rid, "status": "error", "error": "Seq Job Not Found"})
                 continue
             
             try:
@@ -1150,6 +1153,8 @@ async def warmup_ltx_inference(
     import httpx
 
     ltx_url = os.getenv("LTX_INFERENCE_URL", "http://localhost:8080")
+    if "run.app" in ltx_url:
+        ltx_url = "https://bobo68425--kingjam-ltx-video-api.modal.run"
 
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -1456,3 +1461,119 @@ async def run_comfyui_workflow(
         db.commit()
         logger.error(f"[ComfyUI] Workflow {request.workflow_id} failed: {e}")
         raise HTTPException(status_code=500, detail=f"生成失敗：{str(e)}")
+
+
+async def _run_sequential_scenes(
+    scenes: List[Dict[str, Any]], 
+    virtual_job_ids: List[str], 
+    request: Any, 
+    user_id: int,
+    q_prompt: str,
+    n_prompt: str,
+    cost_per_clip: int
+):
+    """
+    背景任務：順序生成 AI 片段，並在場景之間傳遞上一段影片作為參考，確保畫面連貫。
+    """
+    logger.info(f"[V3 Seq] Starting sequential generation for {len(scenes)} scenes. User: {user_id}")
+    
+    previous_video_url = None
+    
+    for i, scene in enumerate(scenes):
+        v_job_id = virtual_job_ids[i]
+        prompt = scene.get("visualPrompt", "")
+        duration_sec = max(3, min(10, scene.get("durationInFrames", 150) // 30))
+        
+        # 處理參考圖片
+        ref_image = scene.get("refImageUrl", None)
+        if ref_image and ref_image.startswith("/"):
+            ref_image = f"https://api.kingjam.app{ref_image}"
+            
+        audio_url_item = scene.get("audioUrl", None)
+        if audio_url_item and audio_url_item.startswith("/"):
+            audio_url_item = f"https://api.kingjam.app{audio_url_item}"
+
+        try:
+            # 建立真正的 LTX 生成任務
+            from app.services.video_v3.ltx_service import generate_scene_clip
+            
+            # 核心邏輯：如果是第 2 段之後，且我們有前一段的影片，則傳入作為連貫參考
+            # 注意：這裡我們依然保留 ref_image 作為 fallback 或輔助
+            current_prev_url = previous_video_url if i > 0 else None
+            
+            logger.info(f"[V3 Seq] Processing scene {i} (Job: {v_job_id}). Prev: {current_prev_url}")
+            
+            # 使用 ltx_service 進行生成 (這是一個 polling 的 await)
+            # 因為 generate_scene_clip 在 ltx_service.py 中原本是回傳 {request_id, model, status: 'pending'}
+            # 我們需要一個能等待結果的版本。
+            # 修改：直接在這邊寫 polling 邏輯，或者擴充 ltx_service。
+            # 這裡我們採取最穩健的方式：呼叫 generate_scene_clip 拿到 rid，然後自己 poll。
+            
+            res = await generate_scene_clip(
+                prompt=prompt,
+                duration=duration_sec,
+                aspect_ratio=request.aspect_ratio,
+                model_preference=request.model_preference,
+                reference_image_url=ref_image,
+                previous_video_url=current_prev_url,
+                audio_url=audio_url_item,
+                quality_prompt=q_prompt,
+                negative_prompt=n_prompt
+            )
+            
+            rid = res.get("request_id")
+            if not rid:
+                raise ValueError("Failed to get request_id from LTX service")
+            
+            # Polling 邏輯
+            import httpx
+            import os
+            LTX_INFERENCE_URL = os.getenv("LTX_INFERENCE_URL", "http://localhost:8080")
+            if "run.app" in LTX_INFERENCE_URL:
+                LTX_INFERENCE_URL = "https://bobo68425--kingjam-ltx-video-api.modal.run"
+            
+            success_url = None
+            max_wait = 600 # 10 mins per scene
+            waited = 0
+            
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                while waited < max_wait:
+                    try:
+                        resp = await client.get(f"{LTX_INFERENCE_URL}/v1/status/{rid}")
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            status = data.get("status", "pending")
+                            if status == "completed":
+                                success_url = data.get("video_url")
+                                break
+                            elif status == "error":
+                                raise ValueError(f"Modal reports error: {data.get('error')}")
+                    except Exception as e:
+                        logger.warning(f"[V3 Seq] Poll error: {e}")
+                    
+                    await asyncio.sleep(5)
+                    waited += 5
+            
+            if success_url:
+                router._ltx_jobs[v_job_id] = {
+                    "status": "completed",
+                    "video_url": success_url,
+                    "model": "ltx-2"
+                }
+                previous_video_url = success_url
+                logger.info(f"[V3 Seq] Scene {i} success: {success_url}")
+            else:
+                raise ValueError("Scene generation timed out or failed")
+
+        except Exception as e:
+            logger.error(f"[V3 Seq] Scene {i} failed: {e}")
+            router._ltx_jobs[v_job_id] = {
+                "status": "error",
+                "video_url": None,
+                "model": "ltx-2",
+                "error": str(e)
+            }
+            # 如果一段失敗，後面可能無法連貫，可以選擇繼續 (用原圖) 或 中斷。
+            # 這裡選擇繼續，但 previous_video_url 清空
+            previous_video_url = None
+

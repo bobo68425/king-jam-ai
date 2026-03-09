@@ -23,6 +23,9 @@ import httpx
 logger = logging.getLogger(__name__)
 
 LTX_INFERENCE_URL = os.getenv("LTX_INFERENCE_URL", "http://localhost:8080")
+if "run.app" in LTX_INFERENCE_URL:
+    LTX_INFERENCE_URL = "https://bobo68425--kingjam-ltx-video-api.modal.run"
+
 # 單次 status poll 的 timeout（秒）
 LTX_POLL_TIMEOUT = int(os.getenv("LTX_POLL_TIMEOUT", "10"))
 # 最長等待生成完成的時間（秒）: cold start (30s) + model load (3min) + generation (5min)
@@ -35,9 +38,9 @@ def _resolve_resolution(aspect_ratio: str) -> str:
     # 如需更高畫質，可調整為 480x854 / 854x480 / 768x768
     # LTX 要求長寬必須是 32 的倍數
     mapping = {
-        "9:16": "480x864",
-        "16:9": "864x480",
-        "1:1":  "768x768",
+        "9:16": "480x864", # 原生解析度 (後續透過 Upscaler 放大至 720p+)
+        "16:9": "864x480", # 原生解析度
+        "1:1":  "768x768", # 原生解析度
     }
     return mapping.get(aspect_ratio, "480x864")
 
@@ -49,6 +52,7 @@ async def generate_scene_clip(
     model_preference: str = "auto",
     webhook_url: Optional[str] = None,
     reference_image_url: Optional[str] = None,
+    previous_video_url: Optional[str] = None,
     audio_url: Optional[str] = None,
     quality_prompt: str = "",
     negative_prompt: str = "",
@@ -72,7 +76,7 @@ async def generate_scene_clip(
             enhanced_prompt += ", "
         enhanced_prompt += quality_prompt
 
-    if reference_image_url:
+    if reference_image_url or previous_video_url:
         endpoint = f"{LTX_INFERENCE_URL}/v1/image-to-video"
         payload: Dict[str, Any] = {
             "user_id": 1,
@@ -82,6 +86,7 @@ async def generate_scene_clip(
             "duration": duration,
             "resolution": resolution,
             "image_uri": reference_image_url,
+            "previous_video_url": previous_video_url,
         }
     else:
         endpoint = f"{LTX_INFERENCE_URL}/v1/text-to-video"
