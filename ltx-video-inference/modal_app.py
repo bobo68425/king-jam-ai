@@ -203,7 +203,16 @@ class LTXVideoInference:
 
             if req.image_uri:
                 pipe = self._get_pipe("i2v")
-                init_image = load_image(req.image_uri)
+                
+                # Fetch image manually with httpx to bypass Cloudflare bot protection on R2
+                import httpx
+                import io
+                import PIL.Image
+                print(f"[LTX-Modal] [{task_id}] Downloading reference image from {req.image_uri}...")
+                resp = httpx.get(req.image_uri, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}, follow_redirects=True, timeout=30.0)
+                if resp.status_code != 200:
+                    raise ValueError(f"Failed to download image: {resp.status_code} {resp.text[:100]}")
+                init_image = PIL.Image.open(io.BytesIO(resp.content)).convert("RGB")
                 
                 # IMPORTANT: Resize the loaded reference image to match the video resolution.
                 # If we feed an arbitrary large image (like an iPhone 4k photo) to the VAE,
