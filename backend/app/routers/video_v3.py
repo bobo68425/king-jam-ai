@@ -620,17 +620,11 @@ async def generate_clips(
         prompt = scene.get("visualPrompt", "")
         ref_image = scene.get("refImageUrl", None)
         if ref_image and ref_image.startswith("/"):
-            if ref_image.startswith("/upload/media/"):
-                ref_image = f"https://api.kingjam.app/static/uploads/{ref_image.replace('/upload/media/', '')}"
-            else:
-                ref_image = f"https://api.kingjam.app{ref_image}"
+            ref_image = f"https://api.kingjam.app{ref_image}"
             
         audio_url_item = scene.get("audioUrl", None)
         if audio_url_item and audio_url_item.startswith("/"):
-            if audio_url_item.startswith("/upload/media/"):
-                audio_url_item = f"https://api.kingjam.app/static/uploads/{audio_url_item.replace('/upload/media/', '')}"
-            else:
-                audio_url_item = f"https://api.kingjam.app{audio_url_item}"
+            audio_url_item = f"https://api.kingjam.app{audio_url_item}"
             
         duration_sec = max(3, min(10, scene.get("durationInFrames", 150) // 30))
         
@@ -1083,9 +1077,7 @@ async def generate_video_api(
         # I2V 與 SadTalker 模式：每個場景附加參考圖片 URL
         if mode in ("i2v", "sadtalker") and request.ref_image_url:
             ref_url = request.ref_image_url
-            if ref_url.startswith("/upload/media/"):
-                ref_url = f"https://api.kingjam.app/static/uploads/{ref_url.replace('/upload/media/', '')}"
-            elif ref_url.startswith("/"):
+            if ref_url.startswith("/"):
                 ref_url = f"https://api.kingjam.app{ref_url}"
             scene["refImageUrl"] = ref_url
         
@@ -1094,9 +1086,7 @@ async def generate_video_api(
             scene["emotion"] = ai_scene.get("emotion", "calm")
             if request.audio_url:
                 audio_url = request.audio_url
-                if audio_url.startswith("/upload/media/"):
-                    audio_url = f"https://api.kingjam.app/static/uploads/{audio_url.replace('/upload/media/', '')}"
-                elif audio_url.startswith("/"):
+                if audio_url.startswith("/"):
                     audio_url = f"https://api.kingjam.app{audio_url}"
                 scene["audioUrl"] = audio_url
         

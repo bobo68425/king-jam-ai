@@ -121,19 +121,44 @@ async def upload_media(
 @router.get("/media/{filename}")
 async def get_media(filename: str):
     """獲取上傳的媒體文件"""
-    from fastapi.responses import FileResponse
+    from fastapi.responses import FileResponse, StreamingResponse
+    import io
     
     file_path = os.path.join(UPLOAD_DIR, filename)
     
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="文件不存在")
+    if os.path.exists(file_path):
+        # 安全檢查：確保文件在上傳目錄內
+        real_path = os.path.realpath(file_path)
+        if not real_path.startswith(os.path.realpath(UPLOAD_DIR)):
+            raise HTTPException(status_code=403, detail="無權訪問此文件")
+        return FileResponse(file_path)
     
-    # 安全檢查：確保文件在上傳目錄內
-    real_path = os.path.realpath(file_path)
-    if not real_path.startswith(os.path.realpath(UPLOAD_DIR)):
-        raise HTTPException(status_code=403, detail="無權訪問此文件")
-    
-    return FileResponse(file_path)
+    # 如果本地不存在，嘗試從 R2 獲取 (解決 Railway 負載平衡與重啟遺失問題)
+    from app.services.cloud_storage import cloud_storage
+    if cloud_storage.is_configured():
+        try:
+            # 依賴檔名副檔名推測 file_type
+            ext = os.path.splitext(filename)[1].lower()
+            file_type = "images" if ext in ALLOWED_IMAGE_TYPES else "audio" if ext in ALLOWED_AUDIO_TYPES else "videos"
+            
+            # 由於我們沒有在 DB 儲存 key，我們依賴 S3 list_objects 尋找後綴符合 filename 的檔案
+            prefix = f"{file_type}/"
+            res = cloud_storage.client.list_objects_v2(Bucket=cloud_storage.bucket_name, Prefix=prefix)
+            if 'Contents' in res:
+                for obj in res['Contents']:
+                    if filename in obj['Key']:
+                        # 找到對應的 S3 物件
+                        s3_obj = cloud_storage.client.get_object(Bucket=cloud_storage.bucket_name, Key=obj['Key'])
+                        return StreamingResponse(
+                            s3_obj['Body'],
+                            media_type=s3_obj['ContentType'],
+                            headers={"Cache-Control": "public, max-age=31536000"}
+                        )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"R2 proxy download failed for {filename}: {e}")
+
+    raise HTTPException(status_code=404, detail="文件不存在")
 
 
 @router.delete("/media/{filename}")
