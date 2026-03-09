@@ -13,6 +13,7 @@ const AI_GENERATE_PATHS = [
   '/video/preview',
   '/video/render-preview',
   '/blog/generate',
+  '/video/v3/render',
 ];
 
 // LTX / v3 生成路徑需要超長 timeout（cold start + 生成約 5-8 分鐘）

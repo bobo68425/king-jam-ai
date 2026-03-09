@@ -70,7 +70,7 @@ async def submit_render_job(
             local_bgm = None
             if music_url:
                 local_bgm = temp_path / "bgm.mp3"
-                resp = await client.get(music_url)
+                resp = await client.get(music_url, headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"})
                 if resp.status_code == 200:
                     local_bgm.write_bytes(resp.content)
             
@@ -78,7 +78,7 @@ async def submit_render_job(
             local_tts = None
             if tts_url:
                 local_tts = temp_path / "tts.mp3"
-                resp = await client.get(tts_url)
+                resp = await client.get(tts_url, headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"})
                 if resp.status_code == 200:
                     local_tts.write_bytes(resp.content)
             
@@ -88,10 +88,12 @@ async def submit_render_job(
                 clip_url = scene.get("media", {}).get("url")
                 if clip_url:
                     clip_path = temp_path / f"scene_{i}.mp4"
-                    resp = await client.get(clip_url)
+                    resp = await client.get(clip_url, headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"})
                     if resp.status_code == 200:
                         clip_path.write_bytes(resp.content)
                         video_clips.append(str(clip_path))
+                    else:
+                        logger.error(f"[RenderClient] 影片下載失敗 ({resp.status_code}): {clip_url[:100]}")
         
         if not video_clips:
             logger.error("[RenderClient] 錯誤: 沒有成功下載任何影片片段。")
