@@ -645,7 +645,7 @@ export default function VideoPage() {
     }
   };
 
-  const handleV3GenerateVideo = async () => {
+  const handleV3GenerateClips = async () => {
     if (v3Scenes.length === 0) {
       toast.error("請先生成腳本");
       return;
@@ -699,13 +699,14 @@ export default function VideoPage() {
           console.log("[Video Generation] Polling API Response:", statusRes.data);
 
           const statuses = statusRes.data.statuses || [];
-          const completed = statuses.filter((s: any) => s.status === "completed" || s.status === "COMPLETED").length;
-          const isQueuing = statuses.some((s: any) => s.status === "queuing");
+          const completedCount = statuses.filter((s: any) => s.status === "completed" || s.status === "COMPLETED").length;
+          const errorCount = statuses.filter((s: any) => s.status === "error" || s.status === "failed" || s.status === "ERROR").length;
+          const isQueuing = statuses.some((s: any) => s.status === "queuing" || s.status === "pending" || s.status === "processing");
 
           if (isQueuing) {
-            setV3VideoProgress("排隊等待 GPU 中... (冷啟動約 30s)");
+            setV3VideoProgress(`影片生成中... ${completedCount}/${validJobs.length} (正在處理中)`);
           } else {
-            setV3VideoProgress(`影片生成中... ${completed}/${validJobs.length} 完成`);
+            setV3VideoProgress(`影片生成中... ${completedCount}/${validJobs.length} 完成`);
           }
 
           const updatedScenes = [...v3Scenes];
@@ -719,12 +720,15 @@ export default function VideoPage() {
           });
           setV3Scenes(updatedScenes);
 
-          if (statusRes.data.all_done) {
-            const successClips = statuses.filter((s: any) => s.video_url);
+          // 嚴格判定：只有當完成 + 錯誤 = 總數時才退出
+          const isRealAllDone = (completedCount + errorCount) >= validJobs.length;
+
+          if (isRealAllDone) {
+            const successClips = statuses.filter((s: any) => s.status === "completed" || s.status === "COMPLETED");
             toast.success(`🎉 ${successClips.length} 個影片片段生成完成！`);
             setV3VideoProgress(`✅ ${successClips.length}/${validJobs.length} 完成`);
 
-            // 將每一個成功生成的片段加入歷史紀錄 (支援發布與排程)
+            // 將每一個成功生成的片段加入歷史紀錄
             for (let i = 0; i < successClips.length; i++) {
               const clip = successClips[i];
               const sceneIdx = validJobs[i]?.index;
@@ -737,7 +741,7 @@ export default function VideoPage() {
                     project_id: "v3_clips",
                     title: sceneDetail?.narration ? `場景片段: ${sceneDetail.narration.substring(0, 15)}...` : "AI 影片片段",
                     prompt: sceneDetail?.visualPrompt || "AI 影片片段",
-                    model: "Kling/Wan (v3)",
+                    model: "LTX-2 (A100)",
                     aspect_ratio: v3AspectRatio,
                     duration: "5"
                   },
@@ -753,13 +757,15 @@ export default function VideoPage() {
                 console.error("保存片段紀錄失敗", e);
               }
             }
-            loadHistory(); // 重新載入歷史列表
+            loadHistory();
             break;
           }
-        } catch {
-          // 輪詢失敗不中斷
+        } catch (pollErr) {
+          console.error("Polling error:", pollErr);
+          // 輪詢失敗不中斷，繼續下一次嘗試
         }
       }
+
       if (attempts >= maxAttempts) {
         toast.error("部分場景生成超時");
         setV3VideoProgress("⏱️ 超時");
@@ -772,6 +778,7 @@ export default function VideoPage() {
       setV3VideoGenerating(false);
     }
   };
+
 
   // 下拉選單
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
@@ -4539,7 +4546,7 @@ export default function VideoPage() {
                     ) : (
                       <Button
                         className="w-full bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 rounded-xl py-5 font-medium disabled:opacity-50 mt-2"
-                        onClick={handleV3GenerateVideo}
+                        onClick={handleV3GenerateClips}
                         disabled={v3Scenes.length === 0}
                       >
                         <ArrowRight className="w-4 h-4 mr-2" /> 第 2 步：生成 AI 影片素材

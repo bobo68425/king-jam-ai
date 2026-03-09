@@ -1494,6 +1494,9 @@ async def _run_sequential_scenes(
             audio_url_item = f"https://api.kingjam.app{audio_url_item}"
 
         try:
+            # 更新狀態為 processing
+            router._ltx_jobs[v_job_id]["status"] = "processing"
+            
             # 建立真正的 LTX 生成任務
             from app.services.video_v3.ltx_service import generate_scene_clip
             
