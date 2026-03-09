@@ -1486,12 +1486,21 @@ async def _run_sequential_scenes(
         
         # 處理參考圖片
         ref_image = scene.get("refImageUrl", None)
-        if ref_image and ref_image.startswith("/"):
-            ref_image = f"https://api.kingjam.app{ref_image}"
+        if ref_image:
+            if ref_image.startswith("/"):
+                ref_image = f"https://api.kingjam.app{ref_image}"
+            elif "upload/media/" in ref_image and "api.kingjam.app" not in ref_image:
+                # 如果是絕對路徑但不是 api.kingjam.app (可能是 platform.givoo.io)，強行替換域名
+                import re
+                ref_image = re.sub(r"https?://[^/]+(/upload/media/.*)", r"https://api.kingjam.app\1", ref_image)
             
         audio_url_item = scene.get("audioUrl", None)
-        if audio_url_item and audio_url_item.startswith("/"):
-            audio_url_item = f"https://api.kingjam.app{audio_url_item}"
+        if audio_url_item:
+            if audio_url_item.startswith("/"):
+                audio_url_item = f"https://api.kingjam.app{audio_url_item}"
+            elif "upload/media/" in audio_url_item and "api.kingjam.app" not in audio_url_item:
+                import re
+                audio_url_item = re.sub(r"https?://[^/]+(/upload/media/.*)", r"https://api.kingjam.app\1", audio_url_item)
 
         try:
             # 更新狀態為 processing
