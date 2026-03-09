@@ -4212,14 +4212,21 @@ export default function VideoPage() {
                           key={r}
                           onClick={() => setV3AspectRatio(r)}
                           disabled={v3Mode === "sadtalker"}
-                          className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${v3Mode === "sadtalker"
+                          className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${v3Mode === "sadtalker"
                             ? "bg-slate-800 text-slate-600 cursor-not-allowed border border-slate-700/50"
                             : v3AspectRatio === r
                               ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
                               : "bg-slate-900 text-slate-500 border border-slate-700 hover:text-slate-300"
                             }`}
                         >
-                          {r === "9:16" ? "竪屏" : r === "16:9" ? "橫屏" : "方形"}
+                          <div className="flex flex-col items-center leading-tight">
+                            <span className="text-[9px] opacity-60 mb-0.5">
+                              {r === "9:16" ? "720x1280" : r === "16:9" ? "1280x720" : "720x720"}
+                            </span>
+                            <span>
+                              {r === "9:16" ? "竪屏" : r === "16:9" ? "橫屏" : "方形"}
+                            </span>
+                          </div>
                         </button>
                       ))}
                     </div>
