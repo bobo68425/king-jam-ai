@@ -97,12 +97,10 @@ async def upload_media(
         from app.services.cloud_storage import upload_image_to_cloud, upload_video_to_cloud
         if content_type in ALLOWED_IMAGE_TYPES:
             r2_res = upload_image_to_cloud(file_path, current_user.id, delete_local=False)
-            if r2_res.get("success"):
-                url = r2_res.get("url")
+            # URL NOT overwritten because the King Jam R2 bucket is private/unreadable
         else: # Video or Audio
             r2_res = upload_video_to_cloud(file_path, current_user.id, delete_local=False)
-            if r2_res.get("success"):
-                url = r2_res.get("url")
+            # URL NOT overwritten
     except Exception as e:
         import logging
         logging.getLogger(__name__).error(f"[Upload] R2 備份上傳失敗: {e}")
