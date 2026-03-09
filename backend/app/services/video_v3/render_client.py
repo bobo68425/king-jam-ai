@@ -88,12 +88,34 @@ async def submit_render_job(
                 clip_url = scene.get("media", {}).get("url")
                 if clip_url:
                     clip_path = temp_path / f"scene_{i}.mp4"
+                    
+                    # R2 Proxy Download: 如果是我們自己的的 R2 或 API 網域，改用 boto3 S3 下載以穿透 Cloudflare 防火牆
+                    if "r2.dev" in clip_url or "cloudflarestorage.com" in clip_url:
+                        from urllib.parse import urlparse
+                        try:
+                            parsed = urlparse(clip_url)
+                            # 從 /videos/1/2026/03/... 擷取 S3 Key (移除 leading slash)
+                            path_parts = parsed.path.strip("/").split("/")
+                            if "kingjam-media" in path_parts:
+                                path_parts.remove("kingjam-media")
+                            s3_key = "/".join(path_parts)
+                            
+                            logger.info(f"[RenderClient] 偵測到 R2 內部連結，改用 boto3 下載: {s3_key}")
+                            from app.services.cloud_storage import cloud_storage
+                            s3_obj = cloud_storage.client.get_object(Bucket=cloud_storage.bucket_name, Key=s3_key)
+                            clip_path.write_bytes(s3_obj['Body'].read())
+                            video_clips.append(str(clip_path))
+                            continue
+                        except Exception as e:
+                            logger.error(f"[RenderClient] 內部 S3 下載失敗，回退 httpx: {e}")
+                    
+                    # 外部連結 (如 fal.ai 或 fallback) 仍使用 httpx
                     resp = await client.get(clip_url, headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"})
                     if resp.status_code == 200:
                         clip_path.write_bytes(resp.content)
                         video_clips.append(str(clip_path))
                     else:
-                        logger.error(f"[RenderClient] 影片下載失敗 ({resp.status_code}): {clip_url[:100]}")
+                        logger.error(f"[RenderClient] 影片 HTTP 下載失敗 ({resp.status_code}): {clip_url[:100]}")
         
         if not video_clips:
             logger.error("[RenderClient] 錯誤: 沒有成功下載任何影片片段。")
