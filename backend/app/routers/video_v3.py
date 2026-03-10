@@ -620,11 +620,13 @@ async def generate_clips(
 
     fal_key_available = bool(os.getenv("FAL_KEY", "").strip())
     is_sadtalker = "sadtalker" in request.model_preference.lower()
-    use_fal_directly = is_sadtalker or "fal" in request.model_preference.lower()
-    if use_fal_directly and not fal_key_available:
+    # 2026-03 之後預設全面改用 LTX-2，僅在 model_preference 明確包含 "fal"
+    # 且環境有設定 FAL_KEY 時，才啟用 fal.ai 直連流程。
+    use_fal_directly = "fal" in request.model_preference.lower() and fal_key_available
+    if "fal" in request.model_preference.lower() and not fal_key_available:
         raise HTTPException(
             status_code=503,
-            detail="FAL_KEY 尚未設定，請在後台環境變數中設定 FAL_KEY（取得方式：https://fal.ai/dashboard/keys）"
+            detail="已指定使用 fal.ai，但 FAL_KEY 尚未設定，請在後台環境變數中設定 FAL_KEY（取得方式：https://fal.ai/dashboard/keys）"
         )
 
     # 計算點數成本
