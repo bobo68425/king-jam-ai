@@ -1,8 +1,10 @@
 # =============================================================================
-# King Jam AI - 前端自動部署到 Google Cloud Run
+# King Jam AI - 前端部署到 Google Cloud Run（已停用）
 # =============================================================================
+# ⚠️ 已遷移至 Vercel，此 workflow 已停用自動觸發。
+# 如需手動部署到 Cloud Run，可使用 workflow_dispatch。
 #
-# 觸發條件:
+# 原觸發條件:
 # - push 到 main 分支且 frontend/ 有變更
 # - 手動觸發 (workflow_dispatch)
 #
@@ -22,12 +24,13 @@
 name: Deploy Frontend to Cloud Run
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'frontend/**'
-      - '.github/workflows/deploy-frontend-cloudrun.yml'
+  # push 觸發已停用（已遷移至 Vercel 自動部署）
+  # push:
+  #   branches:
+  #     - main
+  #   paths:
+  #     - 'frontend/**'
+  #     - '.github/workflows/deploy-frontend-cloudrun.yml'
   
   # 允許手動觸發
   workflow_dispatch:
