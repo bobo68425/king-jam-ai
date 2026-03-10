@@ -784,7 +784,14 @@ async def check_clips(
                         "model": "ltx-2"
                     })
                 else:
-                    statuses.append({"request_id": rid, "status": "error", "error": "Seq Job Not Found"})
+                    # 如果 Redis 或快取中暫時查不到，視為「仍在佇列中」，避免前端誤判為 0/N 完成
+                    statuses.append({
+                        "request_id": rid,
+                        "status": "pending",
+                        "video_url": None,
+                        "model": "ltx-2",
+                        "error": "Seq Job Not Found"
+                    })
                 continue
             
             try:
