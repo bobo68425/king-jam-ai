@@ -768,36 +768,43 @@ export default function VideoPage() {
 
           if (isRealAllDone) {
             const successClips = statuses.filter((s: any) => s.status === "completed" || s.status === "COMPLETED");
-            toast.success(`🎉 ${successClips.length} 個影片片段生成完成！`);
-            setV3VideoProgress(`✅ ${successClips.length}/${validJobs.length} 完成`);
 
-            // 將每一個成功生成的片段加入歷史紀錄
-            for (let i = 0; i < successClips.length; i++) {
-              const clip = successClips[i];
-              const sceneIdx = validJobs[i]?.index;
-              const sceneDetail = sceneIdx !== undefined ? updatedScenes[sceneIdx] : null;
-              try {
-                await api.post("/history", {
-                  generation_type: "short_video",
-                  status: "completed",
-                  input_params: {
-                    project_id: "v3_clips",
-                    title: sceneDetail?.narration ? `場景片段: ${sceneDetail.narration.substring(0, 15)}...` : "AI 影片片段",
-                    prompt: sceneDetail?.visualPrompt || "AI 影片片段",
-                    model: "LTX-2 (A100)",
-                    aspect_ratio: v3AspectRatio,
-                    duration: "5"
-                  },
-                  output_data: {
-                    caption: sceneDetail?.narration || "AI 影片片段",
-                    video_url: clip.video_url,
-                    title: sceneDetail?.narration ? `場景片段: ${sceneDetail.narration.substring(0, 15)}...` : "AI 影片片段"
-                  },
-                  media_cloud_url: clip.video_url,
-                  credits_used: 5
-                });
-              } catch (e) {
-                console.error("保存片段紀錄失敗", e);
+            if (successClips.length === 0) {
+              // 全部失敗：不要顯示綠色勾勾，明確告知 0/N 成功
+              setV3VideoProgress(`❌ 0/${validJobs.length} 成功（全部片段生成失敗）`);
+              toast.error("所有影片片段生成失敗，請稍後重試或聯絡客服。");
+            } else {
+              toast.success(`🎉 ${successClips.length} 個影片片段生成完成！`);
+              setV3VideoProgress(`✅ ${successClips.length}/${validJobs.length} 完成`);
+
+              // 將每一個成功生成的片段加入歷史紀錄
+              for (let i = 0; i < successClips.length; i++) {
+                const clip = successClips[i];
+                const sceneIdx = validJobs[i]?.index;
+                const sceneDetail = sceneIdx !== undefined ? updatedScenes[sceneIdx] : null;
+                try {
+                  await api.post("/history", {
+                    generation_type: "short_video",
+                    status: "completed",
+                    input_params: {
+                      project_id: "v3_clips",
+                      title: sceneDetail?.narration ? `場景片段: ${sceneDetail.narration.substring(0, 15)}...` : "AI 影片片段",
+                      prompt: sceneDetail?.visualPrompt || "AI 影片片段",
+                      model: "LTX-2 (A100)",
+                      aspect_ratio: v3AspectRatio,
+                      duration: "5"
+                    },
+                    output_data: {
+                      caption: sceneDetail?.narration || "AI 影片片段",
+                      video_url: clip.video_url,
+                      title: sceneDetail?.narration ? `場景片段: ${sceneDetail.narration.substring(0, 15)}...` : "AI 影片片段"
+                    },
+                    media_cloud_url: clip.video_url,
+                    credits_used: 5
+                  });
+                } catch (e) {
+                  console.error("保存片段紀錄失敗", e);
+                }
               }
             }
             loadHistory();
