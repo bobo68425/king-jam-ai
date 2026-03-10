@@ -737,10 +737,16 @@ export default function VideoPage() {
 
           const statuses = statusRes.data.statuses || [];
           const completedCount = statuses.filter((s: any) => s.status === "completed" || s.status === "COMPLETED").length;
-          const errorCount = statuses.filter((s: any) => s.status === "error" || s.status === "failed" || s.status === "ERROR").length;
+          // 只計算真正的錯誤（排除 "Seq Job Not Found" 這類暫態錯誤，可能是後端重啟中）
+          const permanentErrors = statuses.filter((s: any) =>
+            (s.status === "error" || s.status === "failed" || s.status === "ERROR") &&
+            !s.error?.includes("Seq Job Not Found")
+          );
+          const errorCount = permanentErrors.length;
           const isQueuing = statuses.some((s: any) => s.status === "queuing" || s.status === "pending" || s.status === "processing");
+          const hasTransientErrors = statuses.some((s: any) => s.error?.includes("Seq Job Not Found"));
 
-          if (isQueuing) {
+          if (isQueuing || hasTransientErrors) {
             setV3VideoProgress(`影片生成中... ${completedCount}/${validJobs.length} (正在處理中)`);
           } else {
             setV3VideoProgress(`影片生成中... ${completedCount}/${validJobs.length} 完成`);
@@ -757,8 +763,8 @@ export default function VideoPage() {
           });
           setV3Scenes(updatedScenes);
 
-          // 嚴格判定：只有當完成 + 錯誤 = 總數時才退出
-          const isRealAllDone = (completedCount + errorCount) >= validJobs.length;
+          // 嚴格判定：只有當完成 + 永久錯誤 = 總數時才退出（暫態錯誤不算）
+          const isRealAllDone = (completedCount + errorCount) >= validJobs.length && !hasTransientErrors;
 
           if (isRealAllDone) {
             const successClips = statuses.filter((s: any) => s.status === "completed" || s.status === "COMPLETED");

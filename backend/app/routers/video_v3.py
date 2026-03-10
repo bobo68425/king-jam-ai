@@ -34,6 +34,51 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/video/v3", tags=["Video V3 Engine"])
 
+# ---------------------------------------------------------------------------
+# Redis-backed job store（取代 in-memory router._ltx_jobs，存活於重啟之間）
+# ---------------------------------------------------------------------------
+import os as _os, json as _json
+
+def _get_redis():
+    """取得共用 Redis 連線（lazy singleton）"""
+    if not hasattr(_get_redis, "_client"):
+        try:
+            import redis
+            _get_redis._client = redis.from_url(
+                _os.getenv("REDIS_URL", "redis://localhost:6379/0"),
+                decode_responses=True,
+            )
+            _get_redis._client.ping()
+        except Exception as e:
+            logger.warning(f"[V3 Jobs] Redis 不可用，降級為 in-memory: {e}")
+            _get_redis._client = None
+    return _get_redis._client
+
+_fallback_jobs: Dict[str, Any] = {}
+
+def _set_ltx_job(job_id: str, data: dict, ttl: int = 3600):
+    """寫入 LTX job 狀態到 Redis（fallback 到 in-memory）"""
+    r = _get_redis()
+    if r:
+        try:
+            r.setex(f"ltx_job:{job_id}", ttl, _json.dumps(data))
+            return
+        except Exception:
+            pass
+    _fallback_jobs[job_id] = data
+
+def _get_ltx_job(job_id: str) -> Optional[dict]:
+    """從 Redis 讀取 LTX job 狀態（fallback 到 in-memory）"""
+    r = _get_redis()
+    if r:
+        try:
+            raw = r.get(f"ltx_job:{job_id}")
+            if raw:
+                return _json.loads(raw)
+        except Exception:
+            pass
+    return _fallback_jobs.get(job_id)
+
 @router.get("/debug-gemini")
 def debug_gemini():
     import google.generativeai as genai
@@ -600,10 +645,6 @@ async def generate_clips(
             description=f"V3 影片片段生成 ({request.model_preference})"
         )
 
-    # 使用 in-process job store 追蹤進度 (用於 fal 降級)
-    if not hasattr(router, "_ltx_jobs"):
-        router._ltx_jobs = {}
-
     # 獲取質量與負面提示詞
     quality_prompt_res = await load_prompt(
         db=db,
@@ -651,11 +692,11 @@ async def generate_clips(
         for i in range(len(request.scenes)):
             v_job_id = f"ltx_seq_{uuid.uuid4().hex[:8]}_{i}"
             virtual_jobs.append(v_job_id)
-            router._ltx_jobs[v_job_id] = {
+            _set_ltx_job(v_job_id, {
                 "status": "pending",
                 "video_url": None,
                 "model": "ltx-2"
-            }
+            })
         
         # 啟動背景任務進行順序生成
         import asyncio
@@ -711,7 +752,7 @@ async def check_clips(
 ):
     """
     批次查詢片段生成狀態
-    - LTX-2 背景任務：不使用 router._ltx_jobs，直接向 Modal API 輪詢 status。
+    - LTX-2 背景任務：從 Redis 讀取 job 狀態（存活於重啟之間）
     - fal.ai：呼叫 fal_check_status
     """
     from app.services.video_v3.fal_service import check_scene_status as fal_check_status
@@ -732,9 +773,9 @@ async def check_clips(
                 statuses.append({"request_id": rid, "status": "error", "error": "missing request_id"})
                 continue
             
-            # 攔截虛擬狀態 (Autoregressive Tracking)
+            # 攔截虛擬狀態 (Autoregressive Tracking via Redis)
             if rid.startswith("ltx_seq_"):
-                vinfo = router._ltx_jobs.get(rid)
+                vinfo = _get_ltx_job(rid)
                 if vinfo:
                     statuses.append({
                         "request_id": rid,
@@ -1504,7 +1545,7 @@ async def _run_sequential_scenes(
 
         try:
             # 更新狀態為 processing
-            router._ltx_jobs[v_job_id]["status"] = "processing"
+            _set_ltx_job(v_job_id, {"status": "processing", "video_url": None, "model": "ltx-2"})
             
             # 建立真正的 LTX 生成任務
             from app.services.video_v3.ltx_service import generate_scene_clip
@@ -1567,11 +1608,11 @@ async def _run_sequential_scenes(
                     waited += 5
             
             if success_url:
-                router._ltx_jobs[v_job_id] = {
+                _set_ltx_job(v_job_id, {
                     "status": "completed",
                     "video_url": success_url,
                     "model": "ltx-2"
-                }
+                })
                 previous_video_url = success_url
                 logger.info(f"[V3 Seq] Scene {i} success: {success_url}")
             else:
@@ -1579,12 +1620,12 @@ async def _run_sequential_scenes(
 
         except Exception as e:
             logger.error(f"[V3 Seq] Scene {i} failed: {e}")
-            router._ltx_jobs[v_job_id] = {
+            _set_ltx_job(v_job_id, {
                 "status": "error",
                 "video_url": None,
                 "model": "ltx-2",
                 "error": str(e)
-            }
+            })
             # 如果一段失敗，後面可能無法連貫，可以選擇繼續 (用原圖) 或 中斷。
             # 這裡選擇繼續，但 previous_video_url 清空
             previous_video_url = None
