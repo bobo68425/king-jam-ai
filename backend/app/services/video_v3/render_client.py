@@ -10,11 +10,8 @@ from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
-# Cloud Run 渲染服務 URL
-RENDER_SERVICE_URL = os.getenv(
-    "REMOTION_RENDER_URL",
-    "https://kingjam-video-renderer-811364632967.asia-east1.run.app"
-)
+# 外部渲染服務 URL（目前改用本地 FFmpeg，此變數僅在 check_render_status fallback 時使用）
+RENDER_SERVICE_URL = os.getenv("REMOTION_RENDER_URL", "")
 
 def _get_gcp_auth_headers() -> Dict[str, str]:
     """若呼叫的對象是受 IAM 保護的 Cloud Run 服務，則嘗試取得並帶上 ID Token。"""
@@ -203,19 +200,22 @@ async def submit_render_job(
         # 4. 上傳到 R2
         import uuid
         job_id = f"local-render-{uuid.uuid4().hex[:8]}"
-        object_name = f"videos/v3/render/{job_id}.mp4"
         
         with open(final_video, "rb") as f:
             video_data = f.read()
-            
-        r2_url = await cloud_storage.upload_bytes(
-            video_data,
-            object_name,
+        
+        upload_result = cloud_storage.upload_bytes(
+            data=video_data,
+            user_id=0,
+            file_type="videos/v3/render",
+            filename=f"{job_id}.mp4",
             content_type="video/mp4"
         )
         
-        if not r2_url:
-            raise Exception("Failed to upload final video to cloud storage.")
+        if not upload_result.get("success"):
+            raise Exception(f"Failed to upload final video to cloud storage: {upload_result.get('error')}")
+        
+        r2_url = upload_result["url"]
             
         logger.info(f"[RenderClient] 渲染完成，已上傳至: {r2_url}")
         

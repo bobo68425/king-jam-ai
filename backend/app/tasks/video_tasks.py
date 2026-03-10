@@ -402,6 +402,8 @@ def generate_ltx_video_task(
     import tempfile
     
     LTX_INFERENCE_URL = os.getenv("LTX_INFERENCE_URL", "http://localhost:8080")
+    if "run.app" in LTX_INFERENCE_URL:
+        LTX_INFERENCE_URL = "https://bobo68425--kingjam-ltx-video-api.modal.run"
     
     headers = {
         "Content-Type": "application/json"

@@ -544,10 +544,47 @@ export default function VideoPage() {
         quality: "medium"
       });
       const jobId = renderRes.data.jobId;
+      const immediateVideoUrl = renderRes.data.videoUrl;
+
+      // 如果後端已同步完成渲染（本地 FFmpeg），直接使用結果
+      if (renderRes.data.status === "done" && immediateVideoUrl) {
+        const finalUrl = immediateVideoUrl;
+        setV3FinalVideoUrl(finalUrl);
+        setV3SynthesisProgress("✅ 合成完成");
+        toast.success("影片合成完成！");
+
+        try {
+          await api.post("/history", {
+            generation_type: "short_video",
+            status: "completed",
+            input_params: {
+              project_id: "v3_demo",
+              title: v3Prompt || "AI 影片",
+              prompt: v3Prompt || "AI 影片",
+              model: "Remotion (v3)",
+              aspect_ratio: v3AspectRatio,
+              duration: "30"
+            },
+            output_data: {
+              caption: `AI Video: ${v3Prompt}`,
+              video_url: finalUrl,
+              title: v3Prompt || "AI 影片"
+            },
+            media_cloud_url: finalUrl,
+            credits_used: 15
+          });
+          loadHistory();
+        } catch (e) {
+          console.error("保存合成紀錄失敗", e);
+        }
+
+        setV3Synthesizing(false);
+        return;
+      }
 
       setV3SynthesisProgress("雲端合成中... (0%)");
 
-      // 4. 輪詢狀態
+      // 4. 輪詢狀態（非同步渲染時使用）
       let attempts = 0;
       while (attempts < 120) {
         if (v3CancelRef.current) {
@@ -561,10 +598,10 @@ export default function VideoPage() {
 
         attempts++;
         await new Promise(r => setTimeout(r, 5000));
-        const statusRes = await api.get(`/video/v3/render/status/${jobId}`);
+        const statusRes = await api.get(`/video/v3/status/${jobId}`);
         const status = statusRes.data;
         if (status.status === "done" && status.videoUrl) {
-          const finalUrl = status.videoUrl.startsWith('http') ? status.videoUrl : `https://kingjam-video-renderer-811364632967.asia-east1.run.app${status.videoUrl}`;
+          const finalUrl = status.videoUrl.startsWith('http') ? status.videoUrl : `${process.env.NEXT_PUBLIC_API_URL || "https://api.kingjam.app"}${status.videoUrl}`;
           setV3FinalVideoUrl(finalUrl);
           setV3SynthesisProgress("✅ 合成完成");
           toast.success("影片合成完成！");
@@ -4111,7 +4148,7 @@ export default function VideoPage() {
                     <label className="text-xs text-slate-400 block mb-1.5">🖼️ 參考圖片 (Avatar 臉部來源)</label>
                     {v3RefImage ? (
                       <div className="relative bg-slate-900 border border-slate-700 rounded-xl p-2">
-                        <img src={v3RefImage.startsWith("/") ? `https://api.kingjam.app${v3RefImage}` : v3RefImage} alt="參考圖" className="w-full h-32 object-contain rounded-lg bg-black" />
+                        <img src={v3RefImage.startsWith("/") ? `${process.env.NEXT_PUBLIC_API_URL || "https://api.kingjam.app"}${v3RefImage}` : v3RefImage} alt="參考圖" className="w-full h-32 object-contain rounded-lg bg-black" />
                         <button
                           onClick={() => setV3RefImage("")}
                           className="absolute top-3 right-3 bg-red-500/80 hover:bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs"
