@@ -781,9 +781,10 @@ async def check_clips(
                 if vinfo:
                     statuses.append({
                         "request_id": rid,
-                        "status": vinfo["status"],
+                        "status": vinfo.get("status", "pending"),
                         "video_url": vinfo.get("video_url"),
-                        "model": "ltx-2"
+                        "model": vinfo.get("model", "ltx-2"),
+                        "error": vinfo.get("error"),
                     })
                 else:
                     # 如果 Redis 或快取中暫時查不到，視為「仍在佇列中」，避免前端誤判為 0/N 完成
