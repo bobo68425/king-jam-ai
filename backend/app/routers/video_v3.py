@@ -1,17 +1,18 @@
 """
-短影音 v3.0 API
-===============
-基於 Remotion + fal.ai + OpenAI TTS 的全新引擎
+短影音 v3.0 API (LTX-2.3 Engine)
+=================================
+基於 LTX-2.3 + Remotion + OpenAI TTS 的影片生成引擎
 
 Endpoints:
-- POST /video/v3/generate      — 全自動流程
-- POST /video/v3/scene/generate — 單場景 AI 片段
-- POST /video/v3/tts            — TTS 配音
-- POST /video/v3/render         — 觸發 Remotion 渲染
-- GET  /video/v3/status/{job_id} — 查詢狀態
-- POST /video/v3/webhook/fal    — fal.ai Webhook
-- GET  /video/v3/themes         — 獲取所有主題模板
-- POST /api/generate-video      — 公開 API (全自動閉環)
+- POST /video/v3/generate         — 全自動流程
+- POST /video/v3/scene/generate   — 單場景 AI 片段 (LTX-2.3)
+- POST /video/v3/tts              — TTS 配音
+- POST /video/v3/render           — 觸發 Remotion 渲染
+- GET  /video/v3/status/{job_id}  — 查詢狀態
+- GET  /video/v3/themes           — 獲取所有主題模板
+- POST /api/generate-clips        — 批次片段生成 (LTX-2.3)
+- POST /api/check-clips           — 批次狀態查詢
+- POST /api/generate-video        — 公開 API (全自動閉環)
 """
 
 import logging
@@ -225,58 +226,29 @@ async def generate_scene(
     current_user: User = Depends(get_current_user)
 ):
     """
-    單場景 AI 影片片段生成
-    使用 fal.ai 異步生成
+    單場景 AI 影片片段生成 (LTX-2.3)
     """
-    from app.services.video_v3.fal_service import generate_scene_clip as fal_generate_scene
     from app.services.video_v3.ltx_service import generate_scene_clip as ltx_generate_scene
     
-    # 構建 Webhook URL
-    webhook_url = None  # TODO: 設定公開 webhook URL
+    is_pro = "pro" in request.model_preference.lower()
+    feature_code = FeatureCode.V3_LTX_PRO if is_pro else FeatureCode.V3_LTX_FAST
     
-    # 計算點數成本
-    is_sadtalker = "sadtalker" in request.model_preference.lower()
-    feature_code = FeatureCode.V3_GENERATE_CLIP_SADTALKER if is_sadtalker else FeatureCode.V3_GENERATE_CLIP_STANDARD
-    
-    # 扣除點數
     consume_result = consume_credits_manually(
         db=db,
         user=current_user,
         feature_code=feature_code,
-        description=f"V3 影片片段生成 ({request.model_preference})"
+        description=f"V3 影片片段 (LTX-2.3 {'Pro' if is_pro else 'Fast'})"
     )
     if not consume_result["success"]:
         raise HTTPException(status_code=402, detail=consume_result.get("error", "點數不足以生成此片段"))
 
-    if is_sadtalker or "fal" in request.model_preference.lower():
-        result = await fal_generate_scene(
-            prompt=request.prompt,
-            duration=request.duration,
-            aspect_ratio=request.aspect_ratio,
-            model_preference=request.model_preference,
-            webhook_url=webhook_url,
-            reference_image_url=request.reference_image_url,
-        )
-    else:
-        try:
-            result = await ltx_generate_scene(
-                prompt=request.prompt,
-                duration=request.duration,
-                aspect_ratio=request.aspect_ratio,
-                model_preference=request.model_preference,
-                webhook_url=webhook_url,
-                reference_image_url=request.reference_image_url,
-            )
-        except Exception as e:
-            logger.warning(f"[Dual-Engine] LTX 啟動失敗，降級為 Fal.ai: {e}")
-            result = await fal_generate_scene(
-                prompt=request.prompt,
-                duration=request.duration,
-                aspect_ratio=request.aspect_ratio,
-                model_preference=request.model_preference,
-                webhook_url=webhook_url,
-                reference_image_url=request.reference_image_url,
-            )
+    result = await ltx_generate_scene(
+        prompt=request.prompt,
+        duration=request.duration,
+        aspect_ratio=request.aspect_ratio,
+        model_preference=request.model_preference,
+        reference_image_url=request.reference_image_url,
+    )
     
     # 建立處理中的歷史紀錄
     try:
@@ -546,47 +518,6 @@ async def get_render_status(
     return result
 
 
-@router.post("/webhook/fal")
-async def fal_webhook(request: Request):
-    """
-    fal.ai Webhook 回調端點
-    
-    fal.ai 任務完成後會 POST 到此端點:
-    {
-        "request_id": "...",
-        "status": "COMPLETED",
-        "payload": { "video": { "url": "..." } }
-    }
-    """
-    from app.services.video_v3.fal_service import handle_webhook
-    
-    payload = await request.json()
-    result = await handle_webhook(payload)
-    
-    # 更新歷史紀錄 (如果在 hook 內能取得 user_id 或 request_id 的話)
-    req_id = payload.get("request_id")
-    if req_id and result.get("video_url"):
-        try:
-            from app.database import SessionLocal
-            from app.models import GenerationHistory
-            db = SessionLocal()
-            # 尋找 processing 中，並且 output_data 包含此 request_id 的紀錄
-            # 為了效能，通常這需要在 handle_webhook 內處理，但在這裡也可以用 filter 查找
-            # (此處假設我們有辦法找到對應紀錄，因為 SQLite JSON 查詢比較複雜，
-            # 我們會依賴前端輪詢 `/check-clips` 及時更新紀錄，這裡作為備用)
-            pass
-        except Exception as e:
-            logger.error(f"[Hook] History update error: {e}")
-        finally:
-            if 'db' in locals():
-                db.close()
-
-    # TODO: 更新 Redis 狀態，推送 SSE 通知前端
-    logger.info(f"[v3 Webhook] fal.ai 回調: {result}")
-    
-    return {"received": True, **result}
-
-
 # ============================================================
 # 批次影片片段生成 API
 # ============================================================
@@ -596,6 +527,7 @@ class BatchClipRequest(BaseModel):
     scenes: List[Dict[str, Any]] = Field(..., description="場景列表")
     aspect_ratio: str = Field(default="9:16")
     model_preference: str = Field(default="auto")
+    quality: str = Field(default="720p", description="品質: 480p / 720p / 1080p")
 
 
 class CheckClipsRequest(BaseModel):
@@ -610,42 +542,48 @@ async def generate_clips(
     current_user: User = Depends(get_current_user)
 ):
     """
-    批次提交場景到 LTX-2 / fal.ai 生成 AI 影片片段
+    批次提交場景到 LTX-2.3 生成 AI 影片片段
 
-    非陰塞架構：立即回傳 job_ids（status=pending），
-    LTX-2 在背景執行，前端用 /api/check-clips 輪詢取得結果。
+    非阻塞架構：立即回傳 job_ids（status=pending），
+    LTX-2.3 在背景執行，前端用 /api/check-clips 輪詢取得結果。
     """
-    import os
-    from app.services.video_v3.fal_service import generate_scene_clip as fal_generate_scene
     from app.services.video_v3.ltx_service import generate_scene_clip as ltx_generate_scene
 
-    fal_key_available = bool(os.getenv("FAL_KEY", "").strip())
     is_sadtalker = "sadtalker" in request.model_preference.lower()
-    # 2026-03 之後預設全面改用 LTX-2，僅在 model_preference 明確包含 "fal"
-    # 且環境有設定 FAL_KEY 時，才啟用 fal.ai 直連流程。
-    use_fal_directly = "fal" in request.model_preference.lower() and fal_key_available
-    if "fal" in request.model_preference.lower() and not fal_key_available:
-        raise HTTPException(
-            status_code=503,
-            detail="已指定使用 fal.ai，但 FAL_KEY 尚未設定，請在後台環境變數中設定 FAL_KEY（取得方式：https://fal.ai/dashboard/keys）"
-        )
+    if is_sadtalker:
+        raise HTTPException(status_code=400, detail="SadTalker 模式已停用，請使用 LTX-2.3 引擎")
 
-    # 計算點數成本
-    feature_code = FeatureCode.V3_GENERATE_CLIP_SADTALKER if is_sadtalker else FeatureCode.V3_GENERATE_CLIP_STANDARD
+    # 計算點數成本 — 根據模型模式與品質等級選擇 FeatureCode
+    is_1080p = request.quality == "1080p"
+    is_pro = "pro" in request.model_preference.lower()
+
+    if is_pro and is_1080p:
+        feature_code = FeatureCode.V3_LTX_PRO_1080P
+    elif is_pro:
+        feature_code = FeatureCode.V3_LTX_PRO
+    elif is_1080p:
+        feature_code = FeatureCode.V3_LTX_FAST_1080P
+    else:
+        feature_code = FeatureCode.V3_LTX_FAST
+
     credit_service = CreditService(db)
     cost_per_clip = credit_service.get_feature_cost(feature_code, current_user.tier)
     total_cost = cost_per_clip * len(request.scenes)
 
     if credit_service.get_balance(current_user.id) < total_cost:
-        raise HTTPException(status_code=402, detail=f"點數不足 (需要 {total_cost} 點，餘額不足)")
+        raise HTTPException(
+            status_code=402,
+            detail=f"點數不足 (需要 {total_cost} 點 = {len(request.scenes)} 片段 × {cost_per_clip} 點/片段，餘額不足)"
+        )
 
     # 預先扣除點數
+    model_label = "LTX-2.3 Pro" if is_pro else "LTX-2.3 Fast"
     for _ in request.scenes:
         consume_credits_manually(
             db=db,
             user=current_user,
             feature_code=feature_code,
-            description=f"V3 影片片段生成 ({request.model_preference})"
+            description=f"V3 影片片段 ({model_label} · {request.quality})"
         )
 
     # 獲取質量與負面提示詞
@@ -660,55 +598,25 @@ async def generate_clips(
     q_prompt = quality_prompt_res.positive
     n_prompt = quality_prompt_res.negative if hasattr(quality_prompt_res, 'negative') and quality_prompt_res.negative else "(deformed iris, deformed pupils, semi-realistic, cgi, 3d, render, sketch, cartoon, drawing, anime:1.4), text, close up, cropped, out of frame, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck, blurry, jittery, flickering, grainy, pixelated"
 
-    # --- 提交生成任務 (模式判斷) ---
-    # 如果只有一個場景，或者多個場景但都是 fal.ai (不支援串聯)，則退回原有的並行產生。
-    # 但為了最高彈性，我們把 King Jam LTX-2 的多場景全數轉為背景順序生成，以確保畫面最高品質銜接！
+    # --- LTX-2.3 Autoregressive Sequential Generation (順序推衍) ---
+    # 場景 N 的起始幀 = 場景 N-1 的結束幀，確保畫面連貫
+    virtual_jobs = []
+    for i in range(len(request.scenes)):
+        v_job_id = f"ltx_seq_{uuid.uuid4().hex[:8]}_{i}"
+        virtual_jobs.append(v_job_id)
+        _set_ltx_job(v_job_id, {
+            "status": "pending",
+            "video_url": None,
+            "model": "ltx-2.3"
+        })
     
-    if use_fal_directly:
-        async def _submit_scene_fal(scene: dict, idx: int):
-            prompt = scene.get("visualPrompt", "")
-            ref_image = scene.get("refImageUrl", None)
-            if ref_image and ref_image.startswith("/"):
-                ref_image = f"https://api.kingjam.app{ref_image}"
-            audio_url_item = scene.get("audioUrl", None)
-            if audio_url_item and audio_url_item.startswith("/"):
-                audio_url_item = f"https://api.kingjam.app{audio_url_item}"
-            duration_sec = max(3, min(10, scene.get("durationInFrames", 150) // 30))
-            
-            try:
-                res = await fal_generate_scene(
-                    prompt=prompt, duration=duration_sec, aspect_ratio=request.aspect_ratio,
-                    model_preference=request.model_preference, reference_image_url=ref_image,
-                    audio_url=audio_url_item, quality_prompt=q_prompt, negative_prompt=n_prompt,
-                )
-                return {"index": idx, "request_id": res.get("request_id"), "model": "fal", "status": "pending"}
-            except Exception as e:
-                return {"index": idx, "request_id": f"err_{idx}", "model": "error", "status": "error", "error": str(e)}
-
-        import asyncio
-        tasks = [_submit_scene_fal(scene, i) for i, scene in enumerate(request.scenes)]
-        jobs = await asyncio.gather(*tasks)
-    else:
-        # LTX-2 Autoregressive Sequential Generation (順序推衍)
-        # 為什麼要序列化？因為要確保 場景 N 的起始幀 = 場景 N-1 的結束幀！
-        virtual_jobs = []
-        for i in range(len(request.scenes)):
-            v_job_id = f"ltx_seq_{uuid.uuid4().hex[:8]}_{i}"
-            virtual_jobs.append(v_job_id)
-            _set_ltx_job(v_job_id, {
-                "status": "pending",
-                "video_url": None,
-                "model": "ltx-2"
-            })
-        
-        # 啟動背景任務進行順序生成
-        import asyncio
-        asyncio.create_task(_run_sequential_scenes(
-            request.scenes, virtual_jobs, request, current_user.id, 
-            q_prompt, n_prompt, cost_per_clip
-        ))
-        
-        jobs = [{"index": i, "request_id": jid, "model": "ltx-2", "status": "pending"} for i, jid in enumerate(virtual_jobs)]
+    import asyncio
+    asyncio.create_task(_run_sequential_scenes(
+        request.scenes, virtual_jobs, request, current_user.id, 
+        q_prompt, n_prompt, cost_per_clip
+    ))
+    
+    jobs = [{"index": i, "request_id": jid, "model": "ltx-2.3", "status": "pending"} for i, jid in enumerate(virtual_jobs)]
 
     # 將新任務寫入 GenerationHistory
     try:
@@ -737,12 +645,15 @@ async def generate_clips(
     except Exception as e:
         logger.error(f"[Generate Clips] 建立歷史紀錄失敗: {e}")
 
-    engine = "fal.ai" if use_fal_directly else "LTX-2"
+    engine = f"LTX-2.3 {'Pro' if is_pro else 'Fast'}"
     return {
         "total": len(request.scenes),
         "submitted": sum(1 for j in jobs if j.get("request_id")),
         "failed": sum(1 for j in jobs if not j.get("request_id")),
         "engine": engine,
+        "quality": request.quality,
+        "cost_per_clip": cost_per_clip,
+        "total_cost": total_cost,
         "jobs": jobs,
     }
 
@@ -755,10 +666,8 @@ async def check_clips(
 ):
     """
     批次查詢片段生成狀態
-    - LTX-2 背景任務：從 Redis 讀取 job 狀態（存活於重啟之間）
-    - fal.ai：呼叫 fal_check_status
+    LTX-2.3 背景任務：從 Redis 讀取 job 狀態（存活於重啟之間）
     """
-    from app.services.video_v3.fal_service import check_scene_status as fal_check_status
     import httpx
     import os
     
@@ -784,7 +693,7 @@ async def check_clips(
                         "request_id": rid,
                         "status": vinfo.get("status", "pending"),
                         "video_url": vinfo.get("video_url"),
-                        "model": vinfo.get("model", "ltx-2"),
+                        "model": vinfo.get("model", "ltx-2.3"),
                         "error": vinfo.get("error"),
                     })
                 else:
@@ -793,38 +702,26 @@ async def check_clips(
                         "request_id": rid,
                         "status": "pending",
                         "video_url": None,
-                        "model": "ltx-2",
+                        "model": "ltx-2.3",
                         "error": "Seq Job Not Found"
                     })
                 continue
             
             try:
-                if "fal" in model.lower():
-                    status = await fal_check_status(rid, model)
-                    statuses.append(status)
-                elif "ltx" in model.lower():
-                    # 向 Modal 請求擷取狀態
-                    try:
-                        resp = await client.get(f"{LTX_INFERENCE_URL}/v1/status/{rid}")
-                        if resp.status_code == 200:
-                            data = resp.json()
-                            status_val = data.get("status", "pending")
-                            
-                            statuses.append({
-                                "request_id": rid,
-                                "status": status_val,
-                                "video_url": data.get("video_url"),
-                                "model": model,
-                            })
-                        else:
-                            statuses.append({"request_id": rid, "status": "pending", "video_url": None, "model": model})
-                    except Exception as e:
-                        logger.warning(f"LTX Poll Error for {rid}: {e}")
-                        statuses.append({"request_id": rid, "status": "pending", "video_url": None, "model": model})
+                resp = await client.get(f"{LTX_INFERENCE_URL}/v1/status/{rid}")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    statuses.append({
+                        "request_id": rid,
+                        "status": data.get("status", "pending"),
+                        "video_url": data.get("video_url"),
+                        "model": model or "ltx-2.3",
+                    })
                 else:
-                    statuses.append({"request_id": rid, "status": "pending", "video_url": None})
+                    statuses.append({"request_id": rid, "status": "pending", "video_url": None, "model": model or "ltx-2.3"})
             except Exception as e:
-                statuses.append({"request_id": rid, "status": "error", "error": str(e)})
+                logger.warning(f"LTX Poll Error for {rid}: {e}")
+                statuses.append({"request_id": rid, "status": "pending", "video_url": None, "model": model or "ltx-2.3"})
 
     # 更新歷史紀錄
     try:
@@ -1196,7 +1093,7 @@ async def warmup_ltx_inference(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Warm-up the LTX-2 Cloud Run GPU inference service.
+    Warm-up the LTX-2.3 Modal GPU inference service.
 
     Called by the frontend when the user starts typing a prompt,
     giving the L4 GPU 20-30 seconds to load models before the real request arrives.
@@ -1556,7 +1453,7 @@ async def _run_sequential_scenes(
 
         try:
             # 更新狀態為 processing
-            _set_ltx_job(v_job_id, {"status": "processing", "video_url": None, "model": "ltx-2"})
+            _set_ltx_job(v_job_id, {"status": "processing", "video_url": None, "model": "ltx-2.3"})
             
             # 建立真正的 LTX 生成任務
             from app.services.video_v3.ltx_service import generate_scene_clip
@@ -1622,7 +1519,7 @@ async def _run_sequential_scenes(
                 _set_ltx_job(v_job_id, {
                     "status": "completed",
                     "video_url": success_url,
-                    "model": "ltx-2"
+                    "model": "ltx-2.3"
                 })
                 previous_video_url = success_url
                 logger.info(f"[V3 Seq] Scene {i} success: {success_url}")
@@ -1634,7 +1531,7 @@ async def _run_sequential_scenes(
             _set_ltx_job(v_job_id, {
                 "status": "error",
                 "video_url": None,
-                "model": "ltx-2",
+                "model": "ltx-2.3",
                 "error": str(e)
             })
             # 如果一段失敗，後面可能無法連貫，可以選擇繼續 (用原圖) 或 中斷。

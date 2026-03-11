@@ -332,8 +332,12 @@ class FeatureCode(str, Enum):
     VEO_VIDEO_15S = "veo_video_15s"
     VEO_VIDEO_30S = "veo_video_30s"
     
-    # GPU 影片生成（LTX-2, EchoMimic, GPT-SoVITS）
-    V3_LTX_VIDEO = "v3_ltx_video"                # LTX-2 文字/圖片生成影片
+    # GPU 影片生成（LTX-2.3, EchoMimic, GPT-SoVITS）
+    V3_LTX_VIDEO = "v3_ltx_video"                # LTX-2.3 文字/圖片生成影片 (通用)
+    V3_LTX_FAST = "v3_ltx_fast"                  # LTX-2.3 Fast (Distilled 8步) 480p/720p
+    V3_LTX_FAST_1080P = "v3_ltx_fast_1080p"      # LTX-2.3 Fast 1080p
+    V3_LTX_PRO = "v3_ltx_pro"                    # LTX-2.3 Pro (Dev 40步) 480p/720p
+    V3_LTX_PRO_1080P = "v3_ltx_pro_1080p"        # LTX-2.3 Pro 1080p
     V3_ECHOMIMIC = "v3_echomimic"                # EchoMimic 數字人口播
     V3_TTS = "v3_tts"                            # OpenAI TTS 語音合成
     V3_VOICE_CLONE = "v3_voice_clone"            # GPT-SoVITS 聲音克隆
@@ -385,8 +389,14 @@ DEFAULT_PRICING: Dict[str, int] = {
     FeatureCode.VEO_VIDEO_30S: 400,
     
     # GPU 影片生成（1點 = NT$1，成本分析基準）
-    # LTX-2: GPU成本$0.008 ≈ NT$0.26/次 → 定價10點(NT$10) 毛利率~38x
-    FeatureCode.V3_LTX_VIDEO: 10,
+    # LTX-2.3 A100-80GB: $3.5/hr
+    # Fast (8步 ~2min): GPU成本 ~$0.12/clip ≈ NT$3.8 → 毛利率 3-5x
+    # Pro  (40步 ~8min): GPU成本 ~$0.47/clip ≈ NT$15  → 毛利率 2-4x
+    FeatureCode.V3_LTX_VIDEO: 10,                # 通用/向後相容
+    FeatureCode.V3_LTX_FAST: 10,                 # Fast 480p/720p: 10點/片段
+    FeatureCode.V3_LTX_FAST_1080P: 20,           # Fast 1080p: 20點/片段
+    FeatureCode.V3_LTX_PRO: 35,                  # Pro 480p/720p: 35點/片段
+    FeatureCode.V3_LTX_PRO_1080P: 60,            # Pro 1080p: 60點/片段
     # EchoMimic: GPU成本$0.003 ≈ NT$0.10/次 → 定價5點(NT$5) 毛利率~50x
     FeatureCode.V3_ECHOMIMIC: 5,
     # OpenAI TTS: 成本$0.001 ≈ NT$0.03/次 → 定價1點(NT$1) 毛利率~33x

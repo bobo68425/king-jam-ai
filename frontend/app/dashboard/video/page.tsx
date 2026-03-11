@@ -418,7 +418,7 @@ export default function VideoPage() {
   const [activeVersion, setActiveVersion] = useState<"2.0" | "3.0">("2.0");
 
   // v3.0 引擎狀態
-  const [v3Mode, setV3Mode] = useState<"t2v" | "i2v" | "s2v" | "sadtalker">("t2v");
+  const [v3Mode, setV3Mode] = useState<"t2v" | "i2v">("t2v");
 
   // 讀取/儲存 Tab 狀態到 LocalStorage
   useEffect(() => {
@@ -427,7 +427,7 @@ export default function VideoPage() {
       if (savedVersion === "2.0" || savedVersion === "3.0") setActiveVersion(savedVersion);
 
       const savedMode = localStorage.getItem("kingjam_vid_v3mode");
-      if (savedMode === "t2v" || savedMode === "i2v" || savedMode === "s2v" || savedMode === "sadtalker") setV3Mode(savedMode);
+      if (savedMode === "t2v" || savedMode === "i2v") setV3Mode(savedMode);
     }
   }, []);
 
@@ -451,6 +451,10 @@ export default function VideoPage() {
   const [v3RefImage, setV3RefImage] = useState("");
   const [v3AudioUrl, setV3AudioUrl] = useState("");
   const [v3NegPrompt, setV3NegPrompt] = useState("");
+  const [v3Quality, setV3Quality] = useState<"480p" | "720p" | "1080p">("720p");
+  const [v3ModelType, setV3ModelType] = useState<"fast" | "pro">("fast");
+  const [v3InferenceSteps, setV3InferenceSteps] = useState(8);
+  const [v3CfgScale, setV3CfgScale] = useState(1.0);
   const [v3Loading, setV3Loading] = useState(false);
   const [v3Result, setV3Result] = useState<any>(null);
   const [v3Error, setV3Error] = useState<string | null>(null);
@@ -688,7 +692,7 @@ export default function VideoPage() {
       return;
     }
     setV3VideoGenerating(true);
-    setV3VideoProgress("提交場景到 AI 影片引擎...");
+    setV3VideoProgress(`提交場景到 LTX-2.3 ${v3ModelType === "pro" ? "Pro" : "Fast"} 引擎 (${v3Quality})...`);
     setV3VideoJobs([]);
     v3CancelRef.current = false;
     setIsV3Canceling(false);
@@ -697,11 +701,14 @@ export default function VideoPage() {
       const clipRes = await api.post("/video/v3/api/generate-clips", {
         scenes: v3Scenes,
         aspect_ratio: v3AspectRatio,
-        model_preference: v3Mode === "sadtalker" ? "sadtalker" : "auto",
+        model_preference: v3ModelType === "pro" ? "ltx-2.3-pro" : "auto",
+        quality: v3Quality,
       });
       const jobs = clipRes.data.jobs || [];
       setV3VideoJobs(jobs);
-      toast.success(`🎬 ${clipRes.data.submitted} 個場景已提交到 AI 影片引擎`);
+      const totalCost = clipRes.data.total_cost || 0;
+      const costPerClip = clipRes.data.cost_per_clip || 0;
+      toast.success(`🎬 ${clipRes.data.submitted} 個場景已提交 · 扣除 ${totalCost} 點 (${costPerClip}點/片段) · ${clipRes.data.engine || "LTX-2.3"} · ${v3Quality}`);
 
       const validJobs = jobs.filter((j: any) => j.request_id);
       if (validJobs.length === 0) {
@@ -790,9 +797,11 @@ export default function VideoPage() {
                       project_id: "v3_clips",
                       title: sceneDetail?.narration ? `場景片段: ${sceneDetail.narration.substring(0, 15)}...` : "AI 影片片段",
                       prompt: sceneDetail?.visualPrompt || "AI 影片片段",
-                      model: "LTX-2 (A100)",
+                      model: `LTX-2.3 ${v3ModelType === "pro" ? "Pro" : "Fast"} (A100-80GB)`,
                       aspect_ratio: v3AspectRatio,
-                      duration: "5"
+                      quality: v3Quality,
+                      duration: "5",
+                      cost_per_clip: costPerClip
                     },
                     output_data: {
                       caption: sceneDetail?.narration || "AI 影片片段",
@@ -800,7 +809,7 @@ export default function VideoPage() {
                       title: sceneDetail?.narration ? `場景片段: ${sceneDetail.narration.substring(0, 15)}...` : "AI 影片片段"
                     },
                     media_cloud_url: clip.video_url,
-                    credits_used: 5
+                    credits_used: costPerClip || 10
                   });
                 } catch (e) {
                   console.error("保存片段紀錄失敗", e);
@@ -2225,8 +2234,8 @@ export default function VideoPage() {
               >
                 <Zap className="w-3.5 h-3.5" />
                 v3.0 引擎
-                <span className="flex h-5 items-center rounded-full bg-cyan-400/20 px-2 text-[10px] font-semibold text-cyan-300">
-                  開發中
+                <span className="flex h-5 items-center rounded-full bg-emerald-400/20 px-2 text-[10px] font-semibold text-emerald-300">
+                  LTX-2.3
                 </span>
               </button>
             </div>
@@ -2245,12 +2254,12 @@ export default function VideoPage() {
             ) : (
               <>
                 <h1 className="text-5xl md:text-6xl font-light text-white mb-4 tracking-tight">
-                  Next-Gen
+                  LTX-2.3
                   <span className="bg-gradient-to-r from-cyan-400 via-blue-400 to-violet-400 bg-clip-text text-transparent"> AI Video </span>
                   Engine
                 </h1>
                 <p className="text-lg text-slate-400 max-w-xl mx-auto">
-                  全新 3.0 引擎，更強大的 AI 影片生成體驗
+                  22B DiT 模型 · 原生 1080p · 同步音視訊 · 最長 20 秒
                 </p>
               </>
             )}
@@ -4108,23 +4117,23 @@ export default function VideoPage() {
               <div className="flex items-center justify-between mb-2">
                 <h2 className="text-2xl font-bold text-white flex items-center">
                   <Zap className="w-6 h-6 mr-3 text-cyan-400" />
-                  v3.0 引擎 <span className="ml-3 px-2.5 py-1 rounded-full bg-cyan-500/20 text-cyan-400 text-xs font-medium">BETA</span>
+                  LTX-2.3 引擎
+                  <span className="ml-3 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-medium">22B DiT</span>
+                  <span className="ml-1.5 px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-400 text-[10px] font-medium">A100-80GB</span>
                 </h2>
                 <Button variant="ghost" size="sm" onClick={() => setActiveVersion("2.0")} className="text-slate-400 hover:text-white">
                   返回 2.0
                 </Button>
               </div>
               <p className="text-slate-400 text-sm">
-                全新架構：支援 T2V / I2V / S2V 多模式生成、專業級運鏡與 AI 配音。
+                Lightricks LTX-2.3 · 原生 1080p 直式影片 · 同步音視訊 · Distilled 8 步快速推論
               </p>
 
               {/* === 生成模式 Tabs === */}
               <div className="flex bg-slate-800/80 rounded-xl p-1 gap-1">
                 {([
                   { id: "t2v", label: "文字生成", icon: "✍️", desc: "Text to Video" },
-                  { id: "i2v", label: "圖片生成", icon: "🖼️", desc: "Image to Video" },
-                  { id: "s2v", label: "語音驅動", icon: "🎤", desc: "Speech to Video" },
-                  { id: "sadtalker", label: "數字人播報", icon: "👤", desc: "Digital Avatar" },
+                  { id: "i2v", label: "圖片動態", icon: "🖼️", desc: "Image to Video" },
                 ] as const).map(tab => (
                   <button
                     key={tab.id}
@@ -4145,20 +4154,20 @@ export default function VideoPage() {
                 {/* Prompt 區 */}
                 <div>
                   <label className="text-xs text-slate-400 block mb-1.5">
-                    {v3Mode === "t2v" ? "🎬 影片描述 (Prompt)" : v3Mode === "i2v" ? "🎬 動態描述" : v3Mode === "sadtalker" ? "🎬 播報講稿 (可選)" : "🎬 畫面描述"}
+                    {v3Mode === "t2v" ? "🎬 影片描述 (Prompt)" : "🎬 動態描述"}
                   </label>
                   <textarea
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-cyan-500 transition-colors resize-none h-20"
-                    placeholder={v3Mode === "t2v" ? "描述你想要的影片內容、風格、氛圍..." : v3Mode === "i2v" ? "描述圖片要如何動起來..." : v3Mode === "sadtalker" ? "在此輸入播報講稿，將用於生成字幕..." : "描述人物在語音驅動下的畫面..."}
+                    placeholder={v3Mode === "t2v" ? "描述你想要的影片內容、風格、氛圍..." : "描述圖片要如何動起來，例如：鏡頭緩慢推進，人物微笑轉頭..."}
                     value={v3Prompt}
                     onChange={(e) => setV3Prompt(e.target.value)}
                   />
                 </div>
 
-                {/* I2V 與 SadTalker 模式：參考圖片上傳 */}
-                {(v3Mode === "i2v" || v3Mode === "sadtalker") && (
+                {/* I2V 模式：參考圖片上傳 */}
+                {v3Mode === "i2v" && (
                   <div>
-                    <label className="text-xs text-slate-400 block mb-1.5">🖼️ 參考圖片 (Avatar 臉部來源)</label>
+                    <label className="text-xs text-slate-400 block mb-1.5">🖼️ 參考圖片 (動態化來源)</label>
                     {v3RefImage ? (
                       <div className="relative bg-slate-900 border border-slate-700 rounded-xl p-2">
                         <img src={v3RefImage.startsWith("/") ? `${process.env.NEXT_PUBLIC_API_URL || "https://api.kingjam.app"}${v3RefImage}` : v3RefImage} alt="參考圖" className="w-full h-32 object-contain rounded-lg bg-black" />
@@ -4199,117 +4208,136 @@ export default function VideoPage() {
                   </div>
                 )}
 
-                {/* S2V 與 SadTalker 模式：語音上傳 */}
-                {(v3Mode === "s2v" || v3Mode === "sadtalker") && (
-                  <div>
-                    <label className="text-xs text-slate-400 block mb-1.5">🎤 語音 / 音頻檔案 (驅動口型用)</label>
-                    {v3AudioUrl ? (
-                      <div className="bg-slate-900 border border-slate-700 rounded-xl p-3 flex items-center gap-3">
-                        <div className="w-10 h-10 bg-cyan-500/20 rounded-lg flex items-center justify-center">
-                          <Mic className="w-5 h-5 text-cyan-400" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-white text-sm truncate">已上傳音頻</p>
-                          <p className="text-[10px] text-emerald-400">✅ 準備就緒</p>
-                        </div>
-                        <button
-                          onClick={() => setV3AudioUrl("")}
-                          className="text-slate-500 hover:text-red-400 p-1"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ) : (
-                      <label className="flex flex-col items-center justify-center w-full h-28 bg-slate-900 border-2 border-dashed border-slate-700 hover:border-cyan-500/50 rounded-xl cursor-pointer transition-colors">
-                        <Mic className="w-5 h-5 text-slate-500 mb-1" />
-                        <span className="text-xs text-slate-500">點擊或拖放音頻上傳</span>
-                        <span className="text-[10px] text-slate-600 mt-0.5">MP3 / WAV / OGG / M4A</span>
-                        <input
-                          type="file"
-                          accept="audio/mpeg,audio/mp3,audio/wav,audio/ogg,audio/m4a,audio/x-m4a,audio/mp4"
-                          className="hidden"
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            const formData = new FormData();
-                            formData.append("file", file);
-                            try {
-                              toast.loading("上傳中...", { id: "v3uploadA" });
-                              const res = await api.post("/upload/media", formData, { headers: { "Content-Type": "multipart/form-data" } });
-                              setV3AudioUrl(res.data.url);
-                              toast.success("音頻上傳成功！", { id: "v3uploadA" });
-                            } catch (err: any) {
-                              toast.error(`上傳失敗: ${err?.response?.data?.detail || err.message}`, { id: "v3uploadA" });
-                            }
-                          }}
-                        />
-                      </label>
-                    )}
-                    <p className="text-[10px] text-slate-600 mt-1">AI 將根據音訊驅動角色口型與表情</p>
-                  </div>
-                )}
 
-                {/* 比例 + 時長 + 場景數 */}
-                <div className="grid grid-cols-3 gap-3">
+                {/* === 模型選擇 (Fast / Pro) === */}
+                <div>
+                  <label className="text-xs text-slate-400 block mb-1.5">⚡ 模型模式</label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { setV3ModelType("fast"); setV3InferenceSteps(8); setV3CfgScale(1.0); }}
+                      className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-medium transition-all border ${v3ModelType === "fast"
+                        ? "bg-cyan-500/20 text-cyan-400 border-cyan-500/30 shadow-sm shadow-cyan-500/10"
+                        : "bg-slate-900 text-slate-500 border-slate-700 hover:text-slate-300"
+                      }`}
+                    >
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="text-sm">⚡ Fast</span>
+                        <span className="text-[10px] opacity-70">Distilled · 8步 · CFG=1</span>
+                        <span className="text-[9px] opacity-50">~2 分鐘生成</span>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => { setV3ModelType("pro"); setV3InferenceSteps(40); setV3CfgScale(4.0); }}
+                      className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-medium transition-all border ${v3ModelType === "pro"
+                        ? "bg-violet-500/20 text-violet-400 border-violet-500/30 shadow-sm shadow-violet-500/10"
+                        : "bg-slate-900 text-slate-500 border-slate-700 hover:text-slate-300"
+                      }`}
+                    >
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="text-sm">✨ Pro</span>
+                        <span className="text-[10px] opacity-70">Dev · 40步 · CFG=4</span>
+                        <span className="text-[9px] opacity-50">~8 分鐘 · 最高品質</span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* === 比例 + 品質 === */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-slate-400 block mb-1.5">📐 比例</label>
+                    <div className="flex gap-1">
+                      {(["9:16", "16:9", "1:1"] as const).map(r => {
+                        const resMap: Record<string, Record<string, string>> = {
+                          "9:16": { "480p": "544×960", "720p": "768×1360", "1080p": "1088×1920" },
+                          "16:9": { "480p": "960×544", "720p": "1360×768", "1080p": "1920×1088" },
+                          "1:1":  { "480p": "768×768", "720p": "1024×1024", "1080p": "1408×1408" },
+                        };
+                        return (
+                          <button
+                            key={r}
+                            onClick={() => setV3AspectRatio(r)}
+                            className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${v3AspectRatio === r
+                                ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
+                                : "bg-slate-900 text-slate-500 border border-slate-700 hover:text-slate-300"
+                              }`}
+                          >
+                            <div className="flex flex-col items-center leading-tight">
+                              <span className="text-[9px] opacity-60 mb-0.5">
+                                {resMap[r]?.[v3Quality] || ""}
+                              </span>
+                              <span>
+                                {r === "9:16" ? "竪屏" : r === "16:9" ? "橫屏" : "方形"}
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                   <div>
                     <label className="text-xs text-slate-400 block mb-1.5">
-                      📐 比例
-                      {v3Mode === "sadtalker" && <span className="text-cyan-400 ml-1 text-[10px]">(源自圖片)</span>}
+                      🎯 品質
+                      <span className="text-cyan-400 ml-1 text-[10px]">{v3Quality}</span>
                     </label>
                     <div className="flex gap-1">
-                      {(["9:16", "16:9", "1:1"] as const).map(r => (
+                      {(["480p", "720p", "1080p"] as const).map(q => (
                         <button
-                          key={r}
-                          onClick={() => setV3AspectRatio(r)}
-                          disabled={v3Mode === "sadtalker"}
-                          className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${v3Mode === "sadtalker"
-                            ? "bg-slate-800 text-slate-600 cursor-not-allowed border border-slate-700/50"
-                            : v3AspectRatio === r
-                              ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
-                              : "bg-slate-900 text-slate-500 border border-slate-700 hover:text-slate-300"
-                            }`}
+                          key={q}
+                          onClick={() => setV3Quality(q)}
+                          className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all border ${v3Quality === q
+                            ? q === "1080p"
+                              ? "bg-violet-500/20 text-violet-400 border-violet-500/30"
+                              : "bg-cyan-500/20 text-cyan-400 border-cyan-500/30"
+                            : "bg-slate-900 text-slate-500 border-slate-700 hover:text-slate-300"
+                          }`}
                         >
                           <div className="flex flex-col items-center leading-tight">
-                            <span className="text-[9px] opacity-60 mb-0.5">
-                              {r === "9:16" ? "720x1280" : r === "16:9" ? "1280x720" : "720x720"}
-                            </span>
-                            <span>
-                              {r === "9:16" ? "竪屏" : r === "16:9" ? "橫屏" : "方形"}
+                            <span>{q}</span>
+                            <span className="text-[9px] opacity-50">
+                              {q === "480p" ? "快速" : q === "720p" ? "標準" : "高清"}
                             </span>
                           </div>
                         </button>
                       ))}
                     </div>
                   </div>
+                </div>
+
+                {/* === 時長 + 場景數 === */}
+                <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs text-slate-400 block mb-1.5">
                       ⏱️ 時長
-                      <span className="text-cyan-400 ml-1">
-                        {v3Mode === "sadtalker" ? "依語音長度決定" : `${v3Duration}s`}
-                      </span>
+                      <span className="text-cyan-400 ml-1">{v3Duration}s</span>
                     </label>
                     <input
                       type="range" min={10} max={120} step={5}
                       value={v3Duration}
                       onChange={e => setV3Duration(Number(e.target.value))}
-                      disabled={v3Mode === "sadtalker"}
-                      className={`w-full h-1.5 rounded-lg appearance-none outline-none ${v3Mode === "sadtalker" ? "bg-slate-800 cursor-not-allowed" : "bg-slate-700 cursor-pointer accent-cyan-500"}`}
+                      className="w-full h-1.5 rounded-lg appearance-none outline-none bg-slate-700 cursor-pointer accent-cyan-500"
                     />
+                    <div className="flex justify-between text-[9px] text-slate-600 mt-0.5">
+                      <span>10s</span>
+                      <span className="text-cyan-500/60">每場景最長 20s</span>
+                      <span>120s</span>
+                    </div>
                   </div>
                   <div>
                     <label className="text-xs text-slate-400 block mb-1.5">
                       🎞️ 場景
-                      <span className="text-cyan-400 ml-1">
-                        {v3Mode === "sadtalker" ? "固定 1 鏡到底" : v3ScenesCount}
-                      </span>
+                      <span className="text-cyan-400 ml-1">{v3ScenesCount}</span>
                     </label>
                     <input
                       type="range" min={2} max={8} step={1}
-                      value={v3Mode === "sadtalker" ? 1 : v3ScenesCount}
+                      value={v3ScenesCount}
                       onChange={e => setV3ScenesCount(Number(e.target.value))}
-                      disabled={v3Mode === "sadtalker"}
-                      className={`w-full h-1.5 rounded-lg appearance-none outline-none ${v3Mode === "sadtalker" ? "bg-slate-800 cursor-not-allowed" : "bg-slate-700 cursor-pointer accent-cyan-500"}`}
+                      className="w-full h-1.5 rounded-lg appearance-none outline-none bg-slate-700 cursor-pointer accent-cyan-500"
                     />
+                    <div className="flex justify-between text-[9px] text-slate-600 mt-0.5">
+                      <span>2</span>
+                      <span>8</span>
+                    </div>
                   </div>
                 </div>
 
@@ -4371,6 +4399,42 @@ export default function VideoPage() {
                         value={v3NegPrompt}
                         onChange={e => setV3NegPrompt(e.target.value)}
                       />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs text-slate-400 block mb-1">
+                          🔄 推論步數 <span className="text-cyan-400">{v3InferenceSteps}</span>
+                        </label>
+                        <input
+                          type="range" min={4} max={50} step={1}
+                          value={v3InferenceSteps}
+                          onChange={e => setV3InferenceSteps(Number(e.target.value))}
+                          className="w-full h-1.5 rounded-lg appearance-none bg-slate-700 cursor-pointer accent-cyan-500 outline-none"
+                        />
+                        <div className="flex justify-between text-[9px] text-slate-600 mt-0.5">
+                          <span>4 (快)</span>
+                          <span>50 (慢/精)</span>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs text-slate-400 block mb-1">
+                          🎛️ CFG Scale <span className="text-cyan-400">{v3CfgScale}</span>
+                        </label>
+                        <input
+                          type="range" min={1} max={7} step={0.5}
+                          value={v3CfgScale}
+                          onChange={e => setV3CfgScale(Number(e.target.value))}
+                          className="w-full h-1.5 rounded-lg appearance-none bg-slate-700 cursor-pointer accent-cyan-500 outline-none"
+                        />
+                        <div className="flex justify-between text-[9px] text-slate-600 mt-0.5">
+                          <span>1.0 (自由)</span>
+                          <span>7.0 (嚴格)</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-slate-800/50 rounded-lg p-2 text-[10px] text-slate-500 flex items-start gap-1.5">
+                      <span className="text-cyan-400 mt-0.5">💡</span>
+                      <span>Fast 模式 (Distilled) 建議: 步數 8, CFG 1.0 · Pro 模式 (Dev) 建議: 步數 40, CFG 4.0 · 長寬必須為 32 的倍數 · 幀數 = 8n+1</span>
                     </div>
                   </div>
                 )}
@@ -4601,13 +4665,42 @@ export default function VideoPage() {
                         </Button>
                       </div>
                     ) : (
-                      <Button
-                        className="w-full bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 rounded-xl py-5 font-medium disabled:opacity-50 mt-2"
-                        onClick={handleV3GenerateClips}
-                        disabled={v3Scenes.length === 0}
-                      >
-                        <ArrowRight className="w-4 h-4 mr-2" /> 第 2 步：生成 AI 影片素材
-                      </Button>
+                      <>
+                        {v3Scenes.length > 0 && (
+                          <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-3 mt-2 space-y-1.5">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-slate-400">預估扣點</span>
+                              <span className="text-amber-400 font-bold text-sm">
+                                {(() => {
+                                  const costMap: Record<string, Record<string, number>> = {
+                                    fast: { "480p": 10, "720p": 10, "1080p": 20 },
+                                    pro:  { "480p": 35, "720p": 35, "1080p": 60 },
+                                  };
+                                  const perClip = costMap[v3ModelType]?.[v3Quality] || 10;
+                                  return `${perClip * v3Scenes.length} 點`;
+                                })()}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between text-[10px] text-slate-500">
+                              <span>{v3Scenes.length} 片段 × {(() => {
+                                const costMap: Record<string, Record<string, number>> = {
+                                  fast: { "480p": 10, "720p": 10, "1080p": 20 },
+                                  pro:  { "480p": 35, "720p": 35, "1080p": 60 },
+                                };
+                                return costMap[v3ModelType]?.[v3Quality] || 10;
+                              })()} 點/片段</span>
+                              <span>{v3ModelType === "pro" ? "Pro" : "Fast"} · {v3Quality}</span>
+                            </div>
+                          </div>
+                        )}
+                        <Button
+                          className="w-full bg-gradient-to-r from-slate-800 to-slate-700 hover:from-slate-700 hover:to-slate-600 text-white border border-slate-600 rounded-xl py-5 font-medium disabled:opacity-50 mt-2 shadow-lg"
+                          onClick={handleV3GenerateClips}
+                          disabled={v3Scenes.length === 0}
+                        >
+                          <ArrowRight className="w-4 h-4 mr-2" /> 第 2 步：LTX-2.3 生成 AI 影片 ({v3Quality})
+                        </Button>
+                      </>
                     )}
 
                     {/* 合成最終影片按鈕 */}
@@ -4732,10 +4825,10 @@ export default function VideoPage() {
                         </div>
 
                         <span className="text-sm font-semibold text-white tracking-[0.2em] uppercase opacity-90 drop-shadow-md">
-                          {v3Synthesizing ? "Synthesizing" : v3VideoGenerating ? "Generating" : "Preview Area"}
+                          {v3Synthesizing ? "Synthesizing" : v3VideoGenerating ? "LTX-2.3 Generating" : "Preview Area"}
                         </span>
                         <span className="text-xs text-slate-400 mt-3 bg-black/50 backdrop-blur-sm px-4 py-1.5 rounded-full border border-white/5 font-medium tracking-wide">
-                          {v3Synthesizing ? "Rendering final composition..." : v3VideoGenerating ? "AI is rendering your scenes..." : "Video will appear here"}
+                          {v3Synthesizing ? "Rendering final composition..." : v3VideoGenerating ? `LTX-2.3 ${v3ModelType === "pro" ? "Pro" : "Fast"} · ${v3Quality} rendering...` : "Video will appear here"}
                         </span>
                       </div>
 

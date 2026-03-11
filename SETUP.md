@@ -252,8 +252,8 @@ gcloud run services logs read kingjam-frontend --region=asia-east1 --limit=50
 | `GOOGLE_CLIENT_ID` | Google OAuth Client ID | `xxx.apps.googleusercontent.com` |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth Client Secret | `GOCSPX-...` |
 | `REPLICATE_API_TOKEN` | Replicate (Kling AI) API | `r8_...` |
-| `FAL_KEY` | fal.ai API 金鑰 | `...` |
-| `LTX_INFERENCE_URL` | 自建 LTX-2 Inference Server 網址 | `https://ltx-inference-xxx.a.run.app` |
+| `FAL_KEY` | ~~fal.ai API 金鑰 (已停用)~~ | - |
+| `LTX_INFERENCE_URL` | 自建 LTX-2.3 Inference Server 網址 (Modal) | `https://bobo68425--kingjam-ltx-video-api.modal.run` |
 | `R2_ENDPOINT_URL` | Cloudflare R2 端點 | `https://xxx.r2.cloudflarestorage.com` |
 | `R2_ACCESS_KEY_ID` | R2 存取金鑰 ID | - |
 | `R2_SECRET_ACCESS_KEY` | R2 存取金鑰 | - |

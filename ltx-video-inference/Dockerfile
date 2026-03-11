@@ -1,59 +1,57 @@
 # =============================================================================
-# King Jam AI - LTX Inference (TensorRT + CUDA 12.4 Optimized for L4 GPU)
+# King Jam AI - LTX-2.3 Inference Server (CUDA 12.8 + Python 3.12)
 # =============================================================================
-# Base: PyTorch + CUDA 12.4 + cuDNN 9 (Ada Lovelace / Compute Capability 8.9)
-# TensorRT Python bindings are installed via pip (no need for the heavy NGC image)
-# GCS volume mount is handled by Cloud Run --add-volume (no gcsfuse needed in image)
+# LTX-2.3 需求:
+#   - Python >= 3.12
+#   - CUDA >= 12.7 (使用 12.8)
+#   - PyTorch >= 2.7
+#   - A100-80GB GPU (22B 模型)
+#
+# 模型權重由 GCS / Modal Volume 外部掛載，不包含在映像中
 # =============================================================================
-FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+FROM nvidia/cuda:12.8.0-runtime-ubuntu22.04
 
 ENV PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
     PIP_ROOT_USER_ACTION=ignore \
-    # L4 GPU (Ada Lovelace) — Compute Capability 8.9
-    TORCH_CUDA_ARCH_LIST="8.9" \
-    # Tell diffusers/xformers to use the CUDA path
     LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 
 WORKDIR /app
 
-# ── System dependencies ────────────────────────────────────────────────────────
-# ffmpeg: required for video encoding via imageio/imageio-ffmpeg
-# libsm6/libxext6: required by OpenCV (used by diffusers image utils)
-# google-cloud-sdk: provides gsutil for video upload to GCS
+# ── System dependencies ──
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.12 \
+    python3.12-venv \
+    python3.12-dev \
+    python3-pip \
     ffmpeg \
     libsm6 \
     libxext6 \
     curl \
+    git \
     gnupg \
     && curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg \
     && echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
     > /etc/apt/sources.list.d/google-cloud-sdk.list \
     && apt-get update && apt-get install -y --no-install-recommends google-cloud-cli \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1 \
+    && update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1
 
-# ── Python dependencies ────────────────────────────────────────────────────────
+# ── Python dependencies ──
 COPY requirements.txt .
 
-# Install TensorRT Python bindings first (compatible with CUDA 12.4)
-# Then install the rest of the project dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt && \
-    # Install TensorRT Python bindings AFTER other deps (avoid resolver conflicts)
-    pip install --no-cache-dir --no-deps \
-    tensorrt==10.3.0 \
-    tensorrt-cu12-bindings==10.3.0 \
-    tensorrt-cu12-libs==10.3.0
+    pip install --no-cache-dir torch>=2.7.0 --index-url https://download.pytorch.org/whl/cu128 && \
+    pip install --no-cache-dir -r requirements.txt
 
-# ── Application code ───────────────────────────────────────────────────────────
-# NOTE: Model weights are NOT baked into this image.
-# They are mounted from GCS at runtime via Cloud Run volume:
-#   --add-volume name=ltx-models,type=cloud-storage,bucket=kingjam-media \
-#   --add-volume-mount volume=ltx-models,mount-path=/models
+# ── Install LTX-2.3 official packages ──
+RUN git clone --depth 1 https://github.com/Lightricks/LTX-2.git /opt/ltx2 && \
+    cd /opt/ltx2 && pip install --no-cache-dir packages/ltx-core packages/ltx-pipelines
+
+# ── Application code ──
 COPY . .
 
 EXPOSE 8080
 
-# uvicorn with 1 worker (GPU inference must be single-process)
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1", "--timeout-keep-alive", "900"]
