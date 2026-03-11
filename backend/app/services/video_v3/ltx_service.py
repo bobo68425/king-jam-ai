@@ -1,15 +1,18 @@
 """
-LTX-2 影片片段生成服務 (非阻塞模式)
+LTX-2.3 影片片段生成服務 (非阻塞模式)
 =================================================
-LTX Cloud Run 端點 (新架構):
+LTX-2.3 Modal 端點:
   POST {LTX_INFERENCE_URL}/v1/text-to-video   → 立即回傳 { task_id, status: "processing" }
   POST {LTX_INFERENCE_URL}/v1/image-to-video  → 立即回傳 { task_id, status: "processing" }
   GET  {LTX_INFERENCE_URL}/v1/status/{task_id} → 輪詢結果 { status, video_url }
 
-呼叫流程:
-  1. POST → 取得 task_id
-  2. 輪詢 /v1/status 直到 status=completed 或 error
-  3. 回傳 { request_id, model, status: "completed", video_url }
+LTX-2.3 升級重點 (相較 LTX-Video v1):
+  - 22B 參數 DiT + Spatiotemporal Attention
+  - 原生 1080p (最高 4K), 原生直式影片 (1080x1920)
+  - Distilled 模型: 8 步推論, CFG=1
+  - 同步音視訊生成
+  - 更強的提示詞遵循 (4x 大 text connector)
+  - 最長 20 秒
 """
 
 import os
@@ -26,23 +29,44 @@ LTX_INFERENCE_URL = os.getenv("LTX_INFERENCE_URL", "http://localhost:8080")
 if "run.app" in LTX_INFERENCE_URL:
     LTX_INFERENCE_URL = "https://bobo68425--kingjam-ltx-video-api.modal.run"
 
-# 單次 status poll 的 timeout（秒）
 LTX_POLL_TIMEOUT = int(os.getenv("LTX_POLL_TIMEOUT", "10"))
-# 最長等待生成完成的時間（秒）: cold start (30s) + model load (3min) + generation (5min)
+# 冷啟動 (60s) + 模型載入 (5min) + 推論 (5min) = 11min, 給 15min 緩衝
 LTX_MAX_WAIT_SECONDS = int(os.getenv("LTX_MAX_WAIT_SECONDS", "900"))
-LTX_POLL_INTERVAL = int(os.getenv("LTX_POLL_INTERVAL", "10"))  # poll 間隔（秒）
+LTX_POLL_INTERVAL = int(os.getenv("LTX_POLL_INTERVAL", "10"))
+
+# LTX-2.3 支援的解析度 (寬x高, 必須為 32 的倍數)
+RESOLUTION_MAP = {
+    # 直式 (Portrait 9:16)
+    "9:16": {
+        "480p":  "544x960",
+        "720p":  "768x1360",
+        "1080p": "1088x1920",
+    },
+    # 橫式 (Landscape 16:9)
+    "16:9": {
+        "480p":  "960x544",
+        "720p":  "1360x768",
+        "1080p": "1920x1088",
+    },
+    # 正方 (Square 1:1)
+    "1:1": {
+        "480p":  "768x768",
+        "720p":  "1024x1024",
+        "1080p": "1408x1408",
+    },
+}
+
+# 預設品質等級
+DEFAULT_QUALITY = "720p"
 
 
-def _resolve_resolution(aspect_ratio: str) -> str:
-    # 降低解析度以大幅縮短生成時間 (約 2-3 分鐘 -> 1 分鐘)
-    # 如需更高畫質，可調整為 480x854 / 854x480 / 768x768
-    # LTX 要求長寬必須是 32 的倍數
-    mapping = {
-        "9:16": "480x864", # 原生解析度 (後續透過 Upscaler 放大至 720p+)
-        "16:9": "864x480", # 原生解析度
-        "1:1":  "768x768", # 原生解析度
-    }
-    return mapping.get(aspect_ratio, "480x864")
+def _resolve_resolution(aspect_ratio: str, quality: str = DEFAULT_QUALITY) -> str:
+    """
+    依據比例與品質等級解析 LTX-2.3 解析度。
+    LTX-2.3 原生支援 1080p, 所有值必須為 32 的倍數。
+    """
+    ar_map = RESOLUTION_MAP.get(aspect_ratio, RESOLUTION_MAP["9:16"])
+    return ar_map.get(quality, ar_map[DEFAULT_QUALITY])
 
 
 async def generate_scene_clip(
@@ -56,72 +80,73 @@ async def generate_scene_clip(
     audio_url: Optional[str] = None,
     quality_prompt: str = "",
     negative_prompt: str = "",
+    quality: str = DEFAULT_QUALITY,
 ) -> Dict[str, Any]:
     """
-    非阻塞呼叫 LTX Cloud Run 生成影片。
+    非阻塞呼叫 LTX-2.3 Modal 服務生成影片。
 
-    步驟:
-      1. POST /v1/text-to-video → 立即取得 task_id
-      2. 輪詢 GET /v1/status/{task_id} 直到完成
-      3. 回傳 { request_id, model, status, video_url }
+    LTX-2.3 模型選項:
+      - "ltx-2.3"     → Distilled 模型 (8 步, CFG=1, 快速)
+      - "ltx-2.3-pro" → Dev 模型 (40 步, CFG=4, 高品質)
     """
-    model = "ltx-2-pro" if "pro" in model_preference.lower() else "ltx-2"
-    resolution = _resolve_resolution(aspect_ratio)
+    is_pro = "pro" in model_preference.lower()
+    model = "ltx-2.3-pro" if is_pro else "ltx-2.3"
+    resolution = _resolve_resolution(aspect_ratio, quality)
     job_id = str(uuid.uuid4())
 
-    # 自動加上質量提示詞與強制寫入 Negative Prompt
     enhanced_prompt = prompt.strip()
     if quality_prompt:
         if enhanced_prompt and not enhanced_prompt.endswith(","):
             enhanced_prompt += ", "
         enhanced_prompt += quality_prompt
 
+    # LTX-2.3 distilled: 8 步, CFG=1; Pro: 40 步, CFG=4
+    num_inference_steps = 40 if is_pro else 8
+    cfg_guidance_scale = 4.0 if is_pro else 1.0
+
+    duration = min(duration, 20)
+
+    payload: Dict[str, Any] = {
+        "user_id": 1,
+        "prompt": enhanced_prompt,
+        "negative_prompt": negative_prompt or (
+            "shaky, glitchy, low quality, worst quality, deformed, distorted, "
+            "disfigured, motion smear, motion artifacts, fused fingers, "
+            "bad anatomy, weird hand, ugly, transition, static"
+        ),
+        "model": model,
+        "duration": duration,
+        "resolution": resolution,
+        "num_inference_steps": num_inference_steps,
+        "cfg_guidance_scale": cfg_guidance_scale,
+        "frame_rate": 24.0,
+    }
+
     if reference_image_url or previous_video_url:
         endpoint = f"{LTX_INFERENCE_URL}/v1/image-to-video"
-        payload: Dict[str, Any] = {
-            "user_id": 1,
-            "prompt": enhanced_prompt,
-            "negative_prompt": negative_prompt,
-            "model": model,
-            "duration": duration,
-            "resolution": resolution,
-            "image_uri": reference_image_url,
-            "previous_video_url": previous_video_url,
-        }
+        payload["image_uri"] = reference_image_url or previous_video_url
     else:
         endpoint = f"{LTX_INFERENCE_URL}/v1/text-to-video"
-        payload = {
-            "user_id": 1,
-            "prompt": enhanced_prompt,
-            "negative_prompt": negative_prompt,
-            "model": model,
-            "duration": duration,
-            "resolution": resolution,
-        }
 
-    logger.info(f"[LTX] Submitting task: job={job_id}, model={model}")
+    logger.info(f"[LTX-2.3] Submitting: job={job_id}, model={model}, res={resolution}, dur={duration}s, steps={num_inference_steps}")
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(connect=60.0, read=30.0, write=30.0, pool=5.0)) as client:
-        # ── Step 1: Submit ──────────────────────────────────────────
         resp = await client.post(endpoint, json=payload)
         if resp.status_code != 200:
-            raise ValueError(f"LTX submit error: HTTP {resp.status_code} - {resp.text[:300]}")
+            raise ValueError(f"LTX-2.3 submit error: HTTP {resp.status_code} - {resp.text[:300]}")
 
         data = resp.json()
         task_id = data.get("task_id")
 
         if not task_id:
-            # 舊版 LTX 可能直接回傳 binary MP4（相容）
             content_type = resp.headers.get("content-type", "")
             if "video" in content_type or "octet-stream" in content_type:
                 video_url = await _upload_video_bytes(resp.content, job_id)
                 return {"request_id": job_id, "model": model, "status": "completed", "video_url": video_url}
-            raise ValueError(f"LTX: no task_id in response: {data}")
+            raise ValueError(f"LTX-2.3: no task_id in response: {data}")
 
-        logger.info(f"[LTX] task_id={task_id} generated, returning immediately to allow frontend polling.")
+        logger.info(f"[LTX-2.3] task_id={task_id}, returning immediately for polling.")
 
-        # ── Step 2: Return immediately ──────────────────────────────
-        # 不在這裡 blocking poll，直接回傳 task_id, 讓 _run_ltx (或者 polling endpoint) 去處理
         return {
             "request_id": task_id,
             "model": model,
@@ -131,8 +156,7 @@ async def generate_scene_clip(
 
 
 async def _upload_video_bytes(video_data: bytes, job_id: str) -> str:
-    """(Compat) Upload binary MP4 from old-style LTX response to GCS."""
-    import asyncio
+    """(Compat) Upload binary MP4 to cloud storage."""
     import tempfile
 
     tmp_path = None
@@ -158,10 +182,7 @@ async def _upload_video_bytes(video_data: bytes, job_id: str) -> str:
 
 
 async def check_scene_status(request_id: str, model_id: str) -> Dict[str, Any]:
-    """
-    LTX 狀態查詢（相容介面）。
-    實際追蹤是在 kingjam-api 的 in-memory job store 完成。
-    """
+    """LTX-2.3 狀態查詢 (追蹤由 in-memory job store 完成)"""
     return {"request_id": request_id, "status": "pending", "video_url": None}
 
 

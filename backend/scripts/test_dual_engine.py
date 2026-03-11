@@ -1,42 +1,41 @@
 """
-測試影片隨機生成模組 v3.0 - LTX/Fal 雙引擎
+測試影片生成 v3.0 - LTX-2.3 引擎
 """
 import sys
 import os
 
-# 確保可導入 app
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import asyncio
 from app.services.video_v3.ltx_service import generate_scene_clip as ltx_generate
-from app.services.video_v3.fal_service import generate_scene_clip as fal_generate
 
-async def test_ltx():
-    print("Testing LTX-2 Engine...")
+async def test_ltx_fast():
+    print("Testing LTX-2.3 Fast Engine...")
     try:
         res = await ltx_generate(
             prompt="A majestic eagle soaring through clouds at sunset, 4k cinematic",
             duration=5,
             aspect_ratio="16:9",
-            model_preference="ltx-2"
+            model_preference="auto"
         )
-        print(f"LTX Result: {res}")
+        print(f"LTX-2.3 Fast Result: {res}")
     except Exception as e:
-        print(f"LTX Error: {e}")
+        print(f"LTX-2.3 Fast Error: {e}")
 
-async def test_fal():
-    print("Testing Fal AI Fallback Engine...")
+async def test_ltx_pro():
+    print("Testing LTX-2.3 Pro Engine...")
     try:
-        res = await fal_generate(
+        res = await ltx_generate(
             prompt="A majestic eagle soaring through clouds at sunset, 4k cinematic",
             duration=5,
             aspect_ratio="16:9",
-            model_preference="kling"
+            model_preference="ltx-2.3-pro",
+            quality="1080p"
         )
-        print(f"Fal Result: {res}")
+        print(f"LTX-2.3 Pro Result: {res}")
     except Exception as e:
-        print(f"Fal Error: {e}")
+        print(f"LTX-2.3 Pro Error: {e}")
 
 if __name__ == "__main__":
-    asyncio.run(test_ltx())
-    asyncio.run(test_fal())
+    asyncio.run(test_ltx_fast())
+    asyncio.run(test_ltx_pro())
