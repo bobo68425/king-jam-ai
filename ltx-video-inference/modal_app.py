@@ -173,8 +173,9 @@ class LTXVideoInference:
             spatial_upsampler_path=upscaler_path,
             gemma_root=GEMMA_DIR,
             distilled_lora=[
-                LoraPathStrengthAndSDOps(path=lora_path, strength=1)
+                LoraPathStrengthAndSDOps(path=lora_path, strength=1, sd_ops=None)
             ],
+            loras=[],
         )
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -206,7 +207,22 @@ class LTXVideoInference:
             actual_seed = req.seed if req.seed is not None else random.randint(0, 2147483647)
             print(f"[LTX-2.3] [{task_id}] res={width}x{height}, frames={num_frames}, steps={req.num_inference_steps}, seed={actual_seed}")
 
-            gen_kwargs = dict(
+            from ltx_core.components.guiders import MultiModalGuiderParams
+            from ltx_pipelines.utils.args import ImageConditioningInput
+
+            guider_params = MultiModalGuiderParams(
+                guidance_scale=req.cfg_guidance_scale,
+            )
+
+            images = []
+            if req.image_uri:
+                images = [ImageConditioningInput(
+                    image=req.image_uri,
+                    frame_index=0,
+                    strength=0.8,
+                )]
+
+            video_iter, audio = self.pipeline(
                 prompt=req.prompt,
                 negative_prompt=req.negative_prompt,
                 seed=actual_seed,
@@ -215,13 +231,14 @@ class LTXVideoInference:
                 num_frames=num_frames,
                 frame_rate=req.frame_rate,
                 num_inference_steps=req.num_inference_steps,
-                cfg_guidance_scale=req.cfg_guidance_scale,
+                video_guider_params=guider_params,
+                audio_guider_params=guider_params,
+                images=images,
             )
 
-            if req.image_uri:
-                gen_kwargs["images"] = [(req.image_uri, 0, 0.8)]
-
-            video, audio = self.pipeline(**gen_kwargs)
+            video = None
+            for frame_chunk in video_iter:
+                video = frame_chunk
 
             # ── 匯出為 MP4 ──
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
