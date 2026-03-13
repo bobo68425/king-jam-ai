@@ -76,6 +76,17 @@ test_endpoint "OpenAPI JSON" "$API_URL/openapi.json"
 test_endpoint_json "Payment Products" "$API_URL/payment/products" "success"
 test_endpoint_json "Credit Pricing" "$API_URL/credits/pricing" "success"
 
+# 服務引擎 Debug（Replicate = v2.0 引擎）
+printf "測試 %-40s" "Replicate (v2.0 引擎)..."
+replicate_resp=$(curl -s "$API_URL/video/v3/debug-replicate" --max-time 15 2>/dev/null || echo "{}")
+if echo "$replicate_resp" | grep -qE '"(status|error)"'; then
+    echo -e " ${GREEN}✓ PASS${NC} (端點可用)"
+    ((PASS++))
+else
+    echo -e " ${RED}✗ FAIL${NC} (404 或無效回應)"
+    ((FAIL++))
+fi
+
 echo -e "\n${YELLOW}=== 前端測試 ===${NC}\n"
 
 # 前端頁面
