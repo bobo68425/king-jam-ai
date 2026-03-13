@@ -127,6 +127,28 @@ async def debug_modal():
         return {"error": str(e)}
 
 
+@router.get("/debug-replicate")
+async def debug_replicate():
+    """檢查 Replicate API（AI 圖像工坊 / Kling 影片）連線狀態"""
+    import os
+    token = os.getenv("REPLICATE_API_TOKEN", "")
+    if not token:
+        return {"error": "REPLICATE_API_TOKEN 未設定"}
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(
+                "https://api.replicate.com/v1/account",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                return {"status": "ok", "account": data.get("username", data.get("type", "authenticated"))}
+            return {"error": f"API 回傳 {resp.status_code}", "detail": resp.text[:200]}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 # ============================================================
 # Request / Response Models
 # ============================================================
@@ -1494,10 +1516,10 @@ async def _run_sequential_scenes(
                 LTX_INFERENCE_URL = "https://bobo68425--kingjam-ltx-video-api.modal.run"
             
             success_url = None
-            max_wait = 600 # 10 mins per scene
+            max_wait = 1200  # 20 mins per scene (cold start + model load + inference)
             waited = 0
             
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=30.0) as client:
                 while waited < max_wait:
                     try:
                         resp = await client.get(f"{LTX_INFERENCE_URL}/v1/status/{rid}")
