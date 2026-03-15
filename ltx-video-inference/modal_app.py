@@ -21,7 +21,7 @@ image = (
         "fastapi==0.115.0",
         "pydantic>=2.5.0",
         "safetensors>=0.4.0",
-        "transformers>=4.51.0",
+        "transformers==4.51.0",
         "accelerate>=1.6.0",
         "sentencepiece>=0.2.0",
         "imageio-ffmpeg==0.5.1",
@@ -211,7 +211,7 @@ class LTXVideoInference:
             from ltx_pipelines.utils.args import ImageConditioningInput
 
             guider_params = MultiModalGuiderParams(
-                guidance_scale=req.cfg_guidance_scale,
+                cfg_scale=req.cfg_guidance_scale,
             )
 
             images = []

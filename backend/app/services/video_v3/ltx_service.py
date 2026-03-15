@@ -30,22 +30,22 @@ if "run.app" in LTX_INFERENCE_URL:
     LTX_INFERENCE_URL = "https://bobo68425--kingjam-ltx-video-api.modal.run"
 
 LTX_POLL_TIMEOUT = int(os.getenv("LTX_POLL_TIMEOUT", "10"))
-# 冷啟動 (60s) + 模型載入 (5min) + 推論 (5min) = 11min, 給 15min 緩衝
-LTX_MAX_WAIT_SECONDS = int(os.getenv("LTX_MAX_WAIT_SECONDS", "900"))
+# 冷啟動 (3-5min) + 模型載入 (3-5min) + 推論 (5-10min) = 約 15min，給 20min 緩衝
+LTX_MAX_WAIT_SECONDS = int(os.getenv("LTX_MAX_WAIT_SECONDS", "1200"))
 LTX_POLL_INTERVAL = int(os.getenv("LTX_POLL_INTERVAL", "10"))
 
 # LTX-2.3 支援的解析度 (寬x高, 必須為 32 的倍數)
 RESOLUTION_MAP = {
     # 直式 (Portrait 9:16)
     "9:16": {
-        "480p":  "544x960",
-        "720p":  "768x1360",
+        "480p":  "576x1024",
+        "720p":  "768x1344",
         "1080p": "1088x1920",
     },
     # 橫式 (Landscape 16:9)
     "16:9": {
-        "480p":  "960x544",
-        "720p":  "1360x768",
+        "480p":  "1024x576",
+        "720p":  "1344x768",
         "1080p": "1920x1088",
     },
     # 正方 (Square 1:1)
