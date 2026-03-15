@@ -21,7 +21,7 @@ image = (
         "fastapi==0.115.0",
         "pydantic>=2.5.0",
         "safetensors>=0.4.0",
-        "transformers==4.51.0",
+        "transformers==4.53.0",
         "accelerate>=1.6.0",
         "sentencepiece>=0.2.0",
         "imageio-ffmpeg==0.5.1",
@@ -36,7 +36,7 @@ image = (
     )
     .run_commands(
         "git clone --depth 1 https://github.com/Lightricks/LTX-2.git /opt/ltx2",
-        "cd /opt/ltx2 && pip install packages/ltx-core packages/ltx-pipelines",
+        "cd /opt/ltx2 && pip install packages/ltx-core packages/ltx-pipelines 'transformers==4.53.0'",
     )
 )
 
@@ -85,7 +85,6 @@ class VideoRequest(BaseModel):
     scaledown_window=600,
     min_containers=0,
     max_containers=5,
-    allow_concurrent_inputs=1,
     volumes={"/models": vol},
     secrets=[
         modal.Secret.from_name("king-jam-secrets"),
@@ -183,6 +182,7 @@ class LTXVideoInference:
         print(f"[LTX-2.3] Setup 完成 (耗時: {elapsed:.1f}s), GPU: {self.device}")
 
     @modal.method()
+    @modal.concurrent(1)
     def generate(self, req: VideoRequest) -> dict:
         """LTX-2.3 影片生成主邏輯"""
         import torch
