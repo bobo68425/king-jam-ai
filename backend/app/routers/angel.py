@@ -82,10 +82,50 @@ async def get_angel_stats(
             
         net_profit = revenue - gpu_cost
     
+    # 計算預扣稅金 (假設 20% 或根據稅法設定)
+    withholding_tax = round(net_profit * 0.20, 2)
+    distributable_profit = net_profit - withholding_tax
+    
     # 計算該天使投資人的分紅：每 1 單位享有 1% 利潤
     units = getattr(current_user, "investment_units", 0)
-    dividend = round(net_profit * (units * 0.01), 2)
+    dividend = round(distributable_profit * (units * 0.01), 2)
     
+    # 4. 推廣成效 (Referral Stats)
+    # 實際查詢大使連結帶來的註冊與營收
+    # 這裡的大使是當前天使本人（假設他的推薦碼用於推廣）
+    referral_code = current_user.referral_code
+    referred_users_ids = []
+    if referral_code:
+        referred_users_ids = [u.id for u in db.query(User.id).filter(User.referred_by == referral_code).all()]
+    
+    referral_count = len(referred_users_ids)
+    referral_revenue = 0
+    if referred_users_ids:
+        referral_revenue = db.query(func.sum(Order.total_amount)).filter(
+            and_(
+                Order.user_id.in_(referred_users_ids),
+                Order.status.in_(["paid", "completed"])
+            )
+        ).scalar() or 0
+        referral_revenue = float(referral_revenue)
+
+    # 5. 系統健康度 (System Health) - Mock 數據
+    system_health = {
+        "stability": 99.98,
+        "success_rate": 98.4,
+        "error_count": 12,
+        "latency_ms": 240
+    }
+    
+    # 6. 預估支出 (Budget Allocation) - 根據用戶內容
+    budget_allocation = [
+        {"item": "雲端固定支出 (首年)", "budget": 10000, "desc": "Railway + Domain + DB"},
+        {"item": "GPU 算力備金 (Modal)", "budget": 10000, "desc": "10k 測試影片支援"},
+        {"item": "LTX-2 模型微調費", "budget": 5000, "desc": "特定風格 H100 租用"},
+        {"item": "廣告種子基金", "budget": 20000, "desc": "精準投放驗證轉化"},
+        {"item": "雜項與儲備金", "budget": 5000, "desc": "Sentry/R2 額外超載"}
+    ]
+
     # 3. 模擬歷史數據 (用於圖表展示)
     historical_data = []
     for i in range(6, -1, -1):
@@ -101,9 +141,17 @@ async def get_angel_stats(
         "revenue": revenue,
         "gpu_cost": gpu_cost,
         "net_profit": net_profit,
+        "withholding_tax": withholding_tax,
+        "distributable_profit": distributable_profit,
         "dividend": dividend,
         "investment_units": units,
         "total_invested": units * 200000,
-        "dividend_rate": units, # 單位數即為百分比
+        "dividend_rate": units,
+        "referral_stats": {
+            "count": referral_count,
+            "revenue": referral_revenue
+        },
+        "system_health": system_health,
+        "budget_allocation": budget_allocation,
         "historical_data": historical_data
     }
