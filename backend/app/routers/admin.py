@@ -1388,7 +1388,11 @@ async def admin_get_users(
         query = query.filter(User.is_angel == False)
         
     total = query.count()
-    users = query.order_by(User.investment_units.desc(), User.created_at.desc()).offset(offset).limit(limit).all()
+    users = query.order_by(
+        User.is_angel.desc(), 
+        User.investment_units.desc().nullslast(), 
+        User.created_at.desc()
+    ).offset(offset).limit(limit).all()
     
     # Calculate global stats for all authorized angels (regardless of search/filter)
     global_angels_query = db.query(
