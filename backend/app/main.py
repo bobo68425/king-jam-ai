@@ -541,20 +541,24 @@ def read_root():
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "service": "backend", "version": "1.0.7-repair"}
+    return {"status": "ok", "service": "backend", "version": "1.0.8-debug"}
 
 
 @app.get("/debug/routes")
 def list_routes():
     """列出所有註冊的路由（除錯用）"""
     url_list = []
+    print(f"[Debug] Listing {len(app.routes)} routes")
     for route in app.routes:
-        route_info = {"path": getattr(route, "path", "unknown"), "name": getattr(route, "name", "unknown")}
-        if hasattr(route, "methods"):
-            route_info["methods"] = list(route.methods)
-        else:
-            route_info["type"] = type(route).__name__
-        url_list.append(route_info)
+        try:
+            route_info = {"path": getattr(route, "path", "unknown"), "name": getattr(route, "name", "unknown")}
+            if hasattr(route, "methods"):
+                route_info["methods"] = list(getattr(route, "methods", []))
+            else:
+                route_info["type"] = type(route).__name__
+            url_list.append(route_info)
+        except Exception as e:
+            url_list.append({"error": str(e), "type": type(route).__name__})
     return {"routes": url_list}
 
 
