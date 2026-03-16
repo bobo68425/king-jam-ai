@@ -11,6 +11,7 @@ import {
   Video,
   Calendar,
   Settings,
+  Star,
   Coins,
   History,
   Share2,
@@ -81,6 +82,7 @@ const adminNavItems = [
       { href: "/dashboard/admin/verification", icon: Shield, label: "身份認證" },
       { href: "/dashboard/admin/campaigns", icon: Megaphone, label: "行銷活動", isNew: true },
       { href: "/dashboard/admin/funding", icon: Gift, label: "募資銷售碼" },
+      { href: "/dashboard/angel", icon: Star, label: "天使專屬儀表板", isNew: true },
       { href: "/dashboard/admin/notifications", icon: Bell, label: "通知中心", isNew: true },
       { href: "/dashboard/admin/withdrawals", icon: Wallet, label: "提領審核" },
       { href: "/dashboard/admin/fraud", icon: ShieldAlert, label: "詐騙偵測" },
@@ -92,6 +94,7 @@ const adminNavItems = [
 export function DashboardNav() {
   const pathname = usePathname();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isAngel, setIsAngel] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -103,15 +106,16 @@ export function DashboardNav() {
         const token = localStorage.getItem("token");
         if (!token) return;
 
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/auth/me`, {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/credits/balance`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
         });
 
         if (response.ok) {
-          const user = await response.json();
-          setIsAdmin(user.is_admin === true);
+          const balance = await response.json();
+          setIsAdmin(balance.is_super_admin === true);
+          setIsAngel(balance.is_angel === true);
         }
       } catch (error) {
         console.error("Failed to check admin status:", error);
@@ -122,7 +126,35 @@ export function DashboardNav() {
   }, []);
 
   // 合併導航項目（管理員選單只在客戶端 mounted 後顯示，避免 hydration 錯誤）
-  const allNavItems = mounted && isAdmin ? [...navItems, ...adminNavItems] : navItems;
+  const allNavItems = mounted 
+    ? [
+        ...navItems,
+        ...(isAdmin || isAngel 
+          ? [
+              {
+                section: "管理後台",
+                items: [
+                  ...(isAdmin ? [
+                    { href: "/dashboard/admin", icon: BarChart3, label: "總覽儀表板" },
+                    { href: "/dashboard/admin/users", icon: Users, label: "用戶管理" },
+                    { href: "/dashboard/admin/angel", icon: Shield, label: "天使權限管理", isNew: true },
+                    { href: "/dashboard/admin/verification", icon: Shield, label: "身份認證" },
+                    { href: "/dashboard/admin/campaigns", icon: Megaphone, label: "行銷活動", isNew: true },
+                    { href: "/dashboard/admin/funding", icon: Gift, label: "募資銷售碼" },
+                  ] : []),
+                  { href: "/dashboard/angel", icon: Star, label: "天使專屬儀表板", isNew: true },
+                  ...(isAdmin ? [
+                    { href: "/dashboard/admin/notifications", icon: Bell, label: "通知中心", isNew: true },
+                    { href: "/dashboard/admin/withdrawals", icon: Wallet, label: "提領審核" },
+                    { href: "/dashboard/admin/fraud", icon: ShieldAlert, label: "詐騙偵測" },
+                    { href: "/dashboard/admin/prompts", icon: FileText, label: "Prompt 管理" },
+                  ] : []),
+                ]
+              }
+            ] 
+          : [])
+      ] 
+    : navItems;
 
   return (
     <nav className="grid items-start gap-1">

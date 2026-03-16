@@ -1351,3 +1351,80 @@ async def admin_confirm_payment(
         "new_status": order.status,
         "credits_granted": (order.credits_amount or 0) + (order.bonus_credits or 0),
     }
+
+
+# ============================================================
+# 天使投資人管理 (僅限超級管理員)
+# ============================================================
+
+@router.get("/users")
+async def admin_get_users(
+    q: Optional[str] = None,
+    is_angel: Optional[bool] = None,
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    獲取用戶列表，支援關鍵字搜尋與天使狀態篩選
+    """
+    require_super_admin(current_user)
+    
+    query = db.query(User)
+    
+    if q:
+        query = query.filter(
+            or_(
+                User.email.ilike(f"%{q}%"),
+                User.full_name.ilike(f"%{q}%"),
+                User.customer_id.ilike(f"%{q}%")
+            )
+        )
+        
+    if is_angel is not None:
+        query = query.filter(User.is_angel == is_angel)
+        
+    total = query.count()
+    users = query.order_by(User.created_at.desc()).offset(offset).limit(limit).all()
+    
+    return {
+        "success": True,
+        "total": total,
+        "users": [
+            {
+                "id": u.id,
+                "email": u.email,
+                "full_name": u.full_name,
+                "is_admin": u.is_admin,
+                "is_angel": u.is_angel,
+                "created_at": u.created_at.isoformat() if u.created_at else None,
+            }
+            for u in users
+        ]
+    }
+
+
+@router.post("/users/{user_id}/toggle-angel")
+async def admin_toggle_angel(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    切換用戶的天使投資人身份
+    """
+    require_super_admin(current_user)
+    
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="找不到此用戶")
+        
+    user.is_angel = not user.is_angel
+    db.commit()
+    
+    return {
+        "success": True,
+        "message": f"用戶 {user.email} 的天使身份已更新為 {user.is_angel}",
+        "is_angel": user.is_angel
+    }

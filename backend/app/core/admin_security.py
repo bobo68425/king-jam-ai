@@ -36,6 +36,13 @@ def is_super_admin(user) -> bool:
     return user.email == SUPER_ADMIN_EMAIL and user.is_admin
 
 
+def is_angel(user) -> bool:
+    """
+    檢查是否為天使投資人
+    """
+    return getattr(user, "is_angel", False)
+
+
 def require_super_admin(user) -> None:
     """
     要求超級管理員權限

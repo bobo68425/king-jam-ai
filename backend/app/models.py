@@ -17,6 +17,7 @@ class User(Base):
     social_id = Column(String, nullable=True, index=True)
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)  # 管理員權限
+    is_angel = Column(Boolean, default=False, index=True)  # 天使投資人權限
     tier = Column(String, default="free")
     
     # 點數餘額（總計）

@@ -64,6 +64,7 @@ class CreditBalanceResponse(BaseModel):
     category_balance: CategoryBalanceDetail
     tier: str
     is_super_admin: bool = False
+    is_angel: bool = False
     is_consistent: bool = True
     
     class Config:
@@ -357,6 +358,7 @@ async def get_balance(
         ),
         tier=current_user.tier or "free",
         is_super_admin=detect_super_admin(current_user),
+        is_angel=current_user.is_angel,
         is_consistent=is_consistent
     )
 
