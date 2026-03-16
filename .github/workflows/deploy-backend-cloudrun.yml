@@ -70,6 +70,7 @@ on:
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: asia-east1
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   SERVICE_NAME: kingjam-api
   REPOSITORY: kingjam-repo
 
