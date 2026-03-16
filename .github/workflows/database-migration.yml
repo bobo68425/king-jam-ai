@@ -36,14 +36,13 @@ on:
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: asia-east1
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   migrate:
     name: 🗄️ 資料庫遷移
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     
     steps:
       - name: 📥 Checkout
@@ -106,12 +105,14 @@ jobs:
               alembic current || echo "⚠️ 無法取得當前版本"
               
               echo "📈 執行 Alembic 資料庫遷移 (upgrade head)..."
-              alembic upgrade head || { 
-                echo "❌ Alembic 遷移失敗！"
-                echo "🔍 [DEBUG] 失敗後的歷史紀錄:"
-                alembic history --verbose | tail -n 20
+              alembic upgrade head > alembic_output.log 2>&1 || { 
+                echo "❌ Alembic 遷移失敗！內容如下："
+                cat alembic_output.log
+                echo "🔍 [DEBUG] 失敗後的完整路徑紀錄:"
+                alembic history --verbose | tail -n 50
                 exit 1 
               }
+              cat alembic_output.log
               
               echo "📈 執行附加直接資料庫遷移腳本..."
               python3 scripts/run_direct_migration.py || { echo "❌ 直接遷移腳本失敗"; exit 1; }
