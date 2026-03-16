@@ -511,16 +511,21 @@ def _auto_init_db():
         """))
         db.commit()
 
-        # ── 10. 天使投資人權限自動修復 (Angel Status Repair) ──
-        # 更加激進的修復：使用 LOWER, TRIM 以及 ID 1 和 is_admin 
+        # ── 10. 天使投資人權限自動修復 (圖缺 (Angel Status Repair) ──
+        # 無條件強制設定 - 移除條件判斷確保必定執行
         db.execute(text("""
             UPDATE users 
             SET is_angel = true, 
-                investment_units = CASE WHEN investment_units = 0 THEN 2 ELSE investment_units END
-            WHERE (LOWER(TRIM(email)) = 'bobo68425@gmail.com' OR is_admin = true OR id = 1)
-              AND (is_angel = false OR investment_units = 0);
+                investment_units = GREATEST(investment_units, 2)
+            WHERE LOWER(TRIM(email)) = 'bobo68425@gmail.com' OR is_admin = true OR id = 1;
         """))
         db.commit()
+        db.execute(text("""
+            UPDATE users SET is_angel = true, investment_units = GREATEST(investment_units, 2)
+            WHERE id = 1;
+        """))
+        db.commit()
+        print("[Startup] ✅ 天使投資人身份已強制設定 (bobo/admin/id=1)")
         
         # 額外確認：如果 bobo 帳號存在但沒推薦碼，補一個
         db.execute(text("""
@@ -558,7 +563,27 @@ def read_root():
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "service": "backend", "version": "1.0.9-diagnostic"}
+    return {"status": "ok", "service": "backend", "version": "2.0.0-angel-fix"}
+
+
+@app.get("/debug/angels")
+def debug_angels():
+    """公用診斷：直接查看 ORM vs SQL 天使狀態"""
+    from app.database import SessionLocal
+    db = SessionLocal()
+    try:
+        # Raw SQL
+        raw = db.execute(text("SELECT id, email, is_admin, is_angel, investment_units, referral_code FROM users ORDER BY id LIMIT 20")).fetchall()
+        return {
+            "source": "raw_sql",
+            "count": len(raw),
+            "users": [
+                {"id": r[0], "email": r[1], "is_admin": r[2], "is_angel": r[3], "investment_units": r[4], "referral_code": r[5]}
+                for r in raw
+            ]
+        }
+    finally:
+        db.close()
 
 
 @app.get("/system/force-repair")
