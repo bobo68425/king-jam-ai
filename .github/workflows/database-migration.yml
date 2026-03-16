@@ -32,6 +32,12 @@ on:
           - downgrade      # 回滾一個版本
           - current        # 顯示當前版本
           - history        # 顯示遷移歷史
+          - stamp          # 強制標記版本 (需提供 revision)
+      revision:
+        description: '目標版本 (僅用於 stamp 或特定升級)'
+        required: false
+        default: 'head'
+        type: string
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
@@ -116,12 +122,15 @@ jobs:
               echo "📌 Alembic Current:"
               alembic current || echo "⚠️ 無法取得當前版本"
               
+              echo "🔍 [DEBUG] 檢查資料庫實際狀態..."
+              python3 scripts/debug_db_state.py
+              
               echo "📈 執行 Alembic 資料庫遷移 (upgrade head)..."
               alembic upgrade head > alembic_output.log 2>&1 || { 
                 echo "❌ Alembic 遷移失敗！內容如下："
                 cat alembic_output.log
                 echo "🔍 [DEBUG] Cloud SQL Proxy 狀態回報:"
-                cat ../cloud_sql_proxy.log
+                cat ../cloud_sql_proxy.log || echo "No proxy log"
                 echo "🔍 [DEBUG] 失敗後的完整路徑紀錄:"
                 alembic history --verbose | tail -n 50
                 exit 1 
@@ -138,6 +147,10 @@ jobs:
             history)
               echo "📜 遷移歷史:"
               alembic history --verbose 2>/dev/null || echo "(alembic 無法讀取歷史)"
+              ;;
+            stamp)
+              echo "📍 強制標記資料庫版本為: ${{ inputs.revision }}"
+              alembic stamp ${{ inputs.revision }}
               ;;
             *)
               echo "⚠️ 不支援的動作: ${{ inputs.action }}"
