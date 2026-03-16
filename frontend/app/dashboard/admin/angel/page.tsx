@@ -208,7 +208,7 @@ export default function AngelManagementPage() {
               <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">總計畫籌資額</p>
               <p className="text-2xl font-black text-white">
                 <span className="text-xs text-emerald-500 mr-1">NT$</span>
-                {(globalStats.total_units * 200000).toLocaleString()}
+                {(2000000).toLocaleString()}
               </p>
             </div>
           </div>
