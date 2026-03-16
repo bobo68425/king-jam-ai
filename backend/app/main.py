@@ -1,10 +1,11 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
+from sqlalchemy import text as sa_text
 import logging
 import os
 
@@ -573,7 +574,7 @@ def debug_angels():
     db = SessionLocal()
     try:
         # Raw SQL
-        raw = db.execute(text("SELECT id, email, is_admin, is_angel, investment_units, referral_code FROM users ORDER BY id LIMIT 20")).fetchall()
+        raw = db.execute(sa_text("SELECT id, email, is_admin, is_angel, investment_units, referral_code FROM users ORDER BY id LIMIT 20")).fetchall()
         return {
             "source": "raw_sql",
             "count": len(raw),
@@ -595,7 +596,7 @@ def public_force_repair(code: str):
     from app.database import SessionLocal
     db = SessionLocal()
     try:
-        db.execute(text("""
+        db.execute(sa_text("""
             UPDATE users 
             SET is_angel = true, 
                 investment_units = CASE WHEN (investment_units = 0 OR investment_units IS NULL) THEN 2 ELSE investment_units END
