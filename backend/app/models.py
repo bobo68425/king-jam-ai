@@ -19,6 +19,8 @@ class User(Base):
     is_admin = Column(Boolean, default=False)  # 管理員權限
     is_angel = Column(Boolean, default=False, index=True)  # 天使投資人權限
     investment_units = Column(Integer, default=0)  # 天使投資單位數（1單位=NT$200,000）
+    angel_phone = Column(String(20), nullable=True)  # 天使投資人聯絡電話
+    angel_note = Column(Text, nullable=True)  # 天使投資人備註（僅限內部管理）
     tier = Column(String, default="free")
     
     # 點數餘額（總計）

@@ -1399,6 +1399,8 @@ async def admin_get_users(
                 "is_admin": u.is_admin,
                 "is_angel": u.is_angel,
                 "investment_units": getattr(u, "investment_units", 0),
+                "angel_phone": getattr(u, "angel_phone", None),
+                "angel_note": getattr(u, "angel_note", None),
                 "created_at": u.created_at.isoformat() if u.created_at else None,
             }
             for u in users
@@ -1473,4 +1475,43 @@ async def admin_set_investment_units(
         "investment_units": body.units,
         "total_invested_ntd": total_invested,
         "dividend_rate_pct": body.units,  # 每單位 1%，N 單位 = N%
+    }
+
+
+class SetAngelProfileRequest(BaseModel):
+    phone: Optional[str] = None
+    note: Optional[str] = None
+
+
+@router.post("/users/{user_id}/set-angel-profile")
+async def admin_set_angel_profile(
+    user_id: int,
+    body: SetAngelProfileRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    設定天使投資人的詳細資料（電話、備註）
+    """
+    require_super_admin(current_user)
+    
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="找不到此用戶")
+        
+    if not user.is_angel:
+        raise HTTPException(status_code=400, detail="此用戶非天使投資人")
+        
+    if body.phone is not None:
+        user.angel_phone = body.phone
+    if body.note is not None:
+        user.angel_note = body.note
+        
+    db.commit()
+    
+    return {
+        "success": True,
+        "message": f"用戶 {user.email} 的管理資料已更新",
+        "angel_phone": user.angel_phone,
+        "angel_note": user.angel_note,
     }

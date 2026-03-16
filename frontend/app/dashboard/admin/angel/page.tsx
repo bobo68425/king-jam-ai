@@ -10,7 +10,11 @@ import {
   ToggleRight, 
   Loader2,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Phone,
+  FileText,
+  Edit3,
+  X
 } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/lib/api';
@@ -22,6 +26,8 @@ interface User {
   is_admin: boolean;
   is_angel: boolean;
   investment_units: number;
+  angel_phone?: string | null;
+  angel_note?: string | null;
   created_at: string;
 }
 
@@ -32,6 +38,12 @@ export default function AngelManagementPage() {
   const [isAngelFilter, setIsAngelFilter] = useState<boolean | null>(null);
   const [togglingId, setTogglingId] = useState<number | null>(null);
   const [updatingUnitsId, setUpdatingUnitsId] = useState<number | null>(null);
+  
+  // Modal state
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editPhone, setEditPhone] = useState('');
+  const [editNote, setEditNote] = useState('');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   const fetchUsers = async () => {
     try {
@@ -98,6 +110,35 @@ export default function AngelManagementPage() {
     }
   };
 
+  const handleOpenEdit = (user: User) => {
+    setEditingUser(user);
+    setEditPhone(user.angel_phone || '');
+    setEditNote(user.angel_note || '');
+  };
+
+  const handleSaveProfile = async () => {
+    if (!editingUser) return;
+    try {
+      setIsSavingProfile(true);
+      const response = await api.post(`/admin/users/${editingUser.id}/set-angel-profile`, {
+        phone: editPhone,
+        note: editNote
+      });
+      
+      setUsers(prev => prev.map(u => 
+        u.id === editingUser.id ? { ...u, angel_phone: editPhone, angel_note: editNote } : u
+      ));
+      
+      toast.success('資料更新成功');
+      setEditingUser(null);
+    } catch (error) {
+      console.error(error);
+      toast.error('更新資料失敗');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex justify-between items-center mb-8">
@@ -106,7 +147,7 @@ export default function AngelManagementPage() {
             <Shield className="text-blue-600 h-8 w-8" />
             天使投資人管理
           </h1>
-          <p className="text-gray-500 mt-2">僅超級管理員可見，用於管理天使投資人帳戶權限與投資份額 (1單位=20萬/1%利潤)</p>
+          <p className="text-gray-500 mt-2">僅超級管理員可見，負責管理天使權限、持股單位與聯絡資料。</p>
         </div>
       </div>
 
@@ -145,16 +186,6 @@ export default function AngelManagementPage() {
             >
               僅天使
             </button>
-            <button
-              onClick={() => setIsAngelFilter(false)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                isAngelFilter === false 
-                ? 'bg-gray-600 text-white shadow-md' 
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              非天使
-            </button>
           </div>
         </div>
       </div>
@@ -177,9 +208,9 @@ export default function AngelManagementPage() {
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
                   <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">用戶</th>
-                  <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">身份/份額</th>
-                  <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">投資單位設定</th>
-                  <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">操作</th>
+                  <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">投資人資料 / 權限</th>
+                  <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">投資單位</th>
+                  <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">管理操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -189,8 +220,8 @@ export default function AngelManagementPage() {
                       <div className="flex flex-col">
                         <span className="font-semibold text-gray-900">{user.full_name || '未填寫姓名'}</span>
                         <span className="text-sm text-gray-500">{user.email}</span>
-                        <span className="text-[10px] text-gray-400 mt-1">
-                          加入：{new Date(user.created_at).toLocaleDateString()}
+                        <span className="text-[10px] text-gray-400 mt-1 uppercase">
+                          ID: {user.id} | 加入: {new Date(user.created_at).toLocaleDateString()}
                         </span>
                       </div>
                     </td>
@@ -198,25 +229,36 @@ export default function AngelManagementPage() {
                       <div className="flex flex-col gap-2">
                         <div className="flex gap-2">
                           {user.is_admin && (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
-                              <ShieldAlert className="h-3 w-3 mr-1" />
-                              管理員
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 border border-red-200 uppercase">
+                              ADMIN
                             </span>
                           )}
-                          {user.is_angel ? (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200">
-                              <CheckCircle2 className="h-3 w-3 mr-1" />
-                              天使投資人
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
-                              一般用戶
+                          {user.is_angel && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-800 border border-orange-200 uppercase">
+                              ANGEL
                             </span>
                           )}
                         </div>
                         {user.is_angel && (
-                          <div className="text-xs font-medium text-blue-600">
-                            份額: {user.investment_units}% (NT${(user.investment_units * 200000).toLocaleString()})
+                          <div className="space-y-1">
+                            {user.angel_phone && (
+                              <div className="flex items-center gap-1.5 text-xs text-slate-600">
+                                <Phone className="h-3 w-3" />
+                                {user.angel_phone}
+                              </div>
+                            )}
+                            {user.angel_note && (
+                              <div className="flex items-center gap-1.5 text-xs text-slate-400 italic bg-gray-50 p-1 rounded border border-gray-100">
+                                <FileText className="h-3 w-3" />
+                                {user.angel_note.length > 30 ? user.angel_note.substring(0, 30) + '...' : user.angel_note}
+                              </div>
+                            )}
+                            <button 
+                              onClick={() => handleOpenEdit(user)}
+                              className="text-[10px] text-blue-600 font-bold hover:underline flex items-center gap-1 mt-1"
+                            >
+                              <Edit3 className="h-3 w-3" /> 編輯投資人資料
+                            </button>
                           </div>
                         )}
                       </div>
@@ -227,7 +269,7 @@ export default function AngelManagementPage() {
                           <input
                             type="number"
                             min="0"
-                            className="w-20 px-3 py-1.5 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-16 px-2 py-1 border border-gray-200 rounded text-sm font-mono outline-none focus:ring-2 focus:ring-orange-500"
                             defaultValue={user.investment_units}
                             onBlur={(e) => {
                               const val = parseInt(e.target.value);
@@ -237,34 +279,35 @@ export default function AngelManagementPage() {
                             }}
                             disabled={updatingUnitsId === user.id}
                           />
-                          <span className="text-sm text-gray-500">單位</span>
-                          {updatingUnitsId === user.id && <Loader2 className="h-4 w-4 animate-spin text-blue-500" />}
+                          <span className="text-xs text-slate-500 font-bold">單位</span>
+                          <span className="text-[10px] text-slate-400">({user.investment_units}%)</span>
+                          {updatingUnitsId === user.id && <Loader2 className="h-3 w-3 animate-spin text-orange-500" />}
                         </div>
                       ) : (
-                        <span className="text-sm text-gray-400 font-italic">無</span>
+                        <span className="text-xs text-gray-300 italic">尚未授權</span>
                       )}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <button
                         onClick={() => toggleAngelStatus(user)}
                         disabled={togglingId === user.id}
-                        className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                        className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                           user.is_angel 
-                          ? 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200' 
-                          : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm'
+                          ? 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200' 
+                          : 'bg-orange-600 text-white hover:bg-orange-500 shadow-sm'
                         } disabled:opacity-50`}
                       >
                         {togglingId === user.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <Loader2 className="h-3 w-3 animate-spin" />
                         ) : user.is_angel ? (
                           <>
                             <ToggleRight className="h-4 w-4 text-orange-500" />
-                            取消權限
+                            撤銷身份
                           </>
                         ) : (
                           <>
                             <ToggleLeft className="h-4 w-4" />
-                            設為天使
+                            授權天使
                           </>
                         )}
                       </button>
@@ -276,6 +319,85 @@ export default function AngelManagementPage() {
           </div>
         )}
       </div>
+
+      {/* Edit Profile Modal */}
+      {editingUser && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="bg-blue-600 p-4 flex justify-between items-center">
+              <h3 className="text-white font-bold flex items-center gap-2">
+                <Edit3 className="h-5 w-5" />
+                編輯投資人資料
+              </h3>
+              <button 
+                onClick={() => setEditingUser(null)}
+                className="text-white/80 hover:text-white"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              <div>
+                <p className="text-sm font-medium text-gray-900 mb-1">{editingUser.full_name}</p>
+                <p className="text-xs text-gray-500 font-mono">{editingUser.email}</p>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
+                    聯絡電話 (Angel Phone)
+                  </label>
+                  <div className="relative">
+                    <input 
+                      type="text" 
+                      value={editPhone}
+                      onChange={(e) => setEditPhone(e.target.value)}
+                      placeholder="例如: 0912-345-678"
+                      className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                    <Phone className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
+                    內部備註 (Admin Note)
+                  </label>
+                  <div className="relative">
+                    <textarea 
+                      value={editNote}
+                      onChange={(e) => setEditNote(e.target.value)}
+                      placeholder="合約備註、特殊分紅調整..."
+                      rows={4}
+                      className="w-full pt-2 pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                    <FileText className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex gap-3 pt-4">
+                <button 
+                  onClick={() => setEditingUser(null)}
+                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-xl text-sm font-bold hover:bg-gray-50"
+                  disabled={isSavingProfile}
+                >
+                  取消
+                </button>
+                <button 
+                  onClick={handleSaveProfile}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-500 flex items-center justify-center gap-2"
+                  disabled={isSavingProfile}
+                >
+                  {isSavingProfile && <Loader2 className="h-4 w-4 animate-spin" />}
+                  儲存更新
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -489,10 +489,16 @@ def _auto_init_db():
                 IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='users' AND column_name='investment_units') THEN
                     ALTER TABLE users ADD COLUMN investment_units INTEGER NOT NULL DEFAULT 0;
                 END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='users' AND column_name='angel_phone') THEN
+                    ALTER TABLE users ADD COLUMN angel_phone VARCHAR(20) DEFAULT NULL;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='users' AND column_name='angel_note') THEN
+                    ALTER TABLE users ADD COLUMN angel_note TEXT DEFAULT NULL;
+                END IF;
             END $$;
         """))
         db.commit()
-        print("[Startup] ✅ users.is_angel / investment_units 欄位已確認")
+        print("[Startup] ✅ users.is_angel / investment / angel_info 欄位已確認")
 
         db.close()
     except Exception as e:
