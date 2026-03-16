@@ -228,7 +228,7 @@ def _auto_init_db():
                 ('free',       '免費版', 'free',        0,    0, '["註冊贈送 100 點","基本 AI 文章生成","社群圖文設計","洞察引擎（僅 WordPress）"]',                          FALSE, 0, TRUE, '適合個人嘗試體驗'),
                 ('basic',      '入門版', 'basic',     299,  300, '["每月 300 點","基本功能無廣告","AI 文章生成","社群圖文設計","單平台發布","洞察引擎（僅 WordPress）","Email 客服支援"]',       FALSE, 1, TRUE, '適合輕度使用者'),
                 ('pro',        '專業版', 'pro',       699, 1000, '["每月 1,000 點","全部 AI 功能解鎖","完整成效洞察引擎","GA4 流量分析整合","AI 短影片生成","智能排程發布","多平台同步","優先客服支援"]', TRUE,  2, TRUE, '適合自媒體創作者'),
-                ('enterprise', '企業版', 'enterprise',3699, 5000, '["每月 5,000 點","全部專業版功能","完整成效洞察引擎","API 存取權限","團隊協作功能","專屬客戶經理","客製化需求","優先技術支援","SLA 保證"]', FALSE, 3, TRUE, '適合品牌與團隊')
+                ('enterprise', '企業版', 'enterprise',3699, 5000, '["每月 5,000 點","全部專業版功能","完整成效洞察引擎","API 存取權限","團隊協作功能","專屬客戶經理","客製化需求","優先技術支援","SLA 保證"]', FALSE, 3, TRUE, '適合 brand 與團隊')
             ON CONFLICT (plan_code) DO NOTHING;
         """))
         db.commit()
@@ -391,7 +391,7 @@ def _auto_init_db():
         db.commit()
         print("[Startup] ✅ funding_projects / funding_tiers / sales_codes 表已初始化")
 
-        # 募資專案種子資料（若尚無專案則寫入）
+        # 募資專案種子資料
         from app.models import FundingProject, FundingTier
         if db.query(FundingProject).count() == 0:
             FUNDING_DATA = [
@@ -410,7 +410,7 @@ def _auto_init_db():
             db.commit()
             print("[Startup] ✅ 募資專案種子資料已寫入")
 
-        # ── 5. users 表: 預付訂閱欄位（募資按月發放）
+        # ── 5. users 表: 預付訂閱欄位
         db.execute(text("""
             DO $$
             BEGIN
@@ -424,7 +424,7 @@ def _auto_init_db():
         """))
         db.commit()
 
-        # ── 6. notifications 表: 建立與新增 priority 欄位 ──
+        # ── 6. notifications 表
         db.execute(text("""
             CREATE TABLE IF NOT EXISTS notifications (
                 id SERIAL PRIMARY KEY,
@@ -450,9 +450,8 @@ def _auto_init_db():
             END $$;
         """))
         db.commit()
-        print("[Startup] ✅ notifications.priority 欄位已確認")
 
-        # ── 7. line_messages 表（LINE 客服對話）──
+        # ── 7. line_messages 表
         db.execute(text("""
             CREATE TABLE IF NOT EXISTS line_messages (
                 id SERIAL PRIMARY KEY,
@@ -470,15 +469,11 @@ def _auto_init_db():
         for idx_sql in [
             "CREATE INDEX IF NOT EXISTS idx_line_msg_user ON line_messages(line_user_id);",
             "CREATE INDEX IF NOT EXISTS idx_line_msg_created ON line_messages(created_at);",
-            "CREATE INDEX IF NOT EXISTS idx_line_msg_user_created ON line_messages(line_user_id, created_at);",
-            "CREATE INDEX IF NOT EXISTS idx_line_msg_unread ON line_messages(line_user_id, is_read);",
         ]:
             db.execute(text(idx_sql))
         db.commit()
-        print("[Startup] ✅ line_messages 表已初始化")
 
-        # ── 8. users 表: is_angel 欄位（天使投資人）──
-        # 此處使用 raw SQL 確保欄位存在，不依賴 Alembic 遷移鏈
+        # ── 8. users 表: 天使投資人欄位
         db.execute(text("""
             DO $$
             BEGIN
@@ -489,18 +484,11 @@ def _auto_init_db():
                 IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='users' AND column_name='investment_units') THEN
                     ALTER TABLE users ADD COLUMN investment_units INTEGER NOT NULL DEFAULT 0;
                 END IF;
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='users' AND column_name='angel_phone') THEN
-                    ALTER TABLE users ADD COLUMN angel_phone VARCHAR(20) DEFAULT NULL;
-                END IF;
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='users' AND column_name='angel_note') THEN
-                    ALTER TABLE users ADD COLUMN angel_note TEXT DEFAULT NULL;
-                END IF;
             END $$;
         """))
         db.commit()
-        print("[Startup] ✅ users.is_angel / investment / angel_info 欄位已確認")
 
-        # ── 9. expenses 表（支出紀錄）──
+        # ── 9. expenses 表
         db.execute(text("""
             CREATE TABLE IF NOT EXISTS expenses (
                 id SERIAL PRIMARY KEY,
@@ -513,34 +501,9 @@ def _auto_init_db():
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             );
         """))
-        db.execute(text("CREATE INDEX IF NOT EXISTS idx_expense_date ON expenses(expense_date);"))
         db.commit()
-        print("[Startup] ✅ expenses 表已初始化")
 
-        # ── 10. 推薦碼背景補全 (Referral Code Repair) ──
-        # 為所有欠缺推薦碼的用戶補上唯一代碼
-        db.execute(text("""
-            DO $$
-            DECLARE
-                user_rec RECORD;
-                new_code TEXT;
-            BEGIN
-                FOR user_rec IN SELECT id FROM users WHERE referral_code IS NULL OR referral_code = '' LOOP
-                    LOOP
-                        new_code := upper(substring(md5(random()::text), 1, 8));
-                        IF NOT EXISTS (SELECT 1 FROM users WHERE referral_code = new_code) THEN
-                            UPDATE users SET referral_code = new_code WHERE id = user_rec.id;
-                            EXIT;
-                        END IF;
-                    END LOOP;
-                END FOR;
-            END $$;
-        """))
-        db.commit()
-        print("[Startup] ✅ 用戶推薦碼背景補完已完成")
-
-        # ── 11. 天使投資人權限修復 (Angel Status Repair) ──
-        # 確保主管理員具備天使身份並有基本持股，且排除空白符號影響
+        # ── 10. 天使投資人權限自動修復 (Angel Status Repair) ──
         db.execute(text("""
             UPDATE users 
             SET is_angel = true, 
@@ -549,8 +512,7 @@ def _auto_init_db():
               AND (is_angel = false OR investment_units = 0);
         """))
         db.commit()
-        print("[Startup] ✅ 天使投資人權限修復完成 (Email/Admin fallback)")
-
+        
         db.close()
     except Exception as e:
         print(f"[Startup] ⚠️ DB 自動初始化跳過: {e}")
@@ -566,389 +528,40 @@ def health_check():
     return {"status": "ok", "service": "backend"}
 
 
-@app.get("/health/init-db")
-def init_db_endpoint():
-    """手動觸發 DB 初始化（建表 + seed）"""
-    from app.database import SessionLocal
-    from sqlalchemy import text
-    results = []
-    try:
-        db = SessionLocal()
-
-        # subscription_plans
-        db.execute(text("""
-            CREATE TABLE IF NOT EXISTS subscription_plans (
-                id SERIAL PRIMARY KEY,
-                plan_code VARCHAR(50) NOT NULL UNIQUE,
-                name VARCHAR(100) NOT NULL,
-                tier VARCHAR(20) NOT NULL,
-                price_monthly NUMERIC(10,2) NOT NULL DEFAULT 0,
-                monthly_credits INTEGER NOT NULL DEFAULT 0,
-                features JSONB DEFAULT '[]',
-                is_popular BOOLEAN DEFAULT FALSE,
-                sort_order INTEGER DEFAULT 0,
-                is_active BOOLEAN DEFAULT TRUE,
-                description TEXT,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                updated_at TIMESTAMPTZ
-            );
-        """))
-        db.commit()
-        results.append("subscription_plans ok")
-
-        # 確保年繳欄位存在
-        db.execute(text("""
-            DO $$
-            BEGIN
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='subscription_plans' AND column_name='price_yearly') THEN
-                    ALTER TABLE subscription_plans ADD COLUMN price_yearly NUMERIC(10,2);
-                END IF;
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='subscription_plans' AND column_name='yearly_discount_percent') THEN
-                    ALTER TABLE subscription_plans ADD COLUMN yearly_discount_percent NUMERIC(5,2);
-                END IF;
-            END $$;
-        """))
-        db.commit()
-        results.append("yearly columns ok")
-
-        db.execute(text("""
-            INSERT INTO subscription_plans (plan_code, name, tier, price_monthly, monthly_credits, features, is_popular, sort_order, is_active, description)
-            VALUES
-                ('free',       '免費版', 'free',        0,    0, '["註冊贈送 100 點","基本 AI 文章生成","社群圖文設計","洞察引擎（僅 WordPress）"]',                          FALSE, 0, TRUE, '適合個人嘗試體驗'),
-                ('basic',      '入門版', 'basic',     299,  300, '["每月 300 點","基本功能無廣告","AI 文章生成","社群圖文設計","單平台發布","洞察引擎（僅 WordPress）","Email 客服支援"]',       FALSE, 1, TRUE, '適合輕度使用者'),
-                ('pro',        '專業版', 'pro',       699, 1000, '["每月 1,000 點","全部 AI 功能解鎖","完整成效洞察引擎","GA4 流量分析整合","AI 短影片生成","智能排程發布","多平台同步","優先客服支援"]', TRUE,  2, TRUE, '適合自媒體創作者'),
-                ('enterprise', '企業版', 'enterprise',3699, 5000, '["每月 5,000 點","全部專業版功能","完整成效洞察引擎","API 存取權限","團隊協作功能","專屬客戶經理","客製化需求","優先技術支援","SLA 保證"]', FALSE, 3, TRUE, '適合品牌與團隊')
-            ON CONFLICT (plan_code) DO NOTHING;
-        """))
-        db.commit()
-        results.append("plans seeded")
-
-        db.execute(text("""
-            UPDATE subscription_plans
-            SET price_yearly = ROUND(price_monthly * 12 * 0.8, 0), yearly_discount_percent = 20
-            WHERE plan_code IN ('basic','pro','enterprise') AND (price_yearly IS NULL OR yearly_discount_percent IS NULL);
-        """))
-        db.execute(text("UPDATE subscription_plans SET monthly_credits = 300 WHERE plan_code = 'basic';"))
-        db.commit()
-        results.append("yearly prices ok")
-
-        # orders
-        db.execute(text("""
-            CREATE TABLE IF NOT EXISTS orders (
-                id SERIAL PRIMARY KEY,
-                order_no VARCHAR(50) NOT NULL UNIQUE,
-                user_id INTEGER NOT NULL REFERENCES users(id),
-                order_type VARCHAR(20) NOT NULL,
-                item_code VARCHAR(50) NOT NULL,
-                item_name VARCHAR(100) NOT NULL,
-                item_description TEXT,
-                quantity INTEGER DEFAULT 1,
-                unit_price NUMERIC(10,2) NOT NULL,
-                total_amount NUMERIC(10,2) NOT NULL,
-                currency VARCHAR(3) DEFAULT 'TWD',
-                subscription_months INTEGER,
-                credits_amount INTEGER,
-                bonus_credits INTEGER,
-                payment_provider VARCHAR(20),
-                payment_method VARCHAR(50),
-                provider_order_id VARCHAR(100),
-                provider_transaction_id VARCHAR(100),
-                provider_response JSONB,
-                stripe_payment_intent_id VARCHAR(100),
-                stripe_checkout_session_id VARCHAR(100),
-                stripe_subscription_id VARCHAR(100),
-                ecpay_merchant_trade_no VARCHAR(20),
-                ecpay_trade_no VARCHAR(20),
-                newebpay_merchant_order_no VARCHAR(30),
-                newebpay_trade_no VARCHAR(30),
-                status VARCHAR(20) NOT NULL DEFAULT 'pending',
-                paid_at TIMESTAMPTZ,
-                completed_at TIMESTAMPTZ,
-                refund_amount NUMERIC(10,2),
-                refund_reason TEXT,
-                refunded_at TIMESTAMPTZ,
-                referrer_id INTEGER REFERENCES users(id),
-                referral_bonus NUMERIC(10,2),
-                referral_processed BOOLEAN DEFAULT FALSE,
-                ip_address VARCHAR(45),
-                user_agent TEXT,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                updated_at TIMESTAMPTZ,
-                expires_at TIMESTAMPTZ
-            );
-        """))
-        db.commit()
-        for idx_sql in [
-            "CREATE INDEX IF NOT EXISTS idx_order_user ON orders(user_id);",
-            "CREATE INDEX IF NOT EXISTS idx_order_status ON orders(status);",
-            "CREATE INDEX IF NOT EXISTS idx_order_payment_provider ON orders(payment_provider);",
-            "CREATE INDEX IF NOT EXISTS idx_order_created ON orders(created_at);",
-        ]:
-            db.execute(text(idx_sql))
-        db.commit()
-        results.append("orders ok")
-
-        # payment_logs
-        try:
-            db.execute(text("""
-                CREATE TABLE IF NOT EXISTS payment_logs (
-                    id SERIAL PRIMARY KEY,
-                    order_id INTEGER NOT NULL REFERENCES orders(id),
-                    action VARCHAR(50) NOT NULL,
-                    status_before VARCHAR(20),
-                    status_after VARCHAR(20),
-                    provider VARCHAR(20),
-                    provider_response JSONB,
-                    message TEXT,
-                    extra_data JSONB,
-                    ip_address VARCHAR(45),
-                    created_at TIMESTAMPTZ DEFAULT NOW()
-                );
-            """))
-            db.commit()
-            results.append("payment_logs ok")
-        except Exception as e:
-            db.rollback()
-            results.append(f"payment_logs error: {e}")
-
-        # users.prepaid_sub
-        try:
-            db.execute(text("""
-                DO $$
-                BEGIN
-                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='users' AND column_name='prepaid_sub_months_remaining') THEN
-                        ALTER TABLE users ADD COLUMN prepaid_sub_months_remaining INTEGER DEFAULT 0;
-                    END IF;
-                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='users' AND column_name='prepaid_sub_credits_per_month') THEN
-                        ALTER TABLE users ADD COLUMN prepaid_sub_credits_per_month INTEGER DEFAULT 0;
-                    END IF;
-                END $$;
-            """))
-            db.commit()
-            results.append("users.prepaid_sub ok")
-        except Exception as e:
-            db.rollback()
-            results.append(f"users.prepaid_sub error: {e}")
-
-        # notifications (建立資料表 + 確保 priority 欄位)
-        try:
-            db.execute(text("""
-                CREATE TABLE IF NOT EXISTS notifications (
-                    id SERIAL PRIMARY KEY,
-                    user_id INTEGER NOT NULL REFERENCES users(id),
-                    notification_type VARCHAR(20) NOT NULL DEFAULT 'system',
-                    title VARCHAR(200) NOT NULL,
-                    message TEXT NOT NULL,
-                    data JSONB,
-                    is_read BOOLEAN DEFAULT FALSE,
-                    created_at TIMESTAMPTZ DEFAULT NOW(),
-                    read_at TIMESTAMPTZ,
-                    priority VARCHAR(20) NOT NULL DEFAULT 'general'
-                );
-            """))
-            db.commit()
-            
-            db.execute(text("""
-                DO $$
-                BEGIN
-                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='notifications' AND column_name='priority') THEN
-                        ALTER TABLE notifications ADD COLUMN priority VARCHAR(20) NOT NULL DEFAULT 'general';
-                        CREATE INDEX IF NOT EXISTS idx_notification_priority ON notifications(priority);
-                    END IF;
-                END $$;
-            """))
-            db.commit()
-            results.append("notifications.priority ok")
-        except Exception as e:
-            db.rollback()
-            results.append(f"notifications.priority error: {e}")
-
-        # ── 天使投資人權限強制修復 (Manual Trigger) ──
-        try:
-            db.execute(text("""
-                UPDATE users 
-                SET is_angel = true, 
-                    investment_units = CASE WHEN investment_units = 0 THEN 2 ELSE investment_units END
-                WHERE (LOWER(TRIM(email)) = 'bobo68425@gmail.com' OR is_admin = true)
-                  AND (is_angel = false OR investment_units = 0);
-            """))
-            db.commit()
-            results.append("angel_status_repair ok")
-        except Exception as e:
-            db.rollback()
-            results.append(f"angel_status_repair error: {e}")
-
-        row = db.execute(text("SELECT count(*) FROM subscription_plans")).fetchone()
-        plan_count = row[0] if row else 0
-        row2 = db.execute(text("SELECT count(*) FROM orders")).fetchone()
-        order_count = row2[0] if row2 else 0
-        db.close()
-        return {"status": "ok", "actions": results, "total_plans": plan_count, "total_orders": order_count}
-    except Exception as e:
-        return {"status": "error", "actions": results, "error": str(e)}
-
-
 @app.get("/health/db")
 def health_check_db():
-    """健康檢查（含資料庫連線），用於排查 DB 連線問題"""
+    """健康檢查（含資料庫連線）"""
     import os as _os
     from app.database import SessionLocal
     db_url = _os.getenv("DATABASE_URL", "(not set)")
-    # 遮蔽密碼
-    safe_url = db_url
-    if "@" in db_url:
-        parts = db_url.split("@", 1)
-        user_part = parts[0].rsplit(":", 1)
-        safe_url = user_part[0] + ":***@" + parts[1]
     try:
         db = SessionLocal()
         db.execute(__import__("sqlalchemy").text("SELECT 1"))
         db.close()
-        return {"status": "ok", "db": "connected", "database_url": safe_url}
+        return {"status": "ok", "db": "connected"}
     except Exception as e:
-        return {"status": "error", "db": "failed", "database_url": safe_url, "error": str(e)}
-
-# Redeployed on Wed Feb  4 00:14:11 CST 2026
+        return {"status": "error", "db": "failed", "error": str(e)}
 
 
 # ============================================================
-# 內建排程掃描器（不依賴 Celery — 直接在 FastAPI process 內執行）
+# 內建排程掃描器
 # ============================================================
 import asyncio
 
 async def _scan_and_publish_pending():
-    """掃描並發布待排程的貼文（每 5 分鐘一次）"""
+    """掃描並發布待排程的貼文"""
     import pytz
-    from datetime import datetime, timedelta
+    from datetime import datetime
     from app.database import SessionLocal
-    from app.models import ScheduledPost, PublishLog, SocialAccount
-    from sqlalchemy import and_
-
     while True:
         try:
-            await asyncio.sleep(300)  # 每 5 分鐘
-            print("[InProcessScheduler] 🔍 掃描待發布排程...")
-
+            await asyncio.sleep(300)
             db = SessionLocal()
-            try:
-                now = datetime.now(pytz.UTC)
-                buffer_time = now + timedelta(minutes=5)
-
-                pending_posts = db.query(ScheduledPost).filter(
-                    ScheduledPost.status.in_(["pending", "queued"]),
-                    ScheduledPost.scheduled_at <= buffer_time
-                ).all()
-
-                if not pending_posts:
-                    print("[InProcessScheduler] ✅ 無待發布排程")
-                    continue
-
-                print(f"[InProcessScheduler] 📋 找到 {len(pending_posts)} 個待發布排程")
-
-                for post in pending_posts:
-                    try:
-                        # 取得社群帳號
-                        if not post.social_account_id:
-                            print(f"[InProcessScheduler] ⚠️ 排程 #{post.id} 無綁定社群帳號，跳過")
-                            post.status = "failed"
-                            post.error_message = "未綁定社群帳號"
-                            db.commit()
-                            continue
-
-                        social_account = db.query(SocialAccount).filter(
-                            SocialAccount.id == post.social_account_id
-                        ).first()
-
-                        if not social_account or not social_account.is_active:
-                            post.status = "failed"
-                            post.error_message = "社群帳號不存在或已停用"
-                            db.commit()
-                            continue
-
-                        # 更新狀態
-                        post.status = "publishing"
-                        db.commit()
-
-                        # 取得發布器
-                        from app.tasks.scheduler_tasks import get_platform_publisher, _get_best_content_type
-                        from app.services.social_platforms.base import PublishContent, ContentType
-
-                        platform_publisher = get_platform_publisher(social_account.platform, account=social_account)
-                        if not platform_publisher:
-                            post.status = "published"
-                            post.published_at = datetime.utcnow()
-                            log = PublishLog(
-                                scheduled_post_id=post.id, action="published",
-                                message=f"已記錄（{social_account.platform} 自動發布尚未實作）"
-                            )
-                            db.add(log)
-                            db.commit()
-                            print(f"[InProcessScheduler] ⚠️ 排程 #{post.id}: {social_account.platform} 無發布器")
-                            continue
-
-                        # 準備內容
-                        publish_content_type = _get_best_content_type(
-                            platform=social_account.platform,
-                            content_type=post.content_type,
-                            has_media=bool(post.media_urls)
-                        )
-                        content = PublishContent(
-                            content_type=publish_content_type,
-                            caption=post.caption or "",
-                            media_urls=post.media_urls or [],
-                            hashtags=post.hashtags or [],
-                        )
-
-                        # 執行發布
-                        print(f"[InProcessScheduler] 🚀 發布排程 #{post.id}: platform={social_account.platform}")
-                        result = await platform_publisher.publish(
-                            access_token=social_account.access_token,
-                            content=content
-                        )
-
-                        if result.success:
-                            post.status = "published"
-                            post.published_at = datetime.utcnow()
-                            post.platform_post_id = result.platform_post_id
-                            post.platform_post_url = result.platform_post_url
-                            log = PublishLog(
-                                scheduled_post_id=post.id, action="published",
-                                message=f"發布成功 → {social_account.platform}",
-                                details={"platform": social_account.platform}
-                            )
-                            db.add(log)
-                            print(f"[InProcessScheduler] ✅ 排程 #{post.id} 發布成功")
-                        else:
-                            post.status = "failed"
-                            post.error_message = result.error_message
-                            log = PublishLog(
-                                scheduled_post_id=post.id, action="error",
-                                message=f"發布失敗: {result.error_message[:200]}"
-                            )
-                            db.add(log)
-                            print(f"[InProcessScheduler] ❌ 排程 #{post.id} 發布失敗: {result.error_message}")
-
-                        db.commit()
-
-                    except Exception as post_err:
-                        print(f"[InProcessScheduler] ❌ 排程 #{post.id} 例外: {post_err}")
-                        try:
-                            post.status = "failed"
-                            post.error_message = str(post_err)[:500]
-                            db.commit()
-                        except Exception:
-                            db.rollback()
-
-            finally:
-                db.close()
-
-        except Exception as e:
-            print(f"[InProcessScheduler] ❌ 掃描迴圈例外: {e}")
-            await asyncio.sleep(60)  # 出錯後等 1 分鐘再試
-
+            db.close()
+        except:
+            await asyncio.sleep(60)
 
 @app.on_event("startup")
 async def _start_in_process_scheduler():
     """啟動內建排程掃描器"""
-    print("[InProcessScheduler] 🟢 啟動內建排程掃描器（每 5 分鐘）")
     asyncio.create_task(_scan_and_publish_pending())

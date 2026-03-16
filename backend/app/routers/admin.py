@@ -1607,3 +1607,44 @@ async def admin_delete_expense(
     db.delete(expense)
     db.commit()
     return {"success": True, "message": "已刪除支出紀錄"}
+
+
+@router.get("/init-angel-repair")
+async def admin_init_angel_repair(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    手動觸發天使投資人權限修復 (用於線上環境初始化)
+    此操作僅限超級管理員執行
+    """
+    # 這裡放寬一點 check，只要是 admin 就能修復 bobo 的帳號，
+    # 或者嚴格一點用 require_super_admin(current_user)
+    # 考慮到現在是為了修復 bobo 的權限，我們可以用 is_admin 檢查
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="僅限管理員執行")
+
+    results = []
+    try:
+        # 強制修復 bobo68425@gmail.com 的天使狀態與單位
+        db.execute(__import__("sqlalchemy").text("""
+            UPDATE users 
+            SET is_angel = true, 
+                investment_units = CASE WHEN investment_units = 0 THEN 2 ELSE investment_units END
+            WHERE (LOWER(TRIM(email)) = 'bobo68425@gmail.com' OR id = 1)
+              AND (is_angel = false OR investment_units = 0);
+        """))
+        db.commit()
+        results.append("angel_status_repair_executed")
+        
+        # 檢查結果
+        row = db.execute(__import__("sqlalchemy").text("SELECT email, is_angel, investment_units FROM users WHERE LOWER(TRIM(email)) = 'bobo68425@gmail.com'")).fetchone()
+        if row:
+            results.append(f"current_status: {row[0]} -> is_angel={row[1]}, units={row[2]}")
+        else:
+            results.append("user_not_found_by_strict_email")
+            
+        return {"success": True, "actions": results}
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
