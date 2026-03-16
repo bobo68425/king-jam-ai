@@ -85,7 +85,7 @@ const AngelDashboard = () => {
           title="總計畫籌資額"
           value="NT$ 2,000,000"
           color="text-emerald-400"
-          desc="目標發行 100 單位"
+          desc="目標發行 12 單位"
         />
         <StatCard
           title="本月實收營收"
