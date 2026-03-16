@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, List
 
 from app.database import get_db
-from app.models import User, Order, Expense
+from app.models import User, Order, Expense, DividendRecord
 from app.routers.auth import get_current_user
 from app.core.admin_security import is_super_admin, is_angel
 import os
@@ -161,6 +161,12 @@ async def get_angel_stats(
             "profit": round(mock_revenue * 0.75, 0)
         })
     
+    # 7. 個人投資詳情 (Personal Investment Details)
+    # 從用戶模型中獲取個人化數據
+    personal_dividends = db.query(DividendRecord).filter(
+        DividendRecord.user_id == current_user.id
+    ).order_by(DividendRecord.dividend_date.desc()).limit(12).all()
+
     return {
         "revenue": revenue,
         "gpu_cost": gpu_cost,
@@ -169,8 +175,10 @@ async def get_angel_stats(
         "distributable_profit": distributable_profit,
         "dividend": dividend,
         "investment_units": units,
-        "total_invested": units * 200000,
-        "dividend_rate": units,
+        "total_invested": float(current_user.total_investment_amount or 0),
+        "dividend_rate": float(current_user.dividend_ratio or 0) * 100, # 轉為百分比顯示
+        "contract_url": current_user.contract_url,
+        "payback_estimate_date": current_user.payback_estimate_date.isoformat() if current_user.payback_estimate_date else None,
         "referral_stats": {
             "count": referral_count,
             "revenue": referral_revenue
@@ -178,5 +186,14 @@ async def get_angel_stats(
         "referral_code": current_user.referral_code,
         "system_health": system_health,
         "budget_allocation": budget_allocation,
-        "historical_data": historical_data
+        "historical_data": historical_data,
+        "personal_dividends": [
+            {
+                "id": dr.id,
+                "amount": float(dr.amount),
+                "date": dr.dividend_date.strftime("%Y-%m"),
+                "description": dr.description,
+                "status": dr.status
+            } for dr in personal_dividends
+        ]
     }

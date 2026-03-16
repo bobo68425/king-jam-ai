@@ -11,7 +11,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import api from "@/lib/api";
-import { Loader2, AlertCircle, TrendingUp, ShieldCheck, Rocket, Share2, ExternalLink } from "lucide-react";
+import { Loader2, AlertCircle, TrendingUp, ShieldCheck, Rocket, Share2, ExternalLink, Download, Calendar, DollarSign, Percent } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 
@@ -65,7 +65,7 @@ const AngelDashboard = () => {
           King-Jam-AI 天使專屬儀表板
         </h1>
         <p className="text-slate-400 text-sm">
-          數據更新：{new Date().toLocaleDateString("zh-TW")} | 持股單位：{data.investment_units} 單位
+          數據更新：{new Date().toLocaleDateString("zh-TW")} | 當前身份：天使投資人 (ID: {data.referral_code})
         </p>
       </div>
 
@@ -109,12 +109,37 @@ const AngelDashboard = () => {
           color="text-rose-400"
           desc={`含稅金: NT$ ${(data.withholding_tax || 0).toLocaleString()}`}
         />
-        <StatCard
-          title="推廣成效 (Referral)"
-          value={`${data.referral_stats?.count || 0} 人`}
-          color="text-emerald-400"
-          desc={`累計預約/註冊用戶`}
-        />
+        <div className="bg-[#11121d] rounded-2xl border border-white/5 p-6 flex flex-col justify-center">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm text-slate-500 font-bold uppercase tracking-wider">個人合約與資產</h3>
+            {data.contract_url && (
+              <a 
+                href={data.contract_url} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-[10px] font-black bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-full transition-all shadow-lg shadow-blue-600/20"
+              >
+                <Download className="w-3 h-3" /> 下載合約
+              </a>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <p className="text-[10px] text-slate-500 font-bold">預計回本時間</p>
+              <div className="flex items-center gap-1.5 text-blue-400 font-mono text-sm font-bold">
+                <Calendar className="w-3.5 h-3.5" />
+                {data.payback_estimate_date ? new Date(data.payback_estimate_date).toLocaleDateString() : '尚未評估'}
+              </div>
+            </div>
+            <div className="space-y-1">
+              <p className="text-[10px] text-slate-500 font-bold">投資占股比例</p>
+              <div className="flex items-center gap-1.5 text-emerald-400 font-mono text-sm font-bold">
+                <Percent className="w-3.5 h-3.5" />
+                {data.dividend_rate}%
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
@@ -303,6 +328,70 @@ const AngelDashboard = () => {
               <ProgressBar label="AI 廣告投放系統研發" percent={15} color="bg-pink-500" />
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* 個人分紅流水帳 */}
+      <div className="bg-[#11121d] border border-white/5 p-8 rounded-3xl shadow-2xl mb-10 overflow-hidden relative">
+        <div className="absolute top-0 right-0 p-10 opacity-5 pointer-events-none">
+          <DollarSign className="w-48 h-48 text-emerald-500" />
+        </div>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+          <div>
+            <h3 className="text-2xl font-black text-white flex items-center gap-3">
+              <div className="w-2 h-8 bg-emerald-500 rounded-full" />
+              個人分紅紀錄管理
+            </h3>
+            <p className="text-slate-500 text-sm mt-1">追蹤您的投資收益發放狀態與歷史明細</p>
+          </div>
+          <div className="px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl">
+            <span className="text-xs text-emerald-400 font-black uppercase tracking-widest">累積已領取分紅：開發中</span>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="text-[10px] text-slate-500 uppercase tracking-[0.2em] border-b border-white/5">
+                <th className="pb-4 font-black px-2">發放月份</th>
+                <th className="pb-4 font-black">分紅金額 (NT$)</th>
+                <th className="pb-4 font-black">狀態</th>
+                <th className="pb-4 font-black">備註摘要</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {data.personal_dividends && data.personal_dividends.length > 0 ? (
+                data.personal_dividends.map((record: any) => (
+                  <tr key={record.id} className="group hover:bg-white/[0.02] transition-colors">
+                    <td className="py-5 px-2">
+                      <span className="text-sm font-bold text-white font-mono bg-white/5 px-3 py-1.5 rounded-lg border border-white/5">
+                        {record.date}
+                      </span>
+                    </td>
+                    <td className="py-5 font-black text-lg text-emerald-400 font-mono">
+                      +{(record.amount || 0).toLocaleString()}
+                    </td>
+                    <td className="py-5">
+                      <span className={`px-3 py-1 rounded-full text-[10px] font-black tracking-tighter uppercase ${
+                        record.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                      }`}>
+                        {record.status === 'completed' ? '已發放' : '處理中'}
+                      </span>
+                    </td>
+                    <td className="py-5 text-slate-400 text-sm italic">
+                      {record.description || '官方營收利潤分紅'}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={4} className="py-12 text-center text-slate-600 italic text-sm">
+                    目前尚無分紅紀錄
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
