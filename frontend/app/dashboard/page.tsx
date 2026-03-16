@@ -6,6 +6,14 @@ import api from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { 
   Coins, 
   TrendingUp, 
@@ -26,7 +34,9 @@ import {
   Timer,
   AlertTriangle,
   Flame,
-  X
+  X,
+  Trash2,
+  Loader2
 } from "lucide-react";
 import { format } from "date-fns";
 import { zhTW } from "date-fns/locale";
@@ -104,6 +114,26 @@ export default function DashboardPage() {
   const [expiringCredits, setExpiringCredits] = useState<ExpiringCredits | null>(null);
   const [loading, setLoading] = useState(true);
   const [greeting, setGreeting] = useState("您好");  // 預設問候語，避免 hydration 錯誤
+
+  // 刪除相關狀態
+  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  const handleDelete = async (id: number) => {
+    setDeleting(true);
+    try {
+      await api.delete(`/history/${id}`);
+      setRecentHistory(prev => prev.filter(item => item.id !== id));
+      toast.success("紀錄已刪除");
+      setDeleteDialogOpen(false);
+    } catch (e: any) {
+      console.error("刪除失敗:", e);
+      toast.error("刪除失敗: " + (e.response?.data?.detail || e.message));
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   // 在客戶端掛載後計算問候語
   useEffect(() => {
@@ -525,6 +555,19 @@ export default function DashboardPage() {
                         {item.credits_used > 0 && ` • 消耗 ${item.credits_used} 點`}
                       </p>
                     </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setDeleteId(item.id);
+                        setDeleteDialogOpen(true);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -638,6 +681,50 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       )}
+      {/* 刪除確認彈窗 */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="max-w-md bg-slate-900 border-slate-700">
+          <DialogHeader>
+            <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
+              <Trash2 className="h-6 w-6 text-red-500" />
+            </div>
+            <DialogTitle className="text-white text-xl">確認刪除紀錄？</DialogTitle>
+            <DialogDescription className="text-slate-400 pt-2 pb-4">
+              <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <p>
+                  <strong>注意：</strong> 資料刪除後將無法回溯，且該筆內容產出的雲端連結也可能失效。
+                </p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-3 mt-4">
+            <Button
+              variant="ghost"
+              className="flex-1 text-slate-400 hover:bg-slate-800"
+              onClick={() => setDeleteDialogOpen(false)}
+              disabled={deleting}
+            >
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              className="flex-1 bg-red-600 hover:bg-red-500"
+              onClick={() => deleteId && handleDelete(deleteId)}
+              disabled={deleting}
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  刪除中...
+                </>
+              ) : (
+                "確認刪除"
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

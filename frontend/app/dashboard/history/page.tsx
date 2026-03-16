@@ -52,6 +52,8 @@ import {
   Hash,
   Copy,
   Check,
+  AlertTriangle,
+  Flame,
   X
 } from "lucide-react";
 import { format } from "date-fns";
@@ -143,6 +145,29 @@ export default function HistoryPage() {
   const [viewerMediaUrl, setViewerMediaUrl] = useState<string | null>(null);
   const [viewerIsVideo, setViewerIsVideo] = useState(false);
   const [viewerTitle, setViewerTitle] = useState("");
+
+  // 刪除確認
+  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  const handleDelete = async (id: number) => {
+    setDeleting(true);
+    try {
+      await api.delete(`/history/${id}`);
+      setHistory(prev => prev.filter(item => item.id !== id));
+      toast.success("紀錄已刪除");
+      setDeleteDialogOpen(false);
+      if (selectedItem?.id === id) {
+        setDetailOpen(false);
+      }
+    } catch (e: any) {
+      console.error("刪除失敗:", e);
+      toast.error("刪除失敗: " + (e.response?.data?.detail || e.message));
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const handleOpenViewer = (url: string | null, isVideo: boolean, title: string) => {
     if (!url) return;
@@ -1022,20 +1047,32 @@ export default function HistoryPage() {
                         </div>
                       )}
 
-                      {/* 操作按鈕 */}
-                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                        {hasMedia(mediaItem) && (
-                          <Button
-                            size="icon"
-                            variant="secondary"
-                            className="h-8 w-8"
-                            onClick={(e) => { e.stopPropagation(); handleDownload(mediaItem); }}
-                            title="下載"
-                          >
-                            <Download className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
+                          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                            {hasMedia(mediaItem) && (
+                              <Button
+                                size="icon"
+                                variant="secondary"
+                                className="h-8 w-8"
+                                onClick={(e) => { e.stopPropagation(); handleDownload(mediaItem); }}
+                                title="下載"
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                            )}
+                            <Button
+                              size="icon"
+                              variant="destructive"
+                              className="h-8 w-8 bg-black/40 hover:bg-red-600 text-white border-0 backdrop-blur-sm"
+                              onClick={(e) => { 
+                                e.stopPropagation(); 
+                                setDeleteId(item.id);
+                                setDeleteDialogOpen(true);
+                              }}
+                              title="刪除"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                     </div>
 
                     <CardContent className="p-4">
@@ -1169,7 +1206,7 @@ export default function HistoryPage() {
                           </div>
                         </div>
 
-                        {/* 操作 */}
+                         {/* 操作 */}
                         <div className="col-span-1 flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <Button
                             size="icon"
@@ -1179,6 +1216,19 @@ export default function HistoryPage() {
                             title="查看詳情"
                           >
                             <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-slate-400 hover:text-red-400"
+                            onClick={(e) => { 
+                              e.stopPropagation(); 
+                              setDeleteId(item.id);
+                              setDeleteDialogOpen(true);
+                            }}
+                            title="刪除"
+                          >
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       </div>
@@ -1635,6 +1685,50 @@ export default function HistoryPage() {
           if (selectedItem) handleDownload(selectedItem);
         }}
       />
+       {/* ==================== 刪除確認彈窗 ==================== */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="max-w-md bg-slate-900 border-slate-700">
+          <DialogHeader>
+            <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
+              <Trash2 className="h-6 w-6 text-red-500" />
+            </div>
+            <DialogTitle className="text-white text-xl">確認刪除紀錄？</DialogTitle>
+            <DialogDescription className="text-slate-400 pt-2 pb-4">
+              <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <p>
+                  <strong>注意：</strong> 資料刪除後將無法回溯，且該筆內容產出的雲端連結也可能失效。
+                </p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-3 mt-4">
+            <Button
+              variant="ghost"
+              className="flex-1 text-slate-400 hover:bg-slate-800"
+              onClick={() => setDeleteDialogOpen(false)}
+              disabled={deleting}
+            >
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              className="flex-1 bg-red-600 hover:bg-red-500"
+              onClick={() => deleteId && handleDelete(deleteId)}
+              disabled={deleting}
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  刪除中...
+                </>
+              ) : (
+                "確認刪除"
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
