@@ -42,8 +42,6 @@ interface User {
   created_at: string;
 }
 
-}
-
 interface DividendRecord {
   id: number;
   user_id: number;
