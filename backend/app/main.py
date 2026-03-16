@@ -500,6 +500,45 @@ def _auto_init_db():
         db.commit()
         print("[Startup] ✅ users.is_angel / investment / angel_info 欄位已確認")
 
+        # ── 9. expenses 表（支出紀錄）──
+        db.execute(text("""
+            CREATE TABLE IF NOT EXISTS expenses (
+                id SERIAL PRIMARY KEY,
+                item_name VARCHAR(200) NOT NULL,
+                amount DECIMAL(12, 2) NOT NULL,
+                category VARCHAR(50) DEFAULT 'other',
+                description TEXT,
+                expense_date TIMESTAMPTZ DEFAULT NOW(),
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            );
+        """))
+        db.execute(text("CREATE INDEX IF NOT EXISTS idx_expense_date ON expenses(expense_date);"))
+        db.commit()
+        print("[Startup] ✅ expenses 表已初始化")
+
+        # ── 10. 推薦碼背景補全 (Referral Code Repair) ──
+        # 為所有欠缺推薦碼的用戶補上唯一代碼
+        db.execute(text("""
+            DO $$
+            DECLARE
+                user_rec RECORD;
+                new_code TEXT;
+            BEGIN
+                FOR user_rec IN SELECT id FROM users WHERE referral_code IS NULL OR referral_code = '' LOOP
+                    LOOP
+                        new_code := upper(substring(md5(random()::text), 1, 8));
+                        IF NOT EXISTS (SELECT 1 FROM users WHERE referral_code = new_code) THEN
+                            UPDATE users SET referral_code = new_code WHERE id = user_rec.id;
+                            EXIT;
+                        END IF;
+                    END LOOP;
+                END FOR;
+            END $$;
+        """))
+        db.commit()
+        print("[Startup] ✅ 用戶推薦碼背景補完已完成")
+
         db.close()
     except Exception as e:
         print(f"[Startup] ⚠️ DB 自動初始化跳過: {e}")

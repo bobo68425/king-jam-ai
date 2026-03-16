@@ -15,7 +15,7 @@ import os
 from app.database import get_db
 from app.models import (
     User, Order, WithdrawalRequest, RefundRequest, ScheduledPost,
-    CreditTransaction, GenerationHistory, IdentityVerification
+    CreditTransaction, GenerationHistory, IdentityVerification, Expense
 )
 from app.routers.auth import get_current_user
 from app.services.lifecycle_manager import lifecycle_manager
@@ -1401,6 +1401,7 @@ async def admin_get_users(
                 "investment_units": getattr(u, "investment_units", 0),
                 "angel_phone": getattr(u, "angel_phone", None),
                 "angel_note": getattr(u, "angel_note", None),
+                "referral_code": getattr(u, "referral_code", None),
                 "created_at": u.created_at.isoformat() if u.created_at else None,
             }
             for u in users
@@ -1481,6 +1482,7 @@ async def admin_set_investment_units(
 class SetAngelProfileRequest(BaseModel):
     phone: Optional[str] = None
     note: Optional[str] = None
+    referral_code: Optional[str] = None
 
 
 @router.post("/users/{user_id}/set-angel-profile")
@@ -1491,7 +1493,7 @@ async def admin_set_angel_profile(
     current_user: User = Depends(get_current_user),
 ):
     """
-    設定天使投資人的詳細資料（電話、備註）
+    設定天使投資人的詳細資料（電話、備註、推薦碼）
     """
     require_super_admin(current_user)
     
@@ -1506,6 +1508,13 @@ async def admin_set_angel_profile(
         user.angel_phone = body.phone
     if body.note is not None:
         user.angel_note = body.note
+    if body.referral_code is not None:
+        # 檢查唯一性
+        if body.referral_code != user.referral_code:
+            existing = db.query(User).filter(User.referral_code == body.referral_code).first()
+            if existing:
+                raise HTTPException(status_code=400, detail="此推薦碼已被使用")
+            user.referral_code = body.referral_code
         
     db.commit()
     
@@ -1514,4 +1523,69 @@ async def admin_set_angel_profile(
         "message": f"用戶 {user.email} 的管理資料已更新",
         "angel_phone": user.angel_phone,
         "angel_note": user.angel_note,
+        "referral_code": user.referral_code,
     }
+
+
+class ExpenseCreate(BaseModel):
+    item_name: str
+    amount: float
+    category: Optional[str] = "other"
+    description: Optional[str] = None
+    expense_date: Optional[datetime] = None
+
+
+@router.get("/expenses")
+async def admin_get_expenses(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    獲取所有支出紀錄（超級管理員或天使投資人）
+    """
+    if not is_super_admin(current_user) and not is_angel(current_user):
+        raise HTTPException(status_code=403, detail="權限不足")
+        
+    expenses = db.query(Expense).order_by(Expense.expense_date.desc()).all()
+    return {"success": True, "expenses": expenses}
+
+
+@router.post("/expenses")
+async def admin_add_expense(
+    body: ExpenseCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    新增支出紀錄（超級管理員）
+    """
+    require_super_admin(current_user)
+    new_expense = Expense(
+        item_name=body.item_name,
+        amount=body.amount,
+        category=body.category,
+        description=body.description,
+        expense_date=body.expense_date or datetime.now()
+    )
+    db.add(new_expense)
+    db.commit()
+    db.refresh(new_expense)
+    return {"success": True, "expense": new_expense}
+
+
+@router.delete("/expenses/{expense_id}")
+async def admin_delete_expense(
+    expense_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    刪除支出紀錄（超級管理員）
+    """
+    require_super_admin(current_user)
+    expense = db.query(Expense).filter(Expense.id == expense_id).first()
+    if not expense:
+        raise HTTPException(status_code=404, detail="找不到支出紀錄")
+    db.delete(expense)
+    db.commit()
+    return {"success": True, "message": "已刪除支出紀錄"}

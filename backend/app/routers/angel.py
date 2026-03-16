@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, List
 
 from app.database import get_db
-from app.models import User, Order
+from app.models import User, Order, Expense
 from app.routers.auth import get_current_user
 from app.core.admin_security import is_super_admin, is_angel
 import os
@@ -117,14 +117,38 @@ async def get_angel_stats(
         "latency_ms": 240
     }
     
-    # 6. 預估支出 (Budget Allocation) - 根據用戶內容
-    budget_allocation = [
-        {"item": "雲端固定支出 (首年)", "budget": 10000, "desc": "Railway + Domain + DB"},
-        {"item": "GPU 算力備金 (Modal)", "budget": 10000, "desc": "10k 測試影片支援"},
-        {"item": "LTX-2 模型微調費", "budget": 5000, "desc": "特定風格 H100 租用"},
-        {"item": "廣告種子基金", "budget": 20000, "desc": "精準投放驗證轉化"},
-        {"item": "雜項與儲備金", "budget": 5000, "desc": "Sentry/R2 額外超載"}
-    ]
+    # 6. 支出明細 (Real Expense Records)
+    # 獲取本月所有支出紀錄
+    expenses = db.query(Expense).filter(Expense.expense_date >= start_of_month).all()
+    
+    if expenses:
+        # 使用真實支出數據
+        budget_allocation = [
+            {
+                "item": e.item_name,
+                "budget": float(e.amount),
+                "desc": e.description or e.category
+            }
+            for e in expenses
+        ]
+        # GPU 成本 fallback 如果沒有特定 GPU 類別，則採總額或特定邏輯
+        # 這裡為了展示，計算總支出並作為 gpu_cost 展示（或可根據類別細分）
+        total_real_expense = sum(float(e.amount) for e in expenses)
+        gpu_cost = total_real_expense
+    else:
+        # fallback: 模擬預算分配 (若無真實資料)
+        budget_allocation = [
+            {"item": "雲端固定支出 (首年)", "budget": 10000, "desc": "Railway + Domain + DB"},
+            {"item": "GPU 算力備金 (Modal)", "budget": 10000, "desc": "10k 測試影片支援"},
+            {"item": "LTX-2 模型微調費", "budget": 5000, "desc": "特定風格 H100 租用"},
+            {"item": "廣告種子基金", "budget": 20000, "desc": "精準投放驗證轉化"},
+            {"item": "雜項與儲備金", "budget": 5000, "desc": "Sentry/R2 額外超載"}
+        ]
+        # fallback: 模擬 GPU 成本與其他數據 (目前暫無實際追蹤，採比例模擬)
+        # 假設 GPU 成本佔營收的 25% (含 API 調用與伺服器預算)
+        gpu_cost = round(revenue * 0.25, 2)
+        if revenue < 1000:
+            gpu_cost = 3145.0
 
     # 3. 模擬歷史數據 (用於圖表展示)
     historical_data = []

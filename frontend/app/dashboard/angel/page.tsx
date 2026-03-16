@@ -11,7 +11,8 @@ import {
   CartesianGrid,
 } from "recharts";
 import api from "@/lib/api";
-import { Loader2, AlertCircle, TrendingUp, ShieldCheck, Rocket, Share2 } from "lucide-react";
+import { Loader2, AlertCircle, TrendingUp, ShieldCheck, Rocket, Share2, ExternalLink } from "lucide-react";
+import Link from "next/link";
 import { toast } from "sonner";
 
 const AngelDashboard = () => {
@@ -192,10 +193,19 @@ const AngelDashboard = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
         {/* 預估支出表 */}
         <div className="bg-[#11121d] border border-white/5 p-6 rounded-2xl shadow-xl">
-          <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-            <TrendingUp className="text-pink-400 w-5 h-5" />
-            預估支出 (Budget Allocation)
-          </h3>
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xl font-bold text-white flex items-center gap-2">
+              <TrendingUp className="text-pink-400 w-5 h-5" />
+              預估支出 (Budget Allocation)
+            </h3>
+            <Link 
+              href="/dashboard/expenses" 
+              className="text-[10px] uppercase font-bold tracking-widest text-indigo-400 hover:text-indigo-300 flex items-center gap-1.5 transition-colors group"
+            >
+              查看支出明細
+              <ExternalLink className="w-3 h-3 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+            </Link>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="text-slate-500 border-b border-white/5">

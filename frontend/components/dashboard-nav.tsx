@@ -138,6 +138,7 @@ export function DashboardNav() {
                     { href: "/dashboard/admin", icon: BarChart3, label: "總覽儀表板" },
                     { href: "/dashboard/admin/users", icon: Users, label: "用戶管理" },
                     { href: "/dashboard/admin/angel", icon: Shield, label: "天使權限管理", isNew: true },
+                    { href: "/dashboard/expenses", icon: Wallet, label: "支出紀錄管理", isNew: true },
                     { href: "/dashboard/admin/verification", icon: Shield, label: "身份認證" },
                     { href: "/dashboard/admin/campaigns", icon: Megaphone, label: "行銷活動", isNew: true },
                     { href: "/dashboard/admin/funding", icon: Gift, label: "募資銷售碼" },
