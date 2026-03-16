@@ -21,6 +21,7 @@ interface User {
   full_name: string | null;
   is_admin: boolean;
   is_angel: boolean;
+  investment_units: number;
   created_at: string;
 }
 
@@ -30,6 +31,7 @@ export default function AngelManagementPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAngelFilter, setIsAngelFilter] = useState<boolean | null>(null);
   const [togglingId, setTogglingId] = useState<number | null>(null);
+  const [updatingUnitsId, setUpdatingUnitsId] = useState<number | null>(null);
 
   const fetchUsers = async () => {
     try {
@@ -65,7 +67,7 @@ export default function AngelManagementPage() {
       const data = response.data;
       
       setUsers(prev => prev.map(u => 
-        u.id === user.id ? { ...u, is_angel: data.is_angel } : u
+        u.id === user.id ? { ...u, is_angel: data.is_angel, investment_units: data.investment_units } : u
       ));
       
       toast.success(data.message);
@@ -77,6 +79,25 @@ export default function AngelManagementPage() {
     }
   };
 
+  const handleUpdateUnits = async (user_id: number, units: number) => {
+    try {
+      setUpdatingUnitsId(user_id);
+      const response = await api.post(`/admin/users/${user_id}/set-investment-units`, { units });
+      const data = response.data;
+      
+      setUsers(prev => prev.map(u => 
+        u.id === user_id ? { ...u, investment_units: data.investment_units } : u
+      ));
+      
+      toast.success(data.message);
+    } catch (error) {
+      console.error(error);
+      toast.error('更新投資單位失敗');
+    } finally {
+      setUpdatingUnitsId(null);
+    }
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex justify-between items-center mb-8">
@@ -85,7 +106,7 @@ export default function AngelManagementPage() {
             <Shield className="text-blue-600 h-8 w-8" />
             天使投資人管理
           </h1>
-          <p className="text-gray-500 mt-2">僅超級管理員可見，用於管理天使投資人帳戶權限</p>
+          <p className="text-gray-500 mt-2">僅超級管理員可見，用於管理天使投資人帳戶權限與投資份額 (1單位=20萬/1%利潤)</p>
         </div>
       </div>
 
@@ -156,8 +177,8 @@ export default function AngelManagementPage() {
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
                   <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">用戶</th>
-                  <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">身份</th>
-                  <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">加入時間</th>
+                  <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">身份/份額</th>
+                  <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">投資單位設定</th>
                   <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">操作</th>
                 </tr>
               </thead>
@@ -168,30 +189,60 @@ export default function AngelManagementPage() {
                       <div className="flex flex-col">
                         <span className="font-semibold text-gray-900">{user.full_name || '未填寫姓名'}</span>
                         <span className="text-sm text-gray-500">{user.email}</span>
+                        <span className="text-[10px] text-gray-400 mt-1">
+                          加入：{new Date(user.created_at).toLocaleDateString()}
+                        </span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex gap-2">
-                        {user.is_admin && (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
-                            <ShieldAlert className="h-3 w-3 mr-1" />
-                            管理員
-                          </span>
-                        )}
-                        {user.is_angel ? (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200">
-                            <CheckCircle2 className="h-3 w-3 mr-1" />
-                            天使投資人
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
-                            一般用戶
-                          </span>
+                      <div className="flex flex-col gap-2">
+                        <div className="flex gap-2">
+                          {user.is_admin && (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
+                              <ShieldAlert className="h-3 w-3 mr-1" />
+                              管理員
+                            </span>
+                          )}
+                          {user.is_angel ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              天使投資人
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
+                              一般用戶
+                            </span>
+                          )}
+                        </div>
+                        {user.is_angel && (
+                          <div className="text-xs font-medium text-blue-600">
+                            份額: {user.investment_units}% (NT${(user.investment_units * 200000).toLocaleString()})
+                          </div>
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {new Date(user.created_at).toLocaleDateString()}
+                    <td className="px-6 py-4">
+                      {user.is_angel ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min="0"
+                            className="w-20 px-3 py-1.5 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                            defaultValue={user.investment_units}
+                            onBlur={(e) => {
+                              const val = parseInt(e.target.value);
+                              if (!isNaN(val) && val !== user.investment_units) {
+                                handleUpdateUnits(user.id, val);
+                              }
+                            }}
+                            disabled={updatingUnitsId === user.id}
+                          />
+                          <span className="text-sm text-gray-500">單位</span>
+                          {updatingUnitsId === user.id && <Loader2 className="h-4 w-4 animate-spin text-blue-500" />}
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-400 font-italic">無</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <button
@@ -208,7 +259,7 @@ export default function AngelManagementPage() {
                         ) : user.is_angel ? (
                           <>
                             <ToggleRight className="h-4 w-4 text-orange-500" />
-                            取消天使
+                            取消權限
                           </>
                         ) : (
                           <>

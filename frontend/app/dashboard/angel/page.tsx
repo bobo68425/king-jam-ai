@@ -69,6 +69,12 @@ const AngelDashboard = () => {
       {/* 核心財務卡片 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
         <StatCard
+          title="累計投資總額"
+          value={`NT$ ${(data.total_invested || 0).toLocaleString()}`}
+          color="text-indigo-400"
+          desc={`持股單位：${data.investment_units || 0} 單位`}
+        />
+        <StatCard
           title="本月總營收"
           value={`NT$ ${data.revenue.toLocaleString()}`}
           color="text-emerald-400"
@@ -81,17 +87,11 @@ const AngelDashboard = () => {
           desc="Modal / R2 / API 預估成本"
         />
         <StatCard
-          title="本月預估淨利"
-          value={`NT$ ${data.net_profit.toLocaleString()}`}
-          color="text-blue-400"
-          desc="毛利估算 (Revenue - Cost)"
-        />
-        <StatCard
-          title="您的預計分紅 (1%)"
+          title="您的本月分紅"
           value={`NT$ ${data.dividend.toLocaleString()}`}
           color="text-amber-400"
           highlight
-          desc="天使投資專屬激勵方案"
+          desc={`分紅比例：${data.dividend_rate || 0}% (每單位 1%)`}
         />
       </div>
 

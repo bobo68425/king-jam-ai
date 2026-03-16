@@ -70,7 +70,6 @@ async def get_angel_stats(
         revenue = float(report.get("revenue", revenue))
         gpu_cost = float(report.get("gpu_cost", 0))
         net_profit = float(report.get("net_profit", 0))
-        dividend = float(report.get("dividend_per_angel", 0))
     else:
         #  fallback: 模擬 GPU 成本與其他數據 (目前暫無實際追蹤，採比例模擬)
         # 假設 GPU 成本佔營收的 25% (含 API 調用與伺服器預算)
@@ -82,7 +81,10 @@ async def get_angel_stats(
             gpu_cost = 3145.0
             
         net_profit = revenue - gpu_cost
-        dividend = round(net_profit * 0.01, 2)
+    
+    # 計算該天使投資人的分紅：每 1 單位享有 1% 利潤
+    units = getattr(current_user, "investment_units", 0)
+    dividend = round(net_profit * (units * 0.01), 2)
     
     # 3. 模擬歷史數據 (用於圖表展示)
     historical_data = []
@@ -100,5 +102,8 @@ async def get_angel_stats(
         "gpu_cost": gpu_cost,
         "net_profit": net_profit,
         "dividend": dividend,
+        "investment_units": units,
+        "total_invested": units * 200000,
+        "dividend_rate": units, # 單位數即為百分比
         "historical_data": historical_data
     }

@@ -486,10 +486,13 @@ def _auto_init_db():
                     ALTER TABLE users ADD COLUMN is_angel BOOLEAN NOT NULL DEFAULT false;
                     CREATE INDEX IF NOT EXISTS ix_users_is_angel ON users(is_angel);
                 END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='users' AND column_name='investment_units') THEN
+                    ALTER TABLE users ADD COLUMN investment_units INTEGER NOT NULL DEFAULT 0;
+                END IF;
             END $$;
         """))
         db.commit()
-        print("[Startup] ✅ users.is_angel 欄位已確認")
+        print("[Startup] ✅ users.is_angel / investment_units 欄位已確認")
 
         db.close()
     except Exception as e:

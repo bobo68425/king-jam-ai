@@ -1398,6 +1398,7 @@ async def admin_get_users(
                 "full_name": u.full_name,
                 "is_admin": u.is_admin,
                 "is_angel": u.is_angel,
+                "investment_units": getattr(u, "investment_units", 0),
                 "created_at": u.created_at.isoformat() if u.created_at else None,
             }
             for u in users
@@ -1421,10 +1422,55 @@ async def admin_toggle_angel(
         raise HTTPException(status_code=404, detail="找不到此用戶")
         
     user.is_angel = not user.is_angel
+    # 若取消天使身份，同時清除投資單位
+    if not user.is_angel:
+        user.investment_units = 0
     db.commit()
     
     return {
         "success": True,
         "message": f"用戶 {user.email} 的天使身份已更新為 {user.is_angel}",
-        "is_angel": user.is_angel
+        "is_angel": user.is_angel,
+        "investment_units": user.investment_units,
+    }
+
+
+class SetInvestmentUnitsRequest(BaseModel):
+    units: int  # 投資單位數（1單位 = NT$200,000）
+
+
+@router.post("/users/{user_id}/set-investment-units")
+async def admin_set_investment_units(
+    user_id: int,
+    body: SetInvestmentUnitsRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    設定天使投資人的投資單位數
+    1 單位 = NT$200,000，每單位享有 1% 利潤分紅
+    """
+    require_super_admin(current_user)
+
+    if body.units < 0:
+        raise HTTPException(status_code=400, detail="投資單位數不可為負數")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="找不到此用戶")
+
+    if not user.is_angel:
+        raise HTTPException(status_code=400, detail="此用戶尚未被授予天使投資人身份")
+
+    user.investment_units = body.units
+    db.commit()
+
+    total_invested = body.units * 200_000
+    return {
+        "success": True,
+        "message": f"已設定 {user.email} 的投資單位為 {body.units} 單位 (NT${total_invested:,})",
+        "user_id": user_id,
+        "investment_units": body.units,
+        "total_invested_ntd": total_invested,
+        "dividend_rate_pct": body.units,  # 每單位 1%，N 單位 = N%
     }
