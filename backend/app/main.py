@@ -547,7 +547,21 @@ def health_check():
 @app.get("/debug/routes")
 def list_routes():
     """列出所有註冊的路由（除錯用）"""
-    url_list = [{"path": route.path, "name": route.name, "methods": list(route.methods)} for route in app.routes]
+    from fastapi.routing import APIRoute
+    url_list = []
+    for route in app.routes:
+        if isinstance(route, APIRoute):
+            url_list.append({
+                "path": route.path,
+                "name": route.name,
+                "methods": list(route.methods)
+            })
+        else:
+            url_list.append({
+                "path": route.path,
+                "name": getattr(route, "name", "unknown"),
+                "type": type(route).__name__
+            })
     return {"routes": url_list}
 
 
