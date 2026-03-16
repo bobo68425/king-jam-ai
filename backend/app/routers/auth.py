@@ -19,6 +19,7 @@ from app.core.security import (
     create_access_token,
     ACCESS_TOKEN_EXPIRE_MINUTES,
 )
+from app.core.admin_security import is_super_admin
 
 logger = logging.getLogger(__name__)
 
@@ -529,6 +530,7 @@ def read_me(current_user: User = Depends(get_current_user)):
     """
     回傳目前登入用戶的基本資料（含 credits）
     """
+    current_user.is_super_admin = is_super_admin(current_user)
     return current_user
 
 

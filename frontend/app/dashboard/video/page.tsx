@@ -379,7 +379,7 @@ const PREVIEW_COST = {
 
 export default function VideoPage() {
   const router = useRouter();
-  const { refreshCredits } = useCredits();
+  const { refreshCredits, isSuperAdmin } = useCredits();
 
   // 客戶端掛載狀態（防止 hydration 錯誤）
   const [mounted, setMounted] = useState(false);
@@ -424,12 +424,21 @@ export default function VideoPage() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       const savedVersion = localStorage.getItem("kingjam_vid_version");
-      if (savedVersion === "2.0" || savedVersion === "3.0") setActiveVersion(savedVersion);
+      if (savedVersion === "3.0") {
+        if (isSuperAdmin) {
+          setActiveVersion("3.0");
+        } else {
+          setActiveVersion("2.0");
+          localStorage.setItem("kingjam_vid_version", "2.0");
+        }
+      } else {
+        setActiveVersion("2.0");
+      }
 
       const savedMode = localStorage.getItem("kingjam_vid_v3mode");
       if (savedMode === "t2v" || savedMode === "i2v") setV3Mode(savedMode);
     }
-  }, []);
+  }, [isSuperAdmin]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -2223,21 +2232,23 @@ export default function VideoPage() {
                 <Sparkles className="w-3.5 h-3.5" />
                 v2.0 引擎
               </button>
-              <button
-                onClick={() => setActiveVersion("3.0")}
-                className={cn(
-                  "relative flex items-center gap-2 px-5 py-2 rounded-full text-sm font-medium transition-all duration-300",
-                  activeVersion === "3.0"
-                    ? "bg-gradient-to-r from-cyan-600 to-blue-500 text-white shadow-lg shadow-cyan-500/25"
-                    : "text-slate-400 hover:text-slate-200"
-                )}
-              >
-                <Zap className="w-3.5 h-3.5" />
-                v3.0 引擎
-                <span className="flex h-5 items-center rounded-full bg-emerald-400/20 px-2 text-[10px] font-semibold text-emerald-300">
-                  LTX-2.3
-                </span>
-              </button>
+              {isSuperAdmin && (
+                <button
+                  onClick={() => setActiveVersion("3.0")}
+                  className={cn(
+                    "relative flex items-center gap-2 px-5 py-2 rounded-full text-sm font-medium transition-all duration-300",
+                    activeVersion === "3.0"
+                      ? "bg-gradient-to-r from-cyan-600 to-blue-500 text-white shadow-lg shadow-cyan-500/25"
+                      : "text-slate-400 hover:text-slate-200"
+                  )}
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  v3.0 引擎
+                  <span className="flex h-5 items-center rounded-full bg-emerald-400/20 px-2 text-[10px] font-semibold text-emerald-300">
+                    LTX-2.3
+                  </span>
+                </button>
+              )}
             </div>
 
             {activeVersion === "2.0" ? (

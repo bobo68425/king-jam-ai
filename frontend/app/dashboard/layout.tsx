@@ -44,6 +44,7 @@ interface UserInfo {
   avatar: string | null;
   tier: string;
   partner_tier: string;
+  is_super_admin?: boolean;
 }
 
 // 通知類型（對應後端）
@@ -108,7 +109,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const prevUnreadCountRef = useRef(0);  // 追蹤上次的未讀數量
-  const { credits, setCredits } = useCredits();
+  const { credits, setCredits, setIsSuperAdmin } = useCredits();
   
   // 客戶端掛載後才顯示
   useEffect(() => {
@@ -196,15 +197,17 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
         if (statsRes.status === "fulfilled" && balanceRes.status === "fulfilled") {
           const stats = statsRes.value.data;
           const balance = balanceRes.value.data;
-          setUserInfo({
-            email: stats.email || "",
-            full_name: stats.full_name,
-            avatar: stats.avatar,
-            tier: balance.tier || "free",
-            partner_tier: stats.partner_tier || "bronze",
-          });
-          // 設置點數到 Context
-          setCredits(balance.balance || 0);
+            setUserInfo({
+              email: stats.email || "",
+              full_name: stats.full_name,
+              avatar: stats.avatar,
+              tier: balance.tier || "free",
+              partner_tier: stats.partner_tier || "bronze",
+              is_super_admin: balance.is_super_admin || false,
+            });
+            // 設置點數到 Context
+            setCredits(balance.balance || 0);
+            setIsSuperAdmin(balance.is_super_admin || false);
         }
         
         // 獲取通知

@@ -17,6 +17,7 @@ class UserResponse(BaseModel):
     credits: int
     is_active: bool
     is_admin: bool = False  # 管理員權限
+    is_super_admin: bool = False  # 超級管理員權限
     referral_code: Optional[str] = None  # 推薦碼
 
     class Config:

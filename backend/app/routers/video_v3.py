@@ -31,6 +31,7 @@ from app.routers.auth import get_current_user
 from app.services.credit_service import FeatureCode, CreditService
 from app.services.credit_decorators import consume_credits_manually
 from app.services.prompt_loader import load_prompt
+from app.core.admin_security import require_super_admin
 
 logger = logging.getLogger(__name__)
 
@@ -245,7 +246,8 @@ async def get_themes():
 async def generate_scene(
     request: SceneGenerateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    _: User = Depends(require_super_admin)
 ):
     """
     單場景 AI 影片片段生成 (LTX-2.3)
@@ -308,7 +310,8 @@ async def generate_scene(
 async def generate_tts(
     request: TTSRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    _: User = Depends(require_super_admin)
 ):
     """
     OpenAI TTS 配音生成
@@ -379,7 +382,8 @@ async def generate_tts(
 async def submit_render(
     request: RenderRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    _: User = Depends(require_super_admin)
 ):
     """
     提交 Remotion 渲染任務
@@ -561,7 +565,8 @@ class CheckClipsRequest(BaseModel):
 async def generate_clips(
     request: BatchClipRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    _: User = Depends(require_super_admin)
 ):
     """
     批次提交場景到 LTX-2.3 生成 AI 影片片段
@@ -793,7 +798,8 @@ async def check_clips(
 async def generate_video_api(
     request: FullGenerateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    _: User = Depends(require_super_admin)
 ):
     """
     全自動影片生成 API — 支援 T2V / I2V / S2V 三種模式

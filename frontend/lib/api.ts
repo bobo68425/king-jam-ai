@@ -46,10 +46,10 @@ api.interceptors.request.use((config) => {
     delete config.headers['Content-Type'];
   }
 
-  // LTX / v3 end全生成端點使用 10 分鐘超時（cold start + 生成）
+  // LTX / v3 生成端點使用 30 分鐘超時（cold start + 多場景推論）
   const url = config.url || '';
   if (LTX_LONG_TIMEOUT_PATHS.some(path => url.includes(path))) {
-    config.timeout = 600000; // 10 分鐘
+    config.timeout = 1800000; // 30 分鐘
   } else if (AI_GENERATE_PATHS.some(path => url.includes(path))) {
     // AI 生成端點使用更長的超時時間（180 秒）
     config.timeout = 180000;

@@ -8,12 +8,15 @@ interface CreditsContextType {
   setCredits: (credits: number) => void;
   refreshCredits: () => Promise<void>;
   deductCredits: (amount: number) => void;
+  isSuperAdmin: boolean;
+  setIsSuperAdmin: (val: boolean) => void;
 }
 
 const CreditsContext = createContext<CreditsContextType | undefined>(undefined);
 
 export function CreditsProvider({ children, initialCredits = 0 }: { children: ReactNode; initialCredits?: number }) {
   const [credits, setCredits] = useState(initialCredits);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   const refreshCredits = useCallback(async () => {
     // 未登入時不發送需要 Token 的請求，避免 console 出現 401 錯誤
@@ -23,6 +26,7 @@ export function CreditsProvider({ children, initialCredits = 0 }: { children: Re
     try {
       const res = await api.get("/credits/balance");
       setCredits(res.data.balance || 0);
+      setIsSuperAdmin(res.data.is_super_admin || false);
     } catch (error) {
       console.error("Failed to refresh credits:", error);
     }
@@ -33,7 +37,7 @@ export function CreditsProvider({ children, initialCredits = 0 }: { children: Re
   }, []);
 
   return (
-    <CreditsContext.Provider value={{ credits, setCredits, refreshCredits, deductCredits }}>
+    <CreditsContext.Provider value={{ credits, setCredits, refreshCredits, deductCredits, isSuperAdmin, setIsSuperAdmin }}>
       {children}
     </CreditsContext.Provider>
   );
