@@ -564,24 +564,44 @@ def read_root():
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "service": "backend", "version": "2.0.0-angel-fix"}
+    return {"status": "ok", "service": "backend", "version": "2.0.2-diag"}
 
 
 @app.get("/debug/angels")
 def debug_angels():
-    """公用診斷：直接查看 ORM vs SQL 天使狀態"""
+    """公用診斷：深入對比 ORM 與 SQL"""
     from app.database import SessionLocal
+    from app.models import User
+    from sqlalchemy import func
     db = SessionLocal()
     try:
-        # Raw SQL
-        raw = db.execute(sa_text("SELECT id, email, is_admin, is_angel, investment_units, referral_code FROM users ORDER BY id LIMIT 20")).fetchall()
+        # 1. SQL Count
+        sql_count = db.execute(sa_text("SELECT COUNT(*) FROM users WHERE is_angel = true")).scalar()
+        
+        # 2. ORM Count
+        orm_count = db.query(func.count(User.id)).filter(User.is_angel == True).scalar()
+        
+        # 3. Specific Users Details
+        users_info = []
+        raw_users = db.execute(sa_text("SELECT id, email, is_angel, investment_units FROM users WHERE is_admin = true OR is_angel = true OR id = 1")).fetchall()
+        for r in raw_users:
+            # Get ORM object for the same ID
+            u_orm = db.query(User).filter(User.id == r[0]).first()
+            users_info.append({
+                "id": r[0],
+                "email": r[1],
+                "sql_is_angel": r[2],
+                "sql_units": r[3],
+                "orm_is_angel": u_orm.is_angel if u_orm else "MISSING",
+                "orm_units": u_orm.investment_units if u_orm else "MISSING"
+            })
+            
         return {
-            "source": "raw_sql",
-            "count": len(raw),
-            "users": [
-                {"id": r[0], "email": r[1], "is_admin": r[2], "is_angel": r[3], "investment_units": r[4], "referral_code": r[5]}
-                for r in raw
-            ]
+            "version": "2.0.2",
+            "sql_total_angels": sql_count,
+            "orm_total_angels": orm_count,
+            "users": users_info,
+            "match": sql_count == orm_count
         }
     finally:
         db.close()
