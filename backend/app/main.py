@@ -540,14 +540,15 @@ def _auto_init_db():
         print("[Startup] ✅ 用戶推薦碼背景補完已完成")
 
         # ── 11. 天使投資人權限修復 (Angel Status Repair) ──
-        # 確保主管理員具備天使身份 (用於初始化線上儀表板數據)
+        # 確保主管理員具備天使身份並有基本持股 (用於初始化線上儀表板數據)
         db.execute(text("""
             UPDATE users 
-            SET is_angel = true, investment_units = 10 
-            WHERE email = 'bobo68425@gmail.com' AND is_angel = false;
+            SET is_angel = true, 
+                investment_units = CASE WHEN investment_units = 0 THEN 2 ELSE investment_units END
+            WHERE email = 'bobo68425@gmail.com' AND (is_angel = false OR investment_units = 0);
         """))
         db.commit()
-        print("[Startup] ✅ 天使投資人權限修復完成")
+        print("[Startup] ✅ 天使投資人權限修復完成 (bobo68425@gmail.com)")
 
         db.close()
     except Exception as e:
