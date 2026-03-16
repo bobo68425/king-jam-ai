@@ -3,7 +3,7 @@
 系統管理、儲存管理、清理任務、健康監控
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Query
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 from sqlalchemy.orm import Session
@@ -1360,7 +1360,7 @@ async def admin_confirm_payment(
 @router.get("/users")
 async def admin_get_users(
     q: Optional[str] = None,
-    is_angel: Optional[bool] = None,
+    angel_only: Optional[bool] = Query(None, alias="is_angel"),
     limit: int = 50,
     offset: int = 0,
     db: Session = Depends(get_db),
@@ -1382,15 +1382,29 @@ async def admin_get_users(
             )
         )
         
-    if is_angel is not None:
-        query = query.filter(User.is_angel == is_angel)
+    if angel_only is True:
+        query = query.filter(User.is_angel == True)
+    elif angel_only is False:
+        query = query.filter(User.is_angel == False)
         
     total = query.count()
     users = query.order_by(User.investment_units.desc(), User.created_at.desc()).offset(offset).limit(limit).all()
     
+    # Calculate global stats for all authorized angels (regardless of search/filter)
+    global_angels_query = db.query(
+        func.count(User.id),
+        func.sum(User.investment_units)
+    ).filter(User.is_angel == True).first()
+    
+    global_stats = {
+        "total_angels": global_angels_query[0] or 0,
+        "total_units": int(global_angels_query[1] or 0)
+    }
+    
     return {
         "success": True,
         "total": total,
+        "global_stats": global_stats,
         "users": [
             {
                 "id": u.id,

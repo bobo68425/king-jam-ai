@@ -40,6 +40,7 @@ export default function AngelManagementPage() {
   const [isAngelFilter, setIsAngelFilter] = useState<boolean | null>(null);
   const [togglingId, setTogglingId] = useState<number | null>(null);
   const [updatingUnitsId, setUpdatingUnitsId] = useState<number | null>(null);
+  const [globalStats, setGlobalStats] = useState({ total_angels: 0, total_units: 0 });
   
   // Modal state
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -50,13 +51,17 @@ export default function AngelManagementPage() {
 
   const fetchUsers = async () => {
     try {
+      setLoading(true);
       let url = `/admin/users?limit=100`;
       if (searchTerm) url += `&q=${encodeURIComponent(searchTerm)}`;
       if (isAngelFilter !== null) url += `&is_angel=${isAngelFilter}`;
 
       const response = await api.get(url);
       const data = response.data;
-      setUsers(data.users);
+      setUsers(data.users || []);
+      if (data.global_stats) {
+        setGlobalStats(data.global_stats);
+      }
     } catch (error) {
       console.error(error);
       toast.error('無法取得用戶數據');
@@ -66,8 +71,11 @@ export default function AngelManagementPage() {
   };
 
   useEffect(() => {
-    fetchUsers();
-  }, [isAngelFilter]);
+    const timer = setTimeout(() => {
+      fetchUsers();
+    }, 300); // Small debounce for search
+    return () => clearTimeout(timer);
+  }, [isAngelFilter, searchTerm]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -172,7 +180,7 @@ export default function AngelManagementPage() {
         </div>
 
       {/* Investment Summary Stats */}
-      {!loading && users.length > 0 && (
+      {(!loading || globalStats.total_angels > 0) && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           <div className="bg-[#11121d] border border-white/5 p-4 rounded-2xl shadow-xl flex items-center gap-4">
             <div className="h-12 w-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
@@ -180,7 +188,7 @@ export default function AngelManagementPage() {
             </div>
             <div>
               <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">已核准天使</p>
-              <p className="text-2xl font-black text-white">{users.filter(u => u.is_angel).length} <span className="text-sm text-slate-500 font-medium">位</span></p>
+              <p className="text-2xl font-black text-white">{globalStats.total_angels} <span className="text-sm text-slate-500 font-medium">位</span></p>
             </div>
           </div>
           <div className="bg-[#11121d] border border-white/5 p-4 rounded-2xl shadow-xl flex items-center gap-4">
@@ -189,7 +197,7 @@ export default function AngelManagementPage() {
             </div>
             <div>
               <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">總持股佔比</p>
-              <p className="text-2xl font-black text-white">{users.reduce((acc, curr) => acc + (curr.investment_units || 0), 0)} <span className="text-sm text-slate-500 font-medium">%</span></p>
+              <p className="text-2xl font-black text-white">{globalStats.total_units} <span className="text-sm text-slate-500 font-medium">%</span></p>
             </div>
           </div>
           <div className="bg-[#11121d] border border-white/5 p-4 rounded-2xl shadow-xl flex items-center gap-4">
@@ -200,7 +208,7 @@ export default function AngelManagementPage() {
               <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">總計畫籌資額</p>
               <p className="text-2xl font-black text-white">
                 <span className="text-xs text-emerald-500 mr-1">NT$</span>
-                {(users.reduce((acc, curr) => acc + (curr.investment_units || 0), 0) * 200000).toLocaleString()}
+                {(globalStats.total_units * 200000).toLocaleString()}
               </p>
             </div>
           </div>
