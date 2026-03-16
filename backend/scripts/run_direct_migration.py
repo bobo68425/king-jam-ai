@@ -213,6 +213,27 @@ def main():
             conn.commit()
             print("  ✅ generation_history 追蹤欄位已確認")
 
+            # ── 8. monthly_reports 表（重要：修復生產環境缺失） ──
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS monthly_reports (
+                    id SERIAL PRIMARY KEY,
+                    year_month VARCHAR(7) NOT NULL UNIQUE,
+                    revenue NUMERIC(12,2) DEFAULT 0,
+                    expenses NUMERIC(12,2) DEFAULT 0,
+                    net_profit NUMERIC(12,2) DEFAULT 0,
+                    withholding_tax NUMERIC(12,2) DEFAULT 0,
+                    distributable_profit NUMERIC(12,2) DEFAULT 0,
+                    status VARCHAR(20) DEFAULT 'draft',
+                    metadata_json JSONB DEFAULT '{}',
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ,
+                    settled_at TIMESTAMPTZ,
+                    sent_at TIMESTAMPTZ
+                );
+            """))
+            conn.commit()
+            print("  ✅ monthly_reports 表已確認")
+
         print("✅ 全部遷移完成")
     except Exception as e:
         print(f"❌ 遷移失敗: {e}", file=sys.stderr)
