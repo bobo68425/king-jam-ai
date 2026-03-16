@@ -74,7 +74,7 @@ const AngelDashboard = () => {
         <div className="w-1.5 h-6 bg-blue-500 rounded-full shadow-[0_0_10px_rgba(59,130,246,0.5)]" />
         財務牆 (Financial Wall)
       </h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
         <StatCard
           title="持股單位 & 投資額"
           value={`NT$ ${(data.total_invested || 0).toLocaleString()}`}
@@ -82,11 +82,27 @@ const AngelDashboard = () => {
           desc={`${data.investment_units || 0} 單位 (每單位 1% 分紅)`}
         />
         <StatCard
+          title="總計畫籌資額"
+          value="NT$ 2,000,000"
+          color="text-emerald-400"
+          desc="目標發行 100 單位"
+        />
+        <StatCard
           title="本月實收營收"
           value={`NT$ ${data.revenue.toLocaleString()}`}
-          color="text-emerald-400"
+          color="text-blue-400"
           desc="ECPay / BluePay 實收"
         />
+        <StatCard
+          title="您的本月分紅"
+          value={`NT$ ${data.dividend.toLocaleString()}`}
+          color="text-amber-400"
+          highlight
+          desc="淨利潤分紅 (扣除成本與稅金)"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
         <StatCard
           title="預計支出 & 稅金"
           value={`NT$ ${((data.gpu_cost || 0) + (data.withholding_tax || 0)).toLocaleString()}`}
@@ -94,11 +110,10 @@ const AngelDashboard = () => {
           desc={`含稅金: NT$ ${(data.withholding_tax || 0).toLocaleString()}`}
         />
         <StatCard
-          title="您的本月分紅"
-          value={`NT$ ${data.dividend.toLocaleString()}`}
-          color="text-amber-400"
-          highlight
-          desc={`分紅比例：${data.dividend_rate || 0}% (淨利扣稅後)`}
+          title="推廣成效 (Referral)"
+          value={`${data.referral_stats?.count || 0} 人`}
+          color="text-emerald-400"
+          desc={`累計預約/註冊用戶`}
         />
       </div>
 
