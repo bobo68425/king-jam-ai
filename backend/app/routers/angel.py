@@ -163,9 +163,18 @@ async def get_angel_stats(
     
     # 7. 個人投資詳情 (Personal Investment Details)
     # 從用戶模型中獲取個人化數據
-    personal_dividends = db.query(DividendRecord).filter(
+    personal_dividends_query = db.query(DividendRecord).filter(
         DividendRecord.user_id == current_user.id
-    ).order_by(DividendRecord.dividend_date.desc()).limit(12).all()
+    )
+    
+    personal_dividends = personal_dividends_query.order_by(DividendRecord.dividend_date.desc()).limit(12).all()
+    
+    total_dividends_received = db.query(func.sum(DividendRecord.amount)).filter(
+        and_(
+            DividendRecord.user_id == current_user.id,
+            DividendRecord.status == "completed"
+        )
+    ).scalar() or 0
 
     return {
         "revenue": revenue,
@@ -187,6 +196,7 @@ async def get_angel_stats(
         "system_health": system_health,
         "budget_allocation": budget_allocation,
         "historical_data": historical_data,
+        "total_dividends_received": float(total_dividends_received),
         "personal_dividends": [
             {
                 "id": dr.id,

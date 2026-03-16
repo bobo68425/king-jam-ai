@@ -344,8 +344,12 @@ const AngelDashboard = () => {
             </h3>
             <p className="text-slate-500 text-sm mt-1">追蹤您的投資收益發放狀態與歷史明細</p>
           </div>
-          <div className="px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl">
-            <span className="text-xs text-emerald-400 font-black uppercase tracking-widest">累積已領取分紅：開發中</span>
+          <div className="px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-shadow-[0_0_10px_rgba(16,185,129,0.3)]">
+            <span className="text-xs text-emerald-400 font-black uppercase tracking-widest flex items-center gap-2">
+              <DollarSign className="w-3 h-3" />
+              累積已領取分紅：
+              <span className="text-sm font-mono tracking-normal">NT$ {(data.total_dividends_received || 0).toLocaleString()}</span>
+            </span>
           </div>
         </div>
 
