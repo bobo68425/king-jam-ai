@@ -5,9 +5,10 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, List
 
 from app.database import get_db
-from app.models import User, Order, Expense, DividendRecord
+from app.models import User, Order, Expense, DividendRecord, MonthlyReport
 from app.routers.auth import get_current_user
 from app.core.admin_security import is_super_admin, is_angel
+from app.services.email_service import get_email_service
 import os
 import json
 import redis
@@ -176,6 +177,11 @@ async def get_angel_stats(
         )
     ).scalar() or 0
 
+    # 8. 獲取正式月結報表 (Official Monthly Reports)
+    official_reports = db.query(MonthlyReport).filter(
+        MonthlyReport.status == "sent"
+    ).order_by(MonthlyReport.year_month.desc()).limit(12).all()
+
     return {
         "revenue": revenue,
         "gpu_cost": gpu_cost,
@@ -205,5 +211,200 @@ async def get_angel_stats(
                 "description": dr.description,
                 "status": dr.status
             } for dr in personal_dividends
+        ],
+        "official_reports": [
+            {
+                "id": report.id,
+                "year_month": report.year_month,
+                "revenue": float(report.revenue),
+                "expenses": float(report.expenses),
+                "net_profit": float(report.net_profit),
+                "distributable_profit": float(report.distributable_profit),
+                "status": report.status,
+                "settled_at": report.settled_at.isoformat() if report.settled_at else None
+            } for report in official_reports
         ]
     }
+
+
+@router.get("/reports")
+async def list_monthly_reports(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """取得月結報表列表 (管理員用)"""
+    if not is_super_admin(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="僅限管理員存取"
+        )
+    
+    reports = db.query(MonthlyReport).order_by(MonthlyReport.year_month.desc()).all()
+    return reports
+
+
+@router.post("/reports/settle")
+async def settle_monthly_report(
+    year_month: str,  # YYYY-MM
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """執行月結：計算數據並產生正式報表與分紅紀錄"""
+    if not is_super_admin(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="僅限管理員執行結算"
+        )
+    
+    # 1. 檢查是否已存在
+    existing = db.query(MonthlyReport).filter(MonthlyReport.year_month == year_month).first()
+    if existing and existing.status == "settled":
+         raise HTTPException(status_code=400, detail=f"{year_month} 報表已結算，請勿重複執行。")
+
+    # 2. 定義時間範圍
+    try:
+        year, month = map(int, year_month.split("-"))
+        start_date = datetime(year, month, 1)
+        if month == 12:
+            end_date = datetime(year + 1, 1, 1)
+        else:
+            end_date = datetime(year, month + 1, 1)
+    except Exception:
+        raise HTTPException(status_code=400, detail="無效的時間格式，請使用 YYYY-MM")
+
+    # 3. 計算財務數據
+    # 總營收
+    revenue = db.query(func.sum(Order.total_amount)).filter(
+        and_(
+            Order.status.in_(["paid", "completed"]),
+            Order.created_at >= start_date,
+            Order.created_at < end_date
+        )
+    ).scalar() or 0
+    revenue = float(revenue)
+
+    # 總支出
+    expenses_list = db.query(Expense).filter(
+        and_(
+            Expense.expense_date >= start_date,
+            Expense.expense_date < end_date
+        )
+    ).all()
+    total_expenses = sum(float(e.amount) for e in expenses_list)
+    
+    # 計算利潤與稅金
+    net_profit = max(0, revenue - total_expenses)
+    withholding_tax = round(net_profit * 0.20, 2)
+    distributable_profit = net_profit - withholding_tax
+
+    # 4. 建立或更新報表
+    if not existing:
+        report = MonthlyReport(year_month=year_month)
+        db.add(report)
+    else:
+        report = existing
+
+    report.revenue = revenue
+    report.expenses = total_expenses
+    report.net_profit = net_profit
+    report.withholding_tax = withholding_tax
+    report.distributable_profit = distributable_profit
+    report.status = "settled"
+    report.settled_at = datetime.now()
+    report.metadata_json = {
+        "expense_count": len(expenses_list),
+        "calculation_time": datetime.now().isoformat()
+    }
+
+    # 5. 為所有天使投資人產生分紅紀錄
+    angels = db.query(User).filter(User.is_angel == True).all()
+    for angel in angels:
+        # 依照投資人的分紅比例計算
+        ratio = float(angel.dividend_ratio or 0)
+        # 如果有設定單位 (investment_units)，也可以採單位制：1 單位 = 1% (0.01)
+        # 這裡採取優先使用 dividend_ratio 的邏輯
+        if ratio <= 0 and angel.investment_units > 0:
+            ratio = angel.investment_units * 0.01
+            
+        dividend_amount = round(distributable_profit * ratio, 2)
+        
+        if dividend_amount > 0:
+            # 檢查是否已存在該月的紀錄
+            existing_dr = db.query(DividendRecord).filter(
+                and_(
+                    DividendRecord.user_id == angel.id,
+                    DividendRecord.description.like(f"%{year_month}%")
+                )
+            ).first()
+            
+            if not existing_dr:
+                dr = DividendRecord(
+                    user_id=angel.id,
+                    amount=dividend_amount,
+                    dividend_date=start_date,
+                    description=f"{year_month} 月結分紅",
+                    status="completed"
+                )
+                db.add(dr)
+
+    db.commit()
+    return {"message": f"{year_month} 結算完成", "report_id": report.id}
+
+
+@router.post("/reports/{year_month}/send")
+async def send_monthly_report_email(
+    year_month: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """一鍵寄送報表通知給所有投資人"""
+    if not is_super_admin(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="僅限超級管理員操作"
+        )
+    
+    report = db.query(MonthlyReport).filter(MonthlyReport.year_month == year_month).first()
+    if not report or report.status != "settled":
+        raise HTTPException(status_code=400, detail="報表尚未結算或不存在")
+    
+    email_service = get_email_service()
+    angels = db.query(User).filter(User.is_angel == True).all()
+    
+    success_count = 0
+    for angel in angels:
+        if not angel.email:
+            continue
+            
+        # 計算此投資人的個別數據
+        ratio = float(angel.dividend_ratio or (angel.investment_units * 0.01))
+        personal_dividend = float(report.distributable_profit) * ratio
+        
+        # 寄送郵件 (使用通用通知模板，稍後可優化專屬模板)
+        html_content = f"""
+        <div class="info-box">
+            <h2 style="margin-top:0;">{year_month} 財務結算報表</h2>
+            <p><strong>本月總營業額：</strong>NT$ {float(report.revenue):,.0f}</p>
+            <p><strong>本月總支出：</strong>NT$ {float(report.expenses):,.0f}</p>
+            <hr style="border:0; border-top:1px solid #e2e8f0; margin:15px 0;">
+            <p><strong>您的分紅比例：</strong>{ratio*100:.2f}%</p>
+            <p style="font-size:18px; color:#10b981;"><strong>應領分紅金額：NT$ {personal_dividend:,.0f}</strong></p>
+        </div>
+        <p>詳細報表已更新至您的投資人儀表板，請登入查看。</p>
+        """
+        
+        result = email_service.send_notification(
+            to=angel.email,
+            title=f"{year_month} 投資結算報告",
+            content_html=html_content,
+            action_url=f"{os.getenv('FRONTEND_URL', 'https://kingjam.app')}/dashboard/angel",
+            user_name=angel.full_name
+        )
+        if result["success"]:
+            success_count += 1
+            
+    report.status = "sent"
+    report.sent_at = datetime.now()
+    db.commit()
+    
+    return {"message": f"成功寄出 {success_count} 封郵件"}

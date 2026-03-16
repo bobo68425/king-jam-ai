@@ -16,7 +16,11 @@ import {
   Edit3,
   X,
   Share2,
-  Upload
+  Upload,
+  Calendar,
+  BarChart3,
+  Send,
+  Calculator
 } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/lib/api';
@@ -38,6 +42,8 @@ interface User {
   created_at: string;
 }
 
+}
+
 interface DividendRecord {
   id: number;
   user_id: number;
@@ -46,6 +52,19 @@ interface DividendRecord {
   description?: string;
   status: string;
   created_at: string;
+}
+
+interface MonthlyReport {
+  id: number;
+  year_month: string;
+  revenue: number;
+  expenses: number;
+  net_profit: number;
+  withholding_tax: number;
+  distributable_profit: number;
+  status: 'draft' | 'settled' | 'sent';
+  created_at: string;
+  settled_at?: string;
 }
 
 export default function AngelManagementPage() {
@@ -81,6 +100,14 @@ export default function AngelManagementPage() {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
+  // Monthly Report States
+  const [reports, setReports] = useState<MonthlyReport[]>([]);
+  const [loadingReports, setLoadingReports] = useState(false);
+  const [isSettling, setIsSettling] = useState(false);
+  const [isSendingReport, setIsSendingReport] = useState<string | null>(null);
+  const [reportTab, setReportTab] = useState<'users' | 'reports'>('users');
+  const [settleYearMonth, setSettleYearMonth] = useState(new Date().toISOString().slice(0, 7));
+
   const fetchUsers = async () => {
     try {
       setLoading(true);
@@ -104,10 +131,53 @@ export default function AngelManagementPage() {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      fetchUsers();
+      if (reportTab === 'users') {
+        fetchUsers();
+      } else {
+        fetchReports();
+      }
     }, 300); // Small debounce for search
     return () => clearTimeout(timer);
-  }, [isAngelFilter, searchTerm]);
+  }, [isAngelFilter, searchTerm, reportTab]);
+
+  const fetchReports = async () => {
+    try {
+      setLoadingReports(true);
+      const response = await api.get('/angel/reports');
+      setReports(response.data);
+    } catch (error) {
+      console.error(error);
+      toast.error('無法取得報表列表');
+    } finally {
+      setLoadingReports(false);
+    }
+  };
+
+  const handleSettle = async () => {
+    try {
+      setIsSettling(true);
+      const response = await api.post(`/angel/reports/settle?year_month=${settleYearMonth}`);
+      toast.success(response.data.message);
+      fetchReports();
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || '結算失敗');
+    } finally {
+      setIsSettling(false);
+    }
+  };
+
+  const handleSendReport = async (yearMonth: string) => {
+    try {
+      setIsSendingReport(yearMonth);
+      const response = await api.post(`/angel/reports/${yearMonth}/send`);
+      toast.success(response.data.message);
+      fetchReports();
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || '寄送失敗');
+    } finally {
+      setIsSendingReport(null);
+    }
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -296,9 +366,38 @@ export default function AngelManagementPage() {
             </div>
           </div>
           <p className="text-slate-400 text-sm max-w-2xl leading-relaxed font-medium">
-            僅超級管理員可見，負責管理天使權限、持股單位與聯絡資料。
+            僅超級管理員可見，負責管理天使權限、持股單位與聯絡資料，並執行每月結算發送。
           </p>
         </div>
+
+      {/* Main Mode Tabs */}
+      <div className="flex gap-4 mb-8 p-1.5 bg-[#11121d] border border-white/5 rounded-2xl w-fit">
+        <button
+          onClick={() => setReportTab('users')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-black transition-all ${
+            reportTab === 'users' 
+            ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' 
+            : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          投資人清單
+        </button>
+        <button
+          onClick={() => setReportTab('reports')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-black transition-all ${
+            reportTab === 'reports' 
+            ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/20' 
+            : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
+          }`}
+        >
+          <BarChart3 className="w-4 h-4" />
+          每月結算報表
+        </button>
+      </div>
+
+      {reportTab === 'users' ? (
+        <>
 
       {/* Investment Summary Stats */}
       {(!loading || globalStats.total_angels > 0) && (
@@ -537,6 +636,122 @@ export default function AngelManagementPage() {
           </div>
         )}
       </div>
+      </>
+      ) : (
+        <div className="space-y-6">
+          {/* Settle New Month Section */}
+          <div className="bg-[#11121d] border border-white/5 p-6 rounded-2xl shadow-xl flex flex-col md:flex-row justify-between items-center gap-4">
+            <div>
+              <h3 className="text-lg font-black text-white flex items-center gap-2">
+                <Calculator className="w-5 h-5 text-blue-400" />
+                執行新月份結算
+              </h3>
+              <p className="text-sm text-slate-500 mt-1">系統將根據該月份的營收與支出自動計算可分配利潤與分紅紀錄。</p>
+            </div>
+            <div className="flex items-center gap-3 w-full md:w-auto">
+              <input 
+                type="month" 
+                value={settleYearMonth}
+                onChange={(e) => setSettleYearMonth(e.target.value)}
+                className="px-4 py-2.5 bg-black/40 border border-white/10 rounded-xl text-white outline-none focus:ring-2 focus:ring-blue-500/50"
+              />
+              <button 
+                onClick={handleSettle}
+                disabled={isSettling}
+                className="flex-shrink-0 bg-blue-600 hover:bg-blue-500 text-white px-6 py-2.5 rounded-xl font-black text-sm transition-all shadow-lg shadow-blue-600/20 flex items-center gap-2 disabled:opacity-50"
+              >
+                {isSettling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calculator className="w-4 h-4" />}
+                開始執行結算
+              </button>
+            </div>
+          </div>
+
+          {/* Reports Table */}
+          <div className="bg-[#11121d] rounded-2xl shadow-xl border border-white/5 overflow-hidden">
+            <div className="p-5 border-b border-white/5 flex justify-between items-center">
+              <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">歷史結算報表</h3>
+            </div>
+            {loadingReports ? (
+              <div className="flex flex-col items-center justify-center py-20">
+                <Loader2 className="h-10 w-10 text-emerald-500 animate-spin mb-4" />
+                <p className="text-gray-500 font-medium">載入報表中...</p>
+              </div>
+            ) : reports.length === 0 ? (
+              <div className="text-center py-20">
+                <BarChart3 className="h-12 w-12 text-gray-700 mx-auto mb-4" />
+                <p className="text-gray-500 font-medium">尚無結算紀錄</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-white/5 border-b border-white/5">
+                      <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">月份</th>
+                      <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">營收 / 支出</th>
+                      <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">淨利 / 實分</th>
+                      <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">狀態</th>
+                      <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {reports.map((report) => (
+                      <tr key={report.id} className="hover:bg-white/5 transition-colors">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-400 font-black">
+                              <Calendar className="w-5 h-5" />
+                            </div>
+                            <span className="text-white font-black">{report.year_month}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="space-y-1">
+                            <p className="text-xs text-emerald-400 font-bold">NT$ {report.revenue.toLocaleString()}</p>
+                            <p className="text-[10px] text-slate-500">NT$ {report.expenses.toLocaleString()}</p>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="space-y-1">
+                            <p className="text-xs text-blue-400 font-bold">NT$ {report.net_profit.toLocaleString()}</p>
+                            <p className="text-[10px] text-slate-500">分紅 NT$ {report.distributable_profit.toLocaleString()}</p>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter border ${
+                            report.status === 'sent' 
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                            : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                          }`}>
+                            {report.status === 'sent' ? '已寄送給投資人' : '已結算 / 草稿'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <button 
+                            onClick={() => handleSendReport(report.year_month)}
+                            disabled={isSendingReport === report.year_month}
+                            className={`flex items-center gap-2 ml-auto px-4 py-2 rounded-xl text-xs font-black transition-all ${
+                              report.status === 'sent'
+                              ? 'bg-white/5 text-slate-500 border border-white/5'
+                              : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20'
+                            } disabled:opacity-50`}
+                          >
+                            {isSendingReport === report.year_month ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Send className="w-3 h-3" />
+                            )}
+                            {report.status === 'sent' ? '再次發送通知' : '發送報表給投資人'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Edit Profile & Angel Detail Modal */}
       {editingUser && (

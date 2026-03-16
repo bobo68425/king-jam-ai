@@ -398,6 +398,72 @@ const AngelDashboard = () => {
           </table>
         </div>
       </div>
+
+      {/* 官方月結報表 (Official Monthly Reports) */}
+      <div className="bg-[#11121d] border border-white/5 p-8 rounded-3xl shadow-2xl mb-10 overflow-hidden relative">
+        <div className="absolute top-0 right-0 p-10 opacity-5 pointer-events-none rotate-12">
+          <TrendingUp className="w-48 h-48 text-blue-500" />
+        </div>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+          <div>
+            <h3 className="text-2xl font-black text-white flex items-center gap-3">
+              <div className="w-2 h-8 bg-blue-500 rounded-full" />
+              官方月結報表 (Official Reports)
+            </h3>
+            <p className="text-slate-500 text-sm mt-1">查看系統正式結算的財務月報與獲利佔比</p>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="text-[10px] text-slate-500 uppercase tracking-[0.2em] border-b border-white/5">
+                <th className="pb-4 font-black px-2">結算月份</th>
+                <th className="pb-4 font-black">總營業額</th>
+                <th className="pb-4 font-black">總支出</th>
+                <th className="pb-4 font-black">可分配利潤</th>
+                <th className="pb-4 font-black text-right">詳情</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {data.official_reports && data.official_reports.length > 0 ? (
+                data.official_reports.map((report: any) => (
+                  <tr key={report.id} className="group hover:bg-white/[0.02] transition-colors">
+                    <td className="py-5 px-2">
+                      <span className="text-sm font-bold text-white font-mono bg-blue-500/10 text-blue-400 px-3 py-1.5 rounded-lg border border-blue-500/20">
+                        {report.year_month}
+                      </span>
+                    </td>
+                    <td className="py-5 font-bold text-sm text-slate-300">
+                      NT$ {(report.revenue || 0).toLocaleString()}
+                    </td>
+                    <td className="py-5 font-bold text-sm text-slate-500">
+                      NT$ {(report.expenses || 0).toLocaleString()}
+                    </td>
+                    <td className="py-5 font-black text-sm text-emerald-400">
+                      NT$ {(report.distributable_profit || 0).toLocaleString()}
+                    </td>
+                    <td className="py-5 text-right">
+                      <button 
+                        onClick={() => toast.info('詳細 PDF 報表功能開發中，請先參考右方分紅金額。')}
+                        className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-white/10 text-slate-400 hover:text-white"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="py-12 text-center text-slate-600 italic text-sm">
+                    目前尚未正式發布月結報表
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 };

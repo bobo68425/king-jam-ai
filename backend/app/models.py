@@ -1658,3 +1658,31 @@ class DividendRecord(Base):
 
     # 關聯
     user = relationship("User", backref="dividend_records")
+
+
+class MonthlyReport(Base):
+    """每月財務報表 - 系統自動結算後產生的正式紀錄"""
+    __tablename__ = "monthly_reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    year_month = Column(String(7), unique=True, nullable=False, index=True)  # YYYY-MM
+    
+    # 財務數據
+    revenue = Column(Numeric(12, 2), default=0)              # 總營收
+    expenses = Column(Numeric(12, 2), default=0)             # 總支出
+    net_profit = Column(Numeric(12, 2), default=0)           # 淨利潤 (Revenue - Expenses)
+    withholding_tax = Column(Numeric(12, 2), default=0)      # 預扣稅金
+    distributable_profit = Column(Numeric(12, 2), default=0) # 可分配利潤
+    
+    # 狀態紀錄
+    status = Column(String(20), default="draft")  # draft, settled, sent (已發送給投資人)
+    
+    # 統計元數據 (JSON 格式儲存)
+    # 包含：referral_revenue, revenue_by_source, expense_details 等
+    metadata_json = Column(JSON, nullable=True)
+    
+    # 時間戳
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    settled_at = Column(DateTime(timezone=True), nullable=True)
+    sent_at = Column(DateTime(timezone=True), nullable=True)
