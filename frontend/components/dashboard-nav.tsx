@@ -106,7 +106,7 @@ export function DashboardNav() {
         const token = localStorage.getItem("token");
         if (!token) return;
 
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/credits/balance`, {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/credits/balance`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },

@@ -13,6 +13,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
+import api from '@/lib/api';
 
 interface User {
   id: number;
@@ -32,20 +33,12 @@ export default function AngelManagementPage() {
 
   const fetchUsers = async () => {
     try {
-      setLoading(true);
-      let url = `${process.env.NEXT_PUBLIC_API_URL || ''}/api/admin/users?limit=100`;
+      let url = `/admin/users?limit=100`;
       if (searchTerm) url += `&q=${encodeURIComponent(searchTerm)}`;
       if (isAngelFilter !== null) url += `&is_angel=${isAngelFilter}`;
 
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-
-      if (!response.ok) throw new Error('獲取用戶列表失敗');
-      
-      const data = await response.json();
+      const response = await api.get(url);
+      const data = response.data;
       setUsers(data.users);
     } catch (error) {
       console.error(error);
@@ -67,18 +60,9 @@ export default function AngelManagementPage() {
   const toggleAngelStatus = async (user: User) => {
     try {
       setTogglingId(user.id);
-      const url = `${process.env.NEXT_PUBLIC_API_URL || ''}/api/admin/users/${user.id}/toggle-angel`;
-      
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-
-      if (!response.ok) throw new Error('操作失敗');
-      
-      const data = await response.json();
+      const url = `/admin/users/${user.id}/toggle-angel`;
+      const response = await api.post(url);
+      const data = response.data;
       
       setUsers(prev => prev.map(u => 
         u.id === user.id ? { ...u, is_angel: data.is_angel } : u
