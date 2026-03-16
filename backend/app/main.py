@@ -532,6 +532,22 @@ def _auto_init_db():
         db.close()
     except Exception as e:
         print(f"[Startup] ⚠️ DB 自動初始化跳過: {e}")
+    
+    # ── 11. 診斷資料導出 (至靜態檔案以便查看) ──
+    try:
+        db = SessionLocal()
+        users = db.execute(text("SELECT id, email, is_admin, is_angel, investment_units FROM users ORDER BY id LIMIT 50")).fetchall()
+        db.close()
+        
+        debug_path = os.path.join(STATIC_DIR, "debug_users.txt")
+        with open(debug_path, "w") as f:
+            f.write("ID | Email | Admin | Angel | Units\n")
+            f.write("-" * 50 + "\n")
+            for u in users:
+                f.write(f"{u[0]} | {u[1]} | {u[2]} | {u[3]} | {u[4]}\n")
+        print(f"[Startup] ✅ 診斷資料已導出至 {debug_path}")
+    except Exception as e:
+        print(f"[Startup] ⚠️ 診斷資料導出失敗: {e}")
 
 
 @app.get("/")
@@ -541,7 +557,31 @@ def read_root():
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "service": "backend", "version": "1.0.8-debug"}
+    return {"status": "ok", "service": "backend", "version": "1.0.9-diagnostic"}
+
+
+@app.get("/system/force-repair")
+def public_force_repair(code: str):
+    """公用修復接口 (需密碼)"""
+    if code != "kingjam2026":
+        raise HTTPException(status_code=403)
+        
+    from app.database import SessionLocal
+    db = SessionLocal()
+    try:
+        db.execute(text("""
+            UPDATE users 
+            SET is_angel = true, 
+                investment_units = CASE WHEN (investment_units = 0 OR investment_units IS NULL) THEN 2 ELSE investment_units END
+            WHERE (LOWER(TRIM(email)) = 'bobo68425@gmail.com' OR is_admin = true OR id = 1);
+        """))
+        db.commit()
+        return {"success": True, "message": "Repair executed for bobo and admins"}
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
 
 
 @app.get("/debug/routes")
