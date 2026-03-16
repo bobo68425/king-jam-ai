@@ -1353,78 +1353,7 @@ async def admin_confirm_payment(
     }
 
 
-# ============================================================
-# 天使投資人管理 (僅限超級管理員)
-# ============================================================
 
-@router.get("/users")
-async def admin_get_users(
-    q: Optional[str] = None,
-    angel_only: Optional[bool] = Query(None, alias="is_angel"),
-    limit: int = 50,
-    offset: int = 0,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """
-    獲取用戶列表，支援關鍵字搜尋與天使狀態篩選
-    """
-    require_super_admin(current_user)
-    
-    query = db.query(User)
-    
-    if q:
-        query = query.filter(
-            or_(
-                User.email.ilike(f"%{q}%"),
-                User.full_name.ilike(f"%{q}%"),
-                User.customer_id.ilike(f"%{q}%")
-            )
-        )
-        
-    if angel_only:
-        query = query.filter(User.is_angel == True)
-    elif angel_only is False:
-        query = query.filter(User.is_angel == False)
-        
-    total = query.count()
-    users = query.order_by(
-        User.is_angel.desc(), 
-        User.investment_units.desc().nullslast(), 
-        User.created_at.desc()
-    ).offset(offset).limit(limit).all()
-    
-    # Calculate global stats for all authorized angels (regardless of search/filter)
-    global_angels_query = db.query(
-        func.count(User.id),
-        func.sum(User.investment_units)
-    ).filter(User.is_angel == True).first()
-    
-    global_stats = {
-        "total_angels": global_angels_query[0] or 0,
-        "total_units": int(global_angels_query[1] or 0)
-    }
-    
-    return {
-        "success": True,
-        "total": total,
-        "global_stats": global_stats,
-        "users": [
-            {
-                "id": u.id,
-                "email": u.email,
-                "full_name": u.full_name,
-                "is_admin": u.is_admin,
-                "is_angel": u.is_angel,
-                "investment_units": getattr(u, "investment_units", 0),
-                "angel_phone": getattr(u, "angel_phone", None),
-                "angel_note": getattr(u, "angel_note", None),
-                "referral_code": getattr(u, "referral_code", None),
-                "created_at": u.created_at.isoformat() if u.created_at else None,
-            }
-            for u in users
-        ]
-    }
 
 
 @router.post("/users/{user_id}/toggle-angel")

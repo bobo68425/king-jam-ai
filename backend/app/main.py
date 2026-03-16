@@ -564,7 +564,7 @@ def read_root():
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "service": "backend", "version": "2.0.2-diag"}
+    return {"status": "ok", "service": "backend", "version": "2.0.3-route-merged"}
 
 
 @app.get("/debug/angels")

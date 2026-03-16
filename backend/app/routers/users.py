@@ -58,6 +58,12 @@ class UserListItem(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     
+    # 天使相關
+    is_angel: bool = False
+    investment_units: int = 0
+    angel_phone: Optional[str] = None
+    angel_note: Optional[str] = None
+    
     # 計算欄位
     total_orders: int = 0
     total_spent: float = 0
@@ -75,6 +81,7 @@ class UserListResponse(BaseModel):
     page_size: int
     total_pages: int
     users: List[UserListItem]
+    global_stats: Optional[Dict[str, Any]] = None
 
 
 class UserDetailResponse(BaseModel):
@@ -160,6 +167,7 @@ async def list_users(
     tier: Optional[str] = Query(None, description="篩選：會員等級"),
     partner_tier: Optional[str] = Query(None, description="篩選：夥伴等級"),
     subscription_plan: Optional[str] = Query(None, description="篩選：訂閱方案"),
+    is_angel: Optional[bool] = Query(None, description="篩選：是否天使"),
     has_credits: Optional[bool] = Query(None, description="篩選：是否有點數"),
     has_orders: Optional[bool] = Query(None, description="篩選：是否有訂單"),
     sort_by: str = Query("created_at", description="排序欄位"),
@@ -207,6 +215,9 @@ async def list_users(
     if subscription_plan:
         query = query.filter(User.subscription_plan == subscription_plan)
     
+    if is_angel is not None:
+        query = query.filter(User.is_angel == is_angel)
+    
     if has_credits is not None:
         if has_credits:
             query = query.filter(User.credits > 0)
@@ -217,11 +228,22 @@ async def list_users(
     total = query.count()
     
     # 排序
-    sort_column = getattr(User, sort_by, User.created_at)
-    if sort_order == "desc":
-        query = query.order_by(desc(sort_column))
+    if sort_by == "investment_units":
+        sort_column = User.investment_units
+    elif sort_by == "is_angel":
+        sort_column = User.is_angel
     else:
-        query = query.order_by(asc(sort_column))
+        sort_column = getattr(User, sort_by, User.created_at)
+
+    if sort_order == "desc":
+        # 如果是天使相關排序，通常希望天使/高單位在前
+        query = query.order_by(desc(sort_column), desc(User.created_at))
+    else:
+        query = query.order_by(asc(sort_column), desc(User.created_at))
+    
+    # 如果沒有指定特定排序，預設先排天使
+    if sort_by not in ["is_angel", "investment_units"]:
+         query = query.order_by(desc(User.is_angel), desc(User.investment_units), desc(User.created_at))
     
     # 分頁
     offset = (page - 1) * page_size
@@ -286,6 +308,10 @@ async def list_users(
             referred_by=user.referred_by,
             created_at=user.created_at,
             updated_at=user.updated_at,
+            is_angel=user.is_angel,
+            investment_units=user.investment_units,
+            angel_phone=user.angel_phone,
+            angel_note=user.angel_note,
             total_orders=order_stats.count if order_stats else 0,
             total_spent=float(order_stats.total) if order_stats else 0,
             total_generations=gen_count,
@@ -295,13 +321,20 @@ async def list_users(
     
     total_pages = (total + page_size - 1) // page_size
     
+    # 天使統計 (Global Stats)
+    global_stats = {
+        "total_angels": db.query(func.count(User.id)).filter(User.is_active == True, User.is_angel == True).scalar() or 0,
+        "total_units": db.query(func.sum(User.investment_units)).filter(User.is_active == True, User.is_angel == True).scalar() or 0,
+    }
+    
     return UserListResponse(
         success=True,
         total=total,
         page=page,
         page_size=page_size,
         total_pages=total_pages,
-        users=user_list
+        users=user_list,
+        global_stats=global_stats
     )
 
 
