@@ -104,6 +104,7 @@ function Navbar() {
             <a href="#features" className="text-slate-300 hover:text-white transition-colors text-sm">功能特色</a>
             <a href="#pricing" className="text-slate-300 hover:text-white transition-colors text-sm">價格方案</a>
             <a href="#how-it-works" className="text-slate-300 hover:text-white transition-colors text-sm">使用流程</a>
+            <a href="#referral" className="text-amber-300 hover:text-amber-200 transition-colors text-sm font-medium">推薦獎金 💰</a>
           </div>
 
           {/* CTA Buttons */}
@@ -133,6 +134,7 @@ function Navbar() {
             <a href="#features" className="block text-slate-300 hover:text-white py-2">功能特色</a>
             <a href="#pricing" className="block text-slate-300 hover:text-white py-2">價格方案</a>
             <a href="#how-it-works" className="block text-slate-300 hover:text-white py-2">使用流程</a>
+            <a href="#referral" className="block text-amber-300 hover:text-amber-200 py-2 font-medium">推薦獎金 💰</a>
             <div className="pt-4 border-t border-slate-800 flex flex-col gap-3">
               <Link href="/login" className="w-full py-3 text-center text-slate-300 border border-slate-700 rounded-xl">登入</Link>
               <Link href="/register" className="w-full py-3 text-center text-white bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl font-medium">免費開始</Link>
@@ -737,6 +739,157 @@ function TestimonialsSection() {
 }
 
 // ============================================================
+// Referral Section
+// ============================================================
+
+function ReferralSection() {
+  const steps = [
+    {
+      step: "01",
+      title: "分享你的推薦碼",
+      description: "登入後在點數頁面取得你的專屬推薦碼或連結，分享給朋友。",
+      icon: "🔗",
+      color: "from-indigo-500 to-purple-500",
+    },
+    {
+      step: "02",
+      title: "好友完成註冊",
+      description: "好友透過你的連結註冊並完成首次登入，系統自動追蹤記錄。",
+      icon: "👤",
+      color: "from-purple-500 to-pink-500",
+    },
+    {
+      step: "03",
+      title: "雙向獲得獎勵",
+      description: "好友獲得 100 點新手禮包，你的帳戶即刻入帳推薦獎金點數！",
+      icon: "🎁",
+      color: "from-pink-500 to-amber-500",
+    },
+  ];
+
+  const rewards = [
+    {
+      title: "推薦人獎金",
+      value: "50",
+      unit: "點/人",
+      description: "每成功推薦一位新用戶，立即獲得 50 獎金點數",
+      highlight: "可提領現金！1點 = NT$1",
+      color: "from-indigo-500 to-purple-500",
+      icon: "👑",
+    },
+    {
+      title: "被推薦人禮包",
+      value: "100",
+      unit: "點",
+      description: "被好友推薦後，除了原有 100 點外再額外獲得禮包點數",
+      highlight: "新手必拿！快問朋友要推薦碼",
+      color: "from-emerald-500 to-cyan-500",
+      icon: "🎊",
+    },
+    {
+      title: "無上限累積",
+      value: "∞",
+      unit: "",
+      description: "推薦越多人，賺越多獎金。沒有人數上限，月入萬點不是夢！",
+      highlight: "成為 KOL 推廣，被動收入無限",
+      color: "from-amber-500 to-orange-500",
+      icon: "📈",
+    },
+  ];
+
+  return (
+    <section id="referral" className="py-24 bg-gradient-to-b from-slate-900 via-slate-950 to-slate-900 relative overflow-hidden">
+      <FloatingOrb className="w-96 h-96 bg-amber-500/20 top-0 right-0" delay={0} />
+      <FloatingOrb className="w-64 h-64 bg-indigo-600/30 bottom-0 left-0" delay={500} />
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+        {/* Section Header */}
+        <div className="text-center mb-16">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500/10 border border-amber-500/30 mb-4">
+            <TrendingUp className="w-4 h-4 text-amber-400" />
+            <span className="text-sm text-amber-300 font-medium">推薦分潤計畫</span>
+          </div>
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-4">
+            推薦朋友，<GradientText>一起賺獎金</GradientText>
+          </h2>
+          <p className="text-lg text-slate-400 max-w-2xl mx-auto">
+            加入 King Jam AI 推薦計畫，分享給朋友即可雙向獲獎。推薦獎金可直接提領現金！
+          </p>
+        </div>
+
+        {/* Reward Cards */}
+        <div className="grid md:grid-cols-3 gap-6 mb-16">
+          {rewards.map((reward, i) => (
+            <div
+              key={i}
+              className="relative p-6 bg-slate-900/70 backdrop-blur rounded-2xl border border-slate-700/50 hover:border-amber-500/40 transition-all hover:shadow-2xl hover:shadow-amber-500/10 hover:-translate-y-1"
+            >
+              <div className="text-4xl mb-4">{reward.icon}</div>
+              <div className={`text-5xl font-black bg-gradient-to-r ${reward.color} bg-clip-text text-transparent mb-1`}>
+                {reward.value}<span className="text-2xl">{reward.unit}</span>
+              </div>
+              <h3 className="text-lg font-semibold text-white mb-2">{reward.title}</h3>
+              <p className="text-slate-400 text-sm mb-4 leading-relaxed">{reward.description}</p>
+              <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r ${reward.color} bg-opacity-10 border border-current/20 text-xs font-medium text-white`}
+                style={{ background: 'rgba(251,191,36,0.1)', borderColor: 'rgba(251,191,36,0.3)', color: '#fbbf24' }}
+              >
+                ✨ {reward.highlight}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* How It Works */}
+        <div className="bg-slate-900/50 backdrop-blur rounded-3xl border border-slate-700/50 p-8 md:p-12 mb-12">
+          <h3 className="text-2xl font-bold text-white text-center mb-10">三步驟，輕鬆賺獎金</h3>
+          <div className="grid md:grid-cols-3 gap-8 relative">
+            {/* Connector Line */}
+            <div className="hidden md:block absolute top-12 left-1/3 right-1/3 h-0.5 bg-gradient-to-r from-indigo-500/50 via-purple-500/50 to-pink-500/50" />
+
+            {steps.map((step, i) => (
+              <div key={i} className="flex flex-col items-center text-center relative">
+                <div className={`relative w-20 h-20 rounded-2xl bg-gradient-to-br ${step.color} flex items-center justify-center text-4xl mb-5 shadow-xl`}>
+                  {step.icon}
+                  <div className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-slate-800 border-2 border-slate-700 flex items-center justify-center text-xs font-bold text-white">
+                    {step.step}
+                  </div>
+                </div>
+                <h4 className="text-lg font-semibold text-white mb-2">{step.title}</h4>
+                <p className="text-slate-400 text-sm leading-relaxed">{step.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* CTA Banner */}
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-900/80 via-purple-900/80 to-pink-900/80 border border-purple-500/30 p-8 md:p-12 text-center">
+          <div className="absolute inset-0 bg-gradient-to-r from-indigo-600/10 via-purple-600/10 to-pink-600/10" />
+          <FloatingOrb className="w-48 h-48 bg-purple-500/30 -top-12 -right-12" delay={0} />
+          <div className="relative z-10">
+            <div className="text-5xl mb-4">💸</div>
+            <h3 className="text-2xl md:text-3xl font-bold text-white mb-3">
+              立即開始推薦，讓錢自動流進來！
+            </h3>
+            <p className="text-slate-300 mb-8 max-w-xl mx-auto">
+              已有超過 <span className="text-amber-300 font-semibold">500+ 用戶</span> 透過推薦計畫賺取了額外收入。
+              現在加入，馬上拿到你的專屬推薦碼！
+            </p>
+            <Link
+              href="/register"
+              className="inline-flex items-center gap-2 px-10 py-4 text-lg font-semibold text-white bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 rounded-2xl transition-all shadow-2xl shadow-amber-500/30 hover:shadow-amber-500/50 hover:scale-105"
+            >
+              <Gift className="w-5 h-5" />
+              立即加入，獲取推薦碼
+            </Link>
+            <p className="mt-4 text-slate-500 text-sm">免費註冊 • 馬上領推薦碼 • 每月可提領獎金</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ============================================================
 // CTA Section
 // ============================================================
 
@@ -925,6 +1078,7 @@ export default function LandingPage() {
       <HowItWorksSection />
       <PricingSection />
       <TestimonialsSection />
+      <ReferralSection />
       <CTASection />
       <Footer />
     </div>
