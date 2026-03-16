@@ -71,6 +71,7 @@ jobs:
           chmod +x cloud_sql_proxy
       
       - name: 🔗 Start Cloud SQL Proxy
+        if: env.DIRECT_DATABASE_URL == ''
         run: |
           echo "Connecting to ${{ env.PROJECT_ID }}:${{ env.REGION }}:kingjam-db on port 5433"
           ./cloud_sql_proxy -instances=${{ env.PROJECT_ID }}:${{ env.REGION }}:kingjam-db=tcp:0.0.0.0:5433 > cloud_sql_proxy.log 2>&1 &
@@ -85,7 +86,13 @@ jobs:
           _DB_PASS: ${{ secrets.DB_PASSWORD }}
         run: |
           cd backend
-          export DATABASE_URL="postgresql://postgres:${_DB_PASS}@127.0.0.1:5433/kingjam"
+          if [ -n "${DIRECT_DATABASE_URL}" ]; then
+            echo "🚀 使用直接 DATABASE_URL 連線..."
+            export DATABASE_URL="${DIRECT_DATABASE_URL}"
+          else
+            echo "🔗 使用 Cloud SQL Proxy 連線 (127.0.0.1:5433)..."
+            export DATABASE_URL="postgresql://postgres:${_DB_PASS}@127.0.0.1:5433/kingjam"
+          fi
           
           if [ -z "${_DB_PASS}" ]; then
             echo "❌ DB_PASSWORD secret 未設定"
