@@ -36,13 +36,14 @@ on:
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: asia-east1
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   migrate:
     name: 🗄️ 資料庫遷移
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     
     steps:
       - name: 📥 Checkout
@@ -94,10 +95,12 @@ jobs:
           
           case "${{ inputs.action }}" in
             upgrade)
+              echo "📈 檢查當前資料庫版本..."
+              alembic current || echo "⚠️ 無法取得當前版本"
               echo "📈 執行 Alembic 資料庫遷移..."
-              alembic upgrade head
+              alembic upgrade head || { echo "❌ Alembic 遷移失敗"; exit 1; }
               echo "📈 執行附加直接資料庫遷移腳本..."
-              python3 scripts/run_direct_migration.py
+              python3 scripts/run_direct_migration.py || { echo "❌ 直接遷移腳本失敗"; exit 1; }
               ;;
             current)
               echo "📍 當前資料庫版本:"
