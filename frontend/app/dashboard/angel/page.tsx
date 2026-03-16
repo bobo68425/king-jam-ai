@@ -313,13 +313,15 @@ const StatCard = ({ title, value, color, highlight, desc }: any) => (
   <div
     className={`p-6 bg-[#11121d] rounded-2xl border transition-all duration-300 ${
       highlight ? "border-amber-500/30 shadow-[0_0_20px_rgba(245,158,11,0.05)]" : "border-white/5"
-    } hover:border-white/10 group`}
+    } hover:border-white/10 group overflow-hidden`}
   >
-    <p className="text-sm text-slate-500 mb-1 group-hover:text-slate-400 transition-colors">
+    <p className="text-sm text-slate-500 mb-1 group-hover:text-slate-400 transition-colors truncate whitespace-nowrap">
       {title}
     </p>
-    <p className={`text-3xl font-bold ${color} mb-2`}>{value}</p>
-    {desc && <p className="text-[10px] text-slate-600 font-medium">{desc}</p>}
+    <p className={`text-2xl lg:text-3xl font-bold ${color} mb-2 whitespace-nowrap tabular-nums`}>
+      {value}
+    </p>
+    {desc && <p className="text-[10px] text-slate-600 font-medium line-clamp-2">{desc}</p>}
   </div>
 );
 
