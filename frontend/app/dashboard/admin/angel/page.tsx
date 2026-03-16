@@ -79,8 +79,8 @@ export default function AngelManagementPage() {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      let url = `/admin/users?limit=100`;
-      if (searchTerm) url += `&q=${encodeURIComponent(searchTerm)}`;
+      let url = `/admin/users?limit=100&sort_by=investment_units&sort_order=desc`;
+      if (searchTerm) url += `&search=${encodeURIComponent(searchTerm)}`;
       if (isAngelFilter !== null) url += `&is_angel=${isAngelFilter}`;
 
       const response = await api.get(url);
