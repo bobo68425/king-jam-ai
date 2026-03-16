@@ -170,7 +170,6 @@ export default function AngelManagementPage() {
             僅超級管理員可見，負責管理天使權限、持股單位與聯絡資料。
           </p>
         </div>
-      </div>
 
       {/* Investment Summary Stats */}
       {!loading && users.length > 0 && (
