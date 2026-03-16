@@ -154,6 +154,11 @@ const AngelDashboard = () => {
               percent={30}
               color="bg-indigo-500"
             />
+            <ProgressBar
+              label="AI 廣告投放系統 開發中"
+              percent={15}
+              color="bg-pink-500"
+            />
           </div>
         </div>
       </div>
