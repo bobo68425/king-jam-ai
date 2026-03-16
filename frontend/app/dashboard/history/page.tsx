@@ -146,10 +146,45 @@ export default function HistoryPage() {
   const [viewerIsVideo, setViewerIsVideo] = useState(false);
   const [viewerTitle, setViewerTitle] = useState("");
 
-  // 刪除確認
+  // 刪除與批量操作
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.length === history.length && history.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(history.map(item => item.id));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    setBulkDeleting(true);
+    try {
+      await api.post("/history/bulk-delete", { ids: selectedIds });
+      setHistory(prev => prev.filter(item => !selectedIds.includes(item.id)));
+      toast.success(`已刪除 ${selectedIds.length} 筆紀錄`);
+      setSelectedIds([]);
+      setBulkDeleteDialogOpen(false);
+    } catch (e: any) {
+      console.error("批量刪除失敗:", e);
+      toast.error("批量刪除失敗: " + (e.response?.data?.detail || e.message));
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
 
   const handleDelete = async (id: number) => {
     setDeleting(true);
@@ -984,8 +1019,20 @@ export default function HistoryPage() {
                     className="bg-slate-800/50 border-slate-700 overflow-hidden group hover:border-slate-600 transition-all cursor-pointer"
                     onClick={() => handleOpenDetail(item)}
                   >
-                    {/* 縮圖/預覽 */}
-                    <div className="relative h-40 bg-slate-700/50">
+                    {/* 勾選框與縮圖/預覽 */}
+                    <div className="relative h-40 bg-slate-700/50 group/thumb">
+                      <div className={`absolute top-2 left-2 z-10 transition-opacity ${selectedIds.includes(item.id) ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); toggleSelect(item.id); }}
+                          className={`w-6 h-6 rounded border flex items-center justify-center transition-colors shadow-md ${
+                            selectedIds.includes(item.id) 
+                              ? "bg-indigo-600 border-indigo-600 text-white" 
+                              : "bg-black/40 border-white/40 hover:border-white text-transparent"
+                          }`}
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                      </div>
                       {(() => {
                         const mediaUrl = getMediaUrl(mediaItem);
                         const isMediaType = mediaItem.generation_type === "short_video" || mediaItem.generation_type === "social_image";
@@ -1118,8 +1165,20 @@ export default function HistoryPage() {
             <Card className="bg-slate-800/50 border-slate-700 overflow-hidden">
               {/* 表頭 */}
               <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-3 bg-slate-900/50 border-b border-slate-700 text-xs font-medium text-slate-400">
+                <div className="col-span-1 flex justify-center">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleSelectAll(); }}
+                    className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                      selectedIds.length === history.length && history.length > 0
+                        ? "bg-indigo-600 border-indigo-600 text-white" 
+                        : "bg-slate-800 border-slate-700 hover:border-slate-600 text-transparent"
+                    }`}
+                  >
+                    <Check className="h-3 w-3" />
+                  </button>
+                </div>
                 <div className="col-span-1">預覽</div>
-                <div className="col-span-3">標題</div>
+                <div className="col-span-2">標題</div>
                 <div className="col-span-2">類型</div>
                 <div className="col-span-2">狀態</div>
                 <div className="col-span-2">時間</div>
@@ -1141,6 +1200,19 @@ export default function HistoryPage() {
                     >
                       {/* 桌面版 */}
                       <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-3 items-center">
+                        {/* 勾選 */}
+                        <div className="col-span-1 flex justify-center">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); toggleSelect(item.id); }}
+                            className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                              selectedIds.includes(item.id) 
+                                ? "bg-indigo-600 border-indigo-600 text-white" 
+                                : "bg-slate-800 border-slate-700 hover:border-slate-600 text-transparent"
+                            }`}
+                          >
+                            <Check className="h-3 w-3" />
+                          </button>
+                        </div>
                         {/* 預覽縮圖 */}
                         <div className="col-span-1">
                           <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-slate-700/50 flex-shrink-0">
@@ -1167,13 +1239,10 @@ export default function HistoryPage() {
                         </div>
 
                         {/* 標題 */}
-                        <div className="col-span-3">
+                        <div className="col-span-2">
                           <h3 className="font-medium text-white truncate">
                             {item.input_params?.topic || item.input_params?.title || getTypeName(item.generation_type)}
                           </h3>
-                          {item.input_params?.platform && (
-                            <p className="text-xs text-slate-500 mt-0.5">{item.input_params.platform}</p>
-                          )}
                         </div>
 
                         {/* 類型 */}
@@ -1727,8 +1796,89 @@ export default function HistoryPage() {
               )}
             </Button>
           </div>
+         </DialogContent>
+      </Dialog>
+
+      {/* ==================== 批量刪除確認彈窗 ==================== */}
+      <Dialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <DialogContent className="max-w-md bg-slate-900 border-slate-700">
+          <DialogHeader>
+            <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
+              <Trash2 className="h-6 w-6 text-red-500" />
+            </div>
+            <DialogTitle className="text-white text-xl">確認批量刪除 {selectedIds.length} 筆紀錄？</DialogTitle>
+            <DialogDescription className="text-slate-400 pt-2 pb-4">
+              <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <p>
+                  <strong>注意：</strong> 已選取的紀錄將被全數刪除且無法回溯。此操作會影響產出的雲端連結。
+                </p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-3 mt-4">
+            <Button
+              variant="ghost"
+              className="flex-1 text-slate-400 hover:bg-slate-800"
+              onClick={() => setBulkDeleteDialogOpen(false)}
+              disabled={bulkDeleting}
+            >
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              className="flex-1 bg-red-600 hover:bg-red-500"
+              onClick={handleBulkDelete}
+              disabled={bulkDeleting}
+            >
+              {bulkDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  刪除中...
+                </>
+              ) : (
+                "確認批量刪除"
+              )}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
+
+      {/* ==================== 批量操作懸浮條 ==================== */}
+      {selectedIds.length > 0 && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-8 duration-300">
+          <div className="bg-slate-900/90 backdrop-blur-md border border-slate-700 rounded-full py-3 px-6 shadow-2xl flex items-center gap-6">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-bold">
+                {selectedIds.length}
+              </div>
+              <span className="text-sm font-medium text-slate-200">項已選取</span>
+            </div>
+            
+            <div className="h-6 w-px bg-slate-700" />
+            
+            <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-slate-400 hover:text-white h-9 px-4 rounded-full"
+                onClick={() => setSelectedIds([])}
+              >
+                取消選擇
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="bg-red-600 hover:bg-red-500 h-9 px-6 rounded-full font-medium"
+                onClick={() => setBulkDeleteDialogOpen(true)}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                批量刪除
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

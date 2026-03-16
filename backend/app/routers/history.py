@@ -48,6 +48,11 @@ class HistoryUpdate(BaseModel):
     error_details: Optional[dict] = None
 
 
+class BulkDeleteRequest(BaseModel):
+    """批量刪除請求"""
+    ids: List[int]
+
+
 class HistoryResponse(BaseModel):
     """歷史紀錄回應（完整版，用於單筆查詢）"""
     id: int
@@ -391,6 +396,37 @@ async def delete_history(
     db.commit()
     
     return {"message": "紀錄已刪除"}
+
+
+@router.post("/bulk-delete")
+async def bulk_delete_history(
+    data: BulkDeleteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    批量軟刪除歷史紀錄
+    """
+    if not data.ids:
+        return {"message": "未選擇任何紀錄", "count": 0}
+        
+    # 執行更新
+    now = datetime.utcnow()
+    result = db.query(GenerationHistory).filter(
+        GenerationHistory.id.in_(data.ids),
+        GenerationHistory.user_id == current_user.id,
+        GenerationHistory.is_deleted == False
+    ).update(
+        {
+            GenerationHistory.is_deleted: True,
+            GenerationHistory.deleted_at: now
+        },
+        synchronize_session=False
+    )
+    
+    db.commit()
+    
+    return {"message": f"已成功刪除 {result} 筆紀錄", "count": result}
 
 
 # ============================================================
