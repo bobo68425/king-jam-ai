@@ -175,6 +175,7 @@ async def get_angel_stats(
             "count": referral_count,
             "revenue": referral_revenue
         },
+        "referral_code": current_user.referral_code,
         "system_health": system_health,
         "budget_allocation": budget_allocation,
         "historical_data": historical_data
