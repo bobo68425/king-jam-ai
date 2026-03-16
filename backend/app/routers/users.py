@@ -17,7 +17,8 @@ from decimal import Decimal
 from app.database import get_db
 from app.models import (
     User, Order, CreditTransaction, GenerationHistory, 
-    WithdrawalRequest, RefundRequest, SocialAccount, ScheduledPost
+    WithdrawalRequest, RefundRequest, SocialAccount, ScheduledPost,
+    DividendRecord
 )
 from app.routers.auth import get_current_user
 from app.services.credit_service import CategoryBalance
@@ -63,6 +64,10 @@ class UserListItem(BaseModel):
     investment_units: int = 0
     angel_phone: Optional[str] = None
     angel_note: Optional[str] = None
+    total_investment_amount: float = 0
+    dividend_ratio: float = 0
+    contract_url: Optional[str] = None
+    payback_estimate_date: Optional[datetime] = None
     
     # 計算欄位
     total_orders: int = 0
@@ -98,6 +103,33 @@ class UserDetailResponse(BaseModel):
 
 class UserUpdateRequest(BaseModel):
     full_name: Optional[str] = None
+    email: Optional[str] = None
+    is_active: Optional[bool] = None
+    is_angel: Optional[bool] = None
+    investment_units: Optional[int] = None
+    angel_phone: Optional[str] = None
+    angel_note: Optional[str] = None
+    total_investment_amount: Optional[float] = None
+    dividend_ratio: Optional[float] = None
+    contract_url: Optional[str] = None
+    payback_estimate_date: Optional[datetime] = None
+
+class DividendRecordSchema(BaseModel):
+    id: int
+    user_id: int
+    amount: float
+    dividend_date: datetime
+    description: Optional[str] = None
+    status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class DividendCreateRequest(BaseModel):
+    amount: float
+    dividend_date: datetime
+    description: Optional[str] = None
     is_active: Optional[bool] = None
     is_admin: Optional[bool] = None
     tier: Optional[str] = None
@@ -312,6 +344,10 @@ async def list_users(
             investment_units=user.investment_units,
             angel_phone=user.angel_phone,
             angel_note=user.angel_note,
+            total_investment_amount=float(user.total_investment_amount or 0),
+            dividend_ratio=float(user.dividend_ratio or 0),
+            contract_url=user.contract_url,
+            payback_estimate_date=user.payback_estimate_date,
             total_orders=order_stats.count if order_stats else 0,
             total_spent=float(order_stats.total) if order_stats else 0,
             total_generations=gen_count,
@@ -832,6 +868,14 @@ async def get_user_detail(
         referred_by=user.referred_by,
         created_at=user.created_at,
         updated_at=user.updated_at,
+        is_angel=user.is_angel,
+        investment_units=user.investment_units,
+        angel_phone=user.angel_phone,
+        angel_note=user.angel_note,
+        total_investment_amount=float(user.total_investment_amount or 0),
+        dividend_ratio=float(user.dividend_ratio or 0),
+        contract_url=user.contract_url,
+        payback_estimate_date=user.payback_estimate_date,
         total_orders=stats["total_orders"],
         total_spent=stats["total_spent"],
         total_generations=gen_count,
@@ -1119,3 +1163,81 @@ async def toggle_user_admin(
         "message": f"用戶{'已設為管理員' if user.is_admin else '已取消管理員權限'}",
         "is_admin": user.is_admin,
     }
+
+# --- 天使投資人管理擴充功能 ---
+
+@router.get("/admin/angels/{user_id}/dividends", tags=["admin"])
+async def get_angel_dividends(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """獲取天使投資人的分紅紀錄"""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+        
+    records = db.query(DividendRecord).filter(
+        DividendRecord.user_id == user_id
+    ).order_by(DividendRecord.dividend_date.desc()).all()
+    
+    return {
+        "success": True,
+        "dividends": [DividendRecordSchema.from_attributes(r) for r in records]
+    }
+
+@router.post("/admin/angels/{user_id}/dividends", tags=["admin"])
+async def add_angel_dividend(
+    user_id: int,
+    request: DividendCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """新增天使投資人的分紅紀錄"""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+        
+    # 驗證用戶是否存在且為天使
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user or not user.is_angel:
+        raise HTTPException(status_code=404, detail="Angel investor not found")
+        
+    new_record = DividendRecord(
+        user_id=user_id,
+        amount=request.amount,
+        dividend_date=request.dividend_date,
+        description=request.description
+    )
+    db.add(new_record)
+    db.commit()
+    db.refresh(new_record)
+    
+    return {
+        "success": True,
+        "dividend": DividendRecordSchema.from_attributes(new_record)
+    }
+
+@router.post("/admin/angels/{user_id}/update-details", tags=["admin"])
+async def update_angel_details(
+    user_id: int,
+    request: UserUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """更新天使投資人的詳細財務資料"""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+        
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    # 只允許更新相關欄位
+    update_data = request.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        if hasattr(user, key):
+            setattr(user, key, value)
+            
+    db.commit()
+    db.refresh(user)
+    
+    return {"success": True}

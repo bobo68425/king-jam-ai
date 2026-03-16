@@ -429,6 +429,20 @@ def _auto_init_db():
                 IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='users' AND column_name='prepaid_sub_credits_per_month') THEN
                     ALTER TABLE users ADD COLUMN prepaid_sub_credits_per_month INTEGER DEFAULT 0;
                 END IF;
+                
+                -- 天使投資詳細欄位
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='total_investment_amount') THEN
+                    ALTER TABLE users ADD COLUMN total_investment_amount NUMERIC(12, 2) DEFAULT 0;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='dividend_ratio') THEN
+                    ALTER TABLE users ADD COLUMN dividend_ratio NUMERIC(5, 4) DEFAULT 0;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='contract_url') THEN
+                    ALTER TABLE users ADD COLUMN contract_url VARCHAR(500);
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='payback_estimate_date') THEN
+                    ALTER TABLE users ADD COLUMN payback_estimate_date TIMESTAMPTZ;
+                END IF;
             END $$;
         """))
         db.commit()
@@ -447,6 +461,20 @@ def _auto_init_db():
                 read_at TIMESTAMPTZ,
                 priority VARCHAR(20) NOT NULL DEFAULT 'general'
             );
+            
+            -- 天使分紅紀錄表
+            CREATE TABLE IF NOT EXISTS dividend_records (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                amount NUMERIC(12, 2) NOT NULL,
+                dividend_date TIMESTAMPTZ NOT NULL,
+                description TEXT,
+                status VARCHAR(20) DEFAULT 'completed',
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ
+            );
+            CREATE INDEX IF NOT EXISTS idx_dividend_user_id ON dividend_records(user_id);
+            CREATE INDEX IF NOT EXISTS idx_dividend_date ON dividend_records(dividend_date);
         """))
         db.commit()
         db.execute(text("""

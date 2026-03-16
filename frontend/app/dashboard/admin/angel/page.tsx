@@ -29,7 +29,21 @@ interface User {
   investment_units: number;
   angel_phone?: string | null;
   angel_note?: string | null;
+  total_investment_amount: number;
+  dividend_ratio: number;
+  contract_url?: string | null;
+  payback_estimate_date?: string | null;
   referral_code: string | null;
+  created_at: string;
+}
+
+interface DividendRecord {
+  id: number;
+  user_id: number;
+  amount: number;
+  dividend_date: string;
+  description?: string;
+  status: string;
   created_at: string;
 }
 
@@ -48,6 +62,19 @@ export default function AngelManagementPage() {
   const [editNote, setEditNote] = useState('');
   const [editReferralCode, setEditReferralCode] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  
+  // New Angel Detail States
+  const [dividends, setDividends] = useState<DividendRecord[]>([]);
+  const [loadingDividends, setLoadingDividends] = useState(false);
+  const [editInvestmentAmount, setEditInvestmentAmount] = useState(0);
+  const [editRatio, setEditRatio] = useState(0);
+  const [editPaybackDate, setEditPaybackDate] = useState('');
+  const [editContractUrl, setEditContractUrl] = useState('');
+  const [newDividendAmount, setNewDividendAmount] = useState(0);
+  const [newDividendDesc, setNewDividendDesc] = useState('');
+  const [newDividendDate, setNewDividendDate] = useState(new Date().toISOString().split('T')[0]);
+  const [isAddingDividend, setIsAddingDividend] = useState(false);
+  const [activeTab, setActiveTab] = useState<'profile' | 'dividends'>('profile');
 
   const fetchUsers = async () => {
     try {
@@ -126,6 +153,11 @@ export default function AngelManagementPage() {
     setEditPhone(user.angel_phone || '');
     setEditNote(user.angel_note || '');
     setEditReferralCode(user.referral_code || '');
+    setEditInvestmentAmount(user.total_investment_amount || 0);
+    setEditRatio(user.dividend_ratio || 0);
+    setEditPaybackDate(user.payback_estimate_date ? user.payback_estimate_date.split('T')[0] : '');
+    setEditContractUrl(user.contract_url || '');
+    fetchDividends(user.id);
   };
 
   const handleSaveProfile = async () => {
@@ -139,8 +171,25 @@ export default function AngelManagementPage() {
       });
       
       setUsers(prev => prev.map(u => 
-        u.id === editingUser.id ? { ...u, angel_phone: editPhone, angel_note: editNote, referral_code: editReferralCode } : u
+        u.id === editingUser.id ? { 
+          ...u, 
+          angel_phone: editPhone, 
+          angel_note: editNote, 
+          referral_code: editReferralCode,
+          total_investment_amount: editInvestmentAmount,
+          dividend_ratio: editRatio,
+          payback_estimate_date: editPaybackDate,
+          contract_url: editContractUrl
+        } : u
       ));
+
+      // 同時更新天使詳細資料
+      await api.post(`/admin/angels/${editingUser.id}/update-details`, {
+        total_investment_amount: editInvestmentAmount,
+        dividend_ratio: editRatio,
+        payback_estimate_date: editPaybackDate ? new Date(editPaybackDate).toISOString() : null,
+        contract_url: editContractUrl
+      });
       
       toast.success('資料更新成功');
       setEditingUser(null);
@@ -149,6 +198,45 @@ export default function AngelManagementPage() {
       toast.error('更新資料失敗');
     } finally {
       setIsSavingProfile(false);
+    }
+  };
+
+  const fetchDividends = async (userId: number) => {
+    try {
+      setLoadingDividends(true);
+      const response = await api.get(`/admin/angels/${userId}/dividends`);
+      setDividends(response.data.dividends || []);
+    } catch (error) {
+      console.error(error);
+      toast.error('無法取得分紅紀錄');
+    } finally {
+      setLoadingDividends(false);
+    }
+  };
+
+  const handleAddDividend = async () => {
+    if (!editingUser) return;
+    if (newDividendAmount <= 0) {
+      toast.error('請輸入有效的金額');
+      return;
+    }
+    try {
+      setIsAddingDividend(true);
+      const response = await api.post(`/admin/angels/${editingUser.id}/dividends`, {
+        amount: newDividendAmount,
+        dividend_date: newDividendDate,
+        description: newDividendDesc
+      });
+      
+      setDividends(prev => [response.data.dividend, ...prev]);
+      setNewDividendAmount(0);
+      setNewDividendDesc('');
+      toast.success('分紅紀錄已新增');
+    } catch (error) {
+      console.error(error);
+      toast.error('新增分紅紀錄失敗');
+    } finally {
+      setIsAddingDividend(false);
     }
   };
 
@@ -417,99 +505,275 @@ export default function AngelManagementPage() {
         )}
       </div>
 
-      {/* Edit Profile Modal */}
+      {/* Edit Profile & Angel Detail Modal */}
       {editingUser && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-[#1a1c2e] rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-white/10">
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-5 flex justify-between items-center">
-              <h3 className="text-white font-extrabold flex items-center gap-2 tracking-tight">
-                <Edit3 className="h-5 w-5" />
-                編輯投資人資料
-              </h3>
+          <div className="bg-[#1a1c2e] rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden border border-white/10 flex flex-col">
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-5 flex justify-between items-center flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-white/20 flex items-center justify-center">
+                  <Shield className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-white font-extrabold tracking-tight">
+                    {editingUser.full_name} - 天使投資人詳情
+                  </h3>
+                  <p className="text-[10px] text-white/70 font-mono tracking-widest">{editingUser.email} (ID: {editingUser.id})</p>
+                </div>
+              </div>
               <button 
                 onClick={() => setEditingUser(null)}
-                className="bg-white/10 hover:bg-white/20 text-white rounded-full p-1 transition-all"
+                className="bg-white/10 hover:bg-white/20 text-white rounded-full p-2 transition-all"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
-            
-            <div className="p-6 space-y-6">
-              <div className="bg-black/20 p-4 rounded-2xl border border-white/5">
-                <p className="text-base font-bold text-white mb-0.5">{editingUser.full_name}</p>
-                <p className="text-xs text-slate-400 font-mono tracking-wider">{editingUser.email}</p>
-              </div>
-              
-              <div className="space-y-5">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-2 px-1">
-                    聯絡電話 (Angel Phone)
-                  </label>
-                  <div className="relative group">
-                    <input 
-                      type="text" 
-                      value={editPhone}
-                      onChange={(e) => setEditPhone(e.target.value)}
-                      placeholder="例如: 0912-345-678"
-                      className="w-full pl-10 pr-4 py-2.5 bg-black/30 border border-white/10 rounded-2xl text-sm text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all group-hover:border-white/20"
-                    />
-                    <Phone className="absolute left-3.5 top-3 h-4 w-4 text-slate-500" />
-                  </div>
-                </div>
 
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-2 px-1">
-                    推廣推薦代碼 (Referral Code)
-                  </label>
-                  <div className="relative group">
-                    <input 
-                      type="text" 
-                      value={editReferralCode}
-                      onChange={(e) => setEditReferralCode(e.target.value)}
-                      placeholder="例如: BOSS-JAM"
-                      className="w-full pl-10 pr-4 py-2.5 bg-black/30 border border-white/10 rounded-2xl text-sm text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all font-mono group-hover:border-white/20"
-                    />
-                    <Share2 className="absolute left-3.5 top-3 h-4 w-4 text-slate-500" />
+            {/* Tab Navigation */}
+            <div className="flex border-b border-white/10 bg-black/20 flex-shrink-0">
+              <button
+                onClick={() => setActiveTab('profile')}
+                className={`flex-1 py-4 text-sm font-black uppercase tracking-widest transition-all border-b-2 ${
+                  activeTab === 'profile' 
+                  ? 'border-blue-500 text-blue-400 bg-blue-500/5' 
+                  : 'border-transparent text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                基本資料與財務
+              </button>
+              <button
+                onClick={() => setActiveTab('dividends')}
+                className={`flex-1 py-4 text-sm font-black uppercase tracking-widest transition-all border-b-2 ${
+                  activeTab === 'dividends' 
+                  ? 'border-orange-500 text-orange-400 bg-orange-500/5' 
+                  : 'border-transparent text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                分紅紀錄管理
+              </button>
+            </div>
+            
+            <div className="flex-grow overflow-y-auto p-6">
+              {activeTab === 'profile' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* Left Column: Contact & Referral */}
+                  <div className="space-y-6">
+                    <div>
+                      <h4 className="flex items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">
+                        <Users className="h-3 w-3" /> 聯絡與推廣資料
+                      </h4>
+                      <div className="space-y-5">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">
+                            聯絡電話
+                          </label>
+                          <div className="relative group">
+                            <input 
+                              type="text" 
+                              value={editPhone}
+                              onChange={(e) => setEditPhone(e.target.value)}
+                              placeholder="09xx-xxx-xxx"
+                              className="w-full pl-10 pr-4 py-3 bg-black/30 border border-white/10 rounded-2xl text-sm text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
+                            />
+                            <Phone className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">
+                            推廣代碼
+                          </label>
+                          <div className="relative group">
+                            <input 
+                              type="text" 
+                              value={editReferralCode}
+                              onChange={(e) => setEditReferralCode(e.target.value)}
+                              className="w-full pl-10 pr-4 py-3 bg-black/30 border border-white/10 rounded-2xl text-sm text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all font-mono"
+                            />
+                            <Share2 className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">
+                            合約網址 (S3/Cloudinary URL)
+                          </label>
+                          <div className="relative group">
+                            <input 
+                              type="text" 
+                              value={editContractUrl}
+                              onChange={(e) => setEditContractUrl(e.target.value)}
+                              placeholder="https://..."
+                              className="w-full pl-10 pr-4 py-3 bg-black/30 border border-white/10 rounded-2xl text-sm text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all font-mono"
+                            />
+                            <FileText className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
+                          </div>
+                          {editContractUrl && (
+                            <a href={editContractUrl} target="_blank" className="text-[10px] text-blue-400 hover:underline block mt-1 px-1">
+                              開啟合約文件 ↗
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-[10px] text-slate-500 mt-2 px-1 italic">
-                    專屬連結: <span className="text-blue-400/80">https://kingjam.app/?ref={editReferralCode || '...'}</span>
-                  </p>
-                </div>
-                
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-2 px-1">
-                    內部備註 (Admin Note)
-                  </label>
-                  <div className="relative group">
-                    <textarea 
-                      value={editNote}
-                      onChange={(e) => setEditNote(e.target.value)}
-                      placeholder="合約備註、特殊分紅調整..."
-                      rows={3}
-                      className="w-full pt-3 pl-10 pr-4 py-2.5 bg-black/30 border border-white/10 rounded-2xl text-sm text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all group-hover:border-white/20 resize-none"
-                    />
-                    <FileText className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
+
+                  {/* Right Column: Financial Details */}
+                  <div className="space-y-6">
+                    <div>
+                      <h4 className="flex items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">
+                        <ShieldAlert className="h-3 w-3" /> 投資財務管理
+                      </h4>
+                      <div className="space-y-5">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">
+                            總投資金額 (NT$)
+                          </label>
+                          <div className="relative group">
+                            <input 
+                              type="number" 
+                              value={editInvestmentAmount}
+                              onChange={(e) => setEditInvestmentAmount(Number(e.target.value))}
+                              className="w-full pl-12 pr-4 py-3 bg-black/30 border border-white/10 rounded-2xl text-sm text-white focus:ring-2 focus:ring-orange-500/50 outline-none transition-all font-mono font-bold"
+                            />
+                            <span className="absolute left-3.5 top-3.5 text-xs text-orange-500 font-bold">NT$</span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">
+                            分紅比例 (%)
+                          </label>
+                          <div className="relative group">
+                            <input 
+                              type="number" 
+                              step="0.1"
+                              value={editRatio}
+                              onChange={(e) => setEditRatio(Number(e.target.value))}
+                              className="w-full pl-10 pr-10 py-3 bg-black/30 border border-white/10 rounded-2xl text-sm text-white focus:ring-2 focus:ring-orange-500/50 outline-none transition-all font-mono font-bold"
+                            />
+                            <span className="absolute right-4 top-3.5 text-xs text-slate-500 font-bold">%</span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">
+                            預估回本時間
+                          </label>
+                          <div className="relative group">
+                            <input 
+                              type="date" 
+                              value={editPaybackDate}
+                              onChange={(e) => setEditPaybackDate(e.target.value)}
+                              className="w-full pl-10 pr-4 py-3 bg-black/30 border border-white/10 rounded-2xl text-sm text-white focus:ring-2 focus:ring-orange-500/50 outline-none transition-all"
+                            />
+                            <AlertCircle className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-              
-              <div className="flex gap-3 pt-2">
-                <button 
-                  onClick={() => setEditingUser(null)}
-                  className="flex-1 px-4 py-3 bg-white/5 border border-white/10 text-slate-400 rounded-2xl text-sm font-bold hover:bg-white/10 transition-all"
-                  disabled={isSavingProfile}
-                >
-                  取消
-                </button>
-                <button 
-                  onClick={handleSaveProfile}
-                  className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl text-sm font-extrabold hover:shadow-lg hover:shadow-blue-500/25 transition-all flex items-center justify-center gap-2"
-                  disabled={isSavingProfile}
-                >
-                  {isSavingProfile && <Loader2 className="h-4 w-4 animate-spin" />}
-                  儲存更新
-                </button>
-              </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Add Dividend Form */}
+                  <div className="bg-orange-500/5 border border-orange-500/20 p-5 rounded-2xl space-y-4">
+                    <h4 className="text-xs font-black text-orange-400 uppercase tracking-widest">新增分紅紀錄</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-slate-500">金額 (NT$)</label>
+                        <input 
+                          type="number" 
+                          value={newDividendAmount}
+                          onChange={(e) => setNewDividendAmount(Number(e.target.value))}
+                          placeholder="例如: 5000"
+                          className="w-full px-4 py-2 bg-black/40 border border-white/10 rounded-xl text-sm text-white outline-none focus:ring-2 focus:ring-orange-500/50"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-slate-500">分紅日期</label>
+                        <input 
+                          type="date" 
+                          value={newDividendDate}
+                          onChange={(e) => setNewDividendDate(e.target.value)}
+                          className="w-full px-4 py-2 bg-black/40 border border-white/10 rounded-xl text-sm text-white outline-none focus:ring-2 focus:ring-orange-500/50"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-slate-500">備註/描述</label>
+                        <input 
+                          type="text" 
+                          value={newDividendDesc}
+                          onChange={(e) => setNewDividendDesc(e.target.value)}
+                          placeholder="2024年1月分紅"
+                          className="w-full px-4 py-2 bg-black/40 border border-white/10 rounded-xl text-sm text-white outline-none focus:ring-2 focus:ring-orange-500/50"
+                        />
+                      </div>
+                    </div>
+                    <button 
+                      onClick={handleAddDividend}
+                      disabled={isAddingDividend}
+                      className="w-full py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-sm font-black transition-all flex items-center justify-center gap-2"
+                    >
+                      {isAddingDividend && <Loader2 className="h-4 w-4 animate-spin" />}
+                      確認新增分紅
+                    </button>
+                  </div>
+
+                  {/* Dividend History List */}
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest underline decoration-orange-500/50 underline-offset-8">歷史分紅紀錄</h4>
+                    {loadingDividends ? (
+                      <div className="py-10 flex flex-col items-center justify-center text-slate-500 italic text-sm">
+                        <Loader2 className="h-8 w-8 animate-spin mb-2 opacity-20" />
+                        載入紀錄中...
+                      </div>
+                    ) : dividends.length === 0 ? (
+                      <div className="py-10 text-center text-slate-500 italic text-sm bg-black/10 rounded-2xl border border-dashed border-white/5">
+                        目前尚無分紅紀錄
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {dividends.map(record => (
+                          <div key={record.id} className="bg-white/5 p-4 rounded-2xl flex justify-between items-center border border-white/5 group hover:bg-white/10 transition-all">
+                            <div className="flex items-center gap-4">
+                              <div className="h-10 w-10 rounded-full bg-orange-500/10 flex items-center justify-center text-orange-500">
+                                <CheckCircle2 className="h-5 w-5" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-black text-white">NT$ {record.amount.toLocaleString()}</p>
+                                <p className="text-[10px] text-slate-500 font-medium">{record.description || '無描述'}</p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-[11px] text-slate-400 font-mono font-bold uppercase">{new Date(record.dividend_date).toLocaleDateString()}</p>
+                              <p className="text-[9px] text-emerald-500 font-black uppercase tracking-widest mt-0.5">{record.status}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="p-6 border-t border-white/10 bg-black/20 flex gap-3 flex-shrink-0">
+              <button 
+                onClick={() => setEditingUser(null)}
+                className="px-6 py-3 bg-white/5 border border-white/10 text-slate-400 rounded-2xl text-sm font-bold hover:bg-white/10 transition-all"
+                disabled={isSavingProfile}
+              >
+                關閉
+              </button>
+              <button 
+                onClick={handleSaveProfile}
+                className="flex-grow px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl text-sm font-extrabold hover:shadow-lg hover:shadow-blue-500/25 transition-all flex items-center justify-center gap-2"
+                disabled={isSavingProfile}
+              >
+                {isSavingProfile && <Loader2 className="h-4 w-4 animate-spin" />}
+                儲存基本與財務更新
+              </button>
             </div>
           </div>
         </div>

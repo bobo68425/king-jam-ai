@@ -23,6 +23,13 @@ class User(Base):
     angel_note = Column(Text, nullable=True)  # 天使投資人備註（僅限內部管理）
     tier = Column(String, default="free")
     
+    # --- 天使投資人詳細財務資料 ---
+    total_investment_amount = Column(Numeric(12, 2), default=0)  # 總投資金額
+    dividend_ratio = Column(Numeric(5, 4), default=0)           # 分紅比例 (例如 0.0200 = 2%)
+    contract_url = Column(String(500), nullable=True)          # 合約文件連結
+    payback_estimate_date = Column(DateTime(timezone=True), nullable=True)  # 預計回本日期
+    # --------------------------
+    
     # 點數餘額（總計）
     credits = Column(Integer, default=100)
     
@@ -1631,3 +1638,23 @@ class Expense(Base):
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class DividendRecord(Base):
+    """天使投資人分紅紀錄"""
+    __tablename__ = "dividend_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    
+    amount = Column(Numeric(12, 2), nullable=False)  # 分紅金額
+    dividend_date = Column(DateTime(timezone=True), nullable=False)  # 分紅日期 (通常指該月份)
+    description = Column(Text, nullable=True)  # 備註、摘要
+    
+    status = Column(String(20), default="completed")  # pending, completed, cancelled
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # 關聯
+    user = relationship("User", backref="dividend_records")
