@@ -763,6 +763,21 @@ def init_db_endpoint():
             db.rollback()
             results.append(f"notifications.priority error: {e}")
 
+        # ── 天使投資人權限強制修復 (Manual Trigger) ──
+        try:
+            db.execute(text("""
+                UPDATE users 
+                SET is_angel = true, 
+                    investment_units = CASE WHEN investment_units = 0 THEN 2 ELSE investment_units END
+                WHERE (LOWER(TRIM(email)) = 'bobo68425@gmail.com' OR is_admin = true)
+                  AND (is_angel = false OR investment_units = 0);
+            """))
+            db.commit()
+            results.append("angel_status_repair ok")
+        except Exception as e:
+            db.rollback()
+            results.append(f"angel_status_repair error: {e}")
+
         row = db.execute(text("SELECT count(*) FROM subscription_plans")).fetchone()
         plan_count = row[0] if row else 0
         row2 = db.execute(text("SELECT count(*) FROM orders")).fetchone()
