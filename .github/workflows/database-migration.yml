@@ -95,10 +95,24 @@ jobs:
           
           case "${{ inputs.action }}" in
             upgrade)
-              echo "📈 檢查當前資料庫版本..."
+              echo "🔍 [DEBUG] 檢查 Alembic 狀態..."
+              echo "📌 當前目錄: $(pwd)"
+              echo "📌 版本目錄內容: $(ls versions/)"
+              echo "📌 Alembic Heads:"
+              alembic heads
+              echo "📌 Alembic Branches:"
+              alembic branches
+              echo "📌 Alembic Current:"
               alembic current || echo "⚠️ 無法取得當前版本"
-              echo "📈 執行 Alembic 資料庫遷移..."
-              alembic upgrade head || { echo "❌ Alembic 遷移失敗"; exit 1; }
+              
+              echo "📈 執行 Alembic 資料庫遷移 (upgrade head)..."
+              alembic upgrade head || { 
+                echo "❌ Alembic 遷移失敗！"
+                echo "🔍 [DEBUG] 失敗後的歷史紀錄:"
+                alembic history --verbose | tail -n 20
+                exit 1 
+              }
+              
               echo "📈 執行附加直接資料庫遷移腳本..."
               python3 scripts/run_direct_migration.py || { echo "❌ 直接遷移腳本失敗"; exit 1; }
               ;;
