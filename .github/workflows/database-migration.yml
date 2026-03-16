@@ -43,6 +43,8 @@ jobs:
     name: 🗄️ 資料庫遷移
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
+    env:
+      DIRECT_DATABASE_URL: ${{ secrets.DATABASE_URL }}
     
     steps:
       - name: 📥 Checkout
