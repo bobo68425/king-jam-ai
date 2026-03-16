@@ -92,6 +92,7 @@ class CloudStorageService:
             "thumbnails": ".jpg",
             "audio": ".mp3",
             "avatars": ".jpg",
+            "documents": ".pdf",
         }
         return type_map.get(file_type, "")
     

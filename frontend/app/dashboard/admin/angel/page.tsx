@@ -15,7 +15,8 @@ import {
   FileText,
   Edit3,
   X,
-  Share2
+  Share2,
+  Upload
 } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/lib/api';
@@ -75,6 +76,10 @@ export default function AngelManagementPage() {
   const [newDividendDate, setNewDividendDate] = useState(new Date().toISOString().split('T')[0]);
   const [isAddingDividend, setIsAddingDividend] = useState(false);
   const [activeTab, setActiveTab] = useState<'profile' | 'dividends'>('profile');
+  
+  // File Upload States
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const fetchUsers = async () => {
     try {
@@ -145,6 +150,34 @@ export default function AngelManagementPage() {
       toast.error('更新投資單位失敗');
     } finally {
       setUpdatingUnitsId(null);
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploading(true);
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await api.post('/upload/media', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      
+      if (response.data.success) {
+        setEditContractUrl(response.data.url);
+        toast.success('檔案上傳成功');
+      }
+    } catch (error: any) {
+      console.error('File upload failed:', error);
+      toast.error(error.response?.data?.detail || '檔案上傳失敗');
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -595,9 +628,23 @@ export default function AngelManagementPage() {
                         </div>
 
                         <div className="space-y-2">
-                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">
-                            合約網址 (S3/Cloudinary URL)
-                          </label>
+                          <div className="flex justify-between items-center px-1">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                              合約網址 (S3/Cloudinary URL)
+                            </label>
+                            <button
+                              onClick={() => fileInputRef.current?.click()}
+                              disabled={isUploading}
+                              className="text-[10px] font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors disabled:opacity-50"
+                            >
+                              {isUploading ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Upload className="h-3 w-3" />
+                              )}
+                              上傳檔案
+                            </button>
+                          </div>
                           <div className="relative group">
                             <input 
                               type="text" 
@@ -608,6 +655,13 @@ export default function AngelManagementPage() {
                             />
                             <FileText className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
                           </div>
+                          <input 
+                            type="file" 
+                            ref={fileInputRef} 
+                            onChange={handleFileUpload} 
+                            className="hidden" 
+                            accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                          />
                           {editContractUrl && (
                             <a href={editContractUrl} target="_blank" className="text-[10px] text-blue-400 hover:underline block mt-1 px-1">
                               開啟合約文件 ↗

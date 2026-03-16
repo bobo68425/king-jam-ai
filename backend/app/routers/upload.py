@@ -21,6 +21,7 @@ SCENE_IMAGES_DIR = "/app/static/uploads/scenes"
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"}
 ALLOWED_VIDEO_TYPES = {"video/mp4", "video/webm", "video/quicktime", "video/mpeg"}
 ALLOWED_AUDIO_TYPES = {"audio/mpeg", "audio/mp3", "audio/wav", "audio/ogg", "audio/m4a", "audio/x-m4a", "audio/mp4"}
+ALLOWED_DOC_TYPES = {"application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain"}
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 MAX_SCENE_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB per scene image
 
@@ -46,16 +47,19 @@ async def upload_media(
     
     # 檢查文件類型
     content_type = file.content_type or ""
-    all_allowed = ALLOWED_IMAGE_TYPES | ALLOWED_VIDEO_TYPES | ALLOWED_AUDIO_TYPES
+    all_allowed = ALLOWED_IMAGE_TYPES | ALLOWED_VIDEO_TYPES | ALLOWED_AUDIO_TYPES | ALLOWED_DOC_TYPES
     if content_type not in all_allowed:
         raise HTTPException(
             status_code=400,
-            detail=f"不支援的文件類型: {content_type}。支援的格式: JPG, PNG, GIF, WebP, MP4, WebM, MP3, WAV, OGG, M4A"
+            detail=f"不支援的文件類型: {content_type}。支援的格式: JPG, PNG, GIF, WebP, MP4, WebM, MP3, WAV, PDF, DOCX"
         )
     
     # 生成唯一文件名
     ext = os.path.splitext(file.filename or "file")[1].lower() or (
-        ".jpg" if content_type in ALLOWED_IMAGE_TYPES else ".mp3" if content_type in ALLOWED_AUDIO_TYPES else ".mp4"
+        ".jpg" if content_type in ALLOWED_IMAGE_TYPES else 
+        ".mp3" if content_type in ALLOWED_AUDIO_TYPES else 
+        ".pdf" if content_type in ALLOWED_DOC_TYPES else
+        ".mp4"
     )
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     unique_id = uuid.uuid4().hex[:8]
@@ -106,7 +110,12 @@ async def upload_media(
         logging.getLogger(__name__).error(f"[Upload] R2 備份上傳失敗: {e}")
     
     # 確定媒體類型
-    media_type = "image" if content_type in ALLOWED_IMAGE_TYPES else "audio" if content_type in ALLOWED_AUDIO_TYPES else "video"
+    media_type = (
+        "image" if content_type in ALLOWED_IMAGE_TYPES else 
+        "audio" if content_type in ALLOWED_AUDIO_TYPES else 
+        "document" if content_type in ALLOWED_DOC_TYPES else
+        "video"
+    )
     
     return {
         "success": True,
