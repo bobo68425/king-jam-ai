@@ -1386,7 +1386,7 @@ async def admin_get_users(
         query = query.filter(User.is_angel == is_angel)
         
     total = query.count()
-    users = query.order_by(User.created_at.desc()).offset(offset).limit(limit).all()
+    users = query.order_by(User.investment_units.desc(), User.created_at.desc()).offset(offset).limit(limit).all()
     
     return {
         "success": True,
