@@ -136,19 +136,19 @@ async def get_angel_stats(
         total_real_expense = sum(float(e.amount) for e in expenses)
         gpu_cost = total_real_expense
     else:
-        # fallback: 模擬預算分配 (若無真實資料)
+        # 使用用戶指定的預計支出：50,000
+        gpu_cost = 50000.0
+        
+        # 調整預算分配表，使其總和為 50,000
         budget_allocation = [
-            {"item": "雲端固定支出 (首年)", "budget": 10000, "desc": "Railway + Domain + DB"},
-            {"item": "GPU 算力備金 (Modal)", "budget": 10000, "desc": "10k 測試影片支援"},
-            {"item": "LTX-2 模型微調費", "budget": 5000, "desc": "特定風格 H100 租用"},
-            {"item": "廣告種子基金", "budget": 20000, "desc": "精準投放驗證轉化"},
-            {"item": "雜項與儲備金", "budget": 5000, "desc": "Sentry/R2 額外超載"}
+            {"item": "雲端固定支出 (Railway/DB)", "budget": 10000, "desc": "伺服器與資料庫維運"},
+            {"item": "GPU 算力預算 (Modal/LTX)", "budget": 20000, "desc": "影片渲染與模型運算"},
+            {"item": "行銷與推廣基金", "budget": 15000, "desc": "Meta/Google 廣告投放"},
+            {"item": "維護與儲備金", "budget": 5000, "desc": "系統監控與緊急預備"}
         ]
-        # fallback: 模擬 GPU 成本與其他數據 (目前暫無實際追蹤，採比例模擬)
-        # 假設 GPU 成本佔營收的 25% (含 API 調用與伺服器預算)
-        gpu_cost = round(revenue * 0.25, 2)
-        if revenue < 1000:
-            gpu_cost = 3145.0
+        
+        # 計算利潤 (以當月營收減去預計支出)
+        net_profit = max(0, revenue - gpu_cost)
 
     # 3. 模擬歷史數據 (用於圖表展示)
     historical_data = []
