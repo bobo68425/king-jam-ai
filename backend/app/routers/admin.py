@@ -1382,7 +1382,7 @@ async def admin_get_users(
             )
         )
         
-    if angel_only is True:
+    if angel_only:
         query = query.filter(User.is_angel == True)
     elif angel_only is False:
         query = query.filter(User.is_angel == False)
