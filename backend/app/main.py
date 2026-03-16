@@ -72,7 +72,15 @@ class CORSEnforceMiddleware(BaseHTTPMiddleware):
             )
 
 
-# 先加入 CORS 補強（最先加入 = 最外層 = 最後處理 response）
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    logger.info(f"[Request] {request.method} {request.url.path}")
+    response = await call_next(request)
+    logger.info(f"[Response] {request.method} {request.url.path} -> {response.status_code}")
+    return response
+
+
+# 先加入 CORS 補強
 app.add_middleware(CORSEnforceMiddleware)
 
 # 全域例外處理：確保未處理的 500 錯誤也回傳 JSON 與 CORS 標頭
@@ -504,12 +512,20 @@ def _auto_init_db():
         db.commit()
 
         # ── 10. 天使投資人權限自動修復 (Angel Status Repair) ──
+        # 更加激進的修復：使用 LOWER, TRIM 以及 ID 1 和 is_admin 
         db.execute(text("""
             UPDATE users 
             SET is_angel = true, 
                 investment_units = CASE WHEN investment_units = 0 THEN 2 ELSE investment_units END
-            WHERE (LOWER(TRIM(email)) = 'bobo68425@gmail.com' OR is_admin = true)
+            WHERE (LOWER(TRIM(email)) = 'bobo68425@gmail.com' OR is_admin = true OR id = 1)
               AND (is_angel = false OR investment_units = 0);
+        """))
+        db.commit()
+        
+        # 額外確認：如果 bobo 帳號存在但沒推薦碼，補一個
+        db.execute(text("""
+            UPDATE users SET referral_code = 'angel' 
+            WHERE LOWER(TRIM(email)) = 'bobo68425@gmail.com' AND referral_code IS NULL;
         """))
         db.commit()
         
@@ -525,7 +541,14 @@ def read_root():
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "service": "backend"}
+    return {"status": "ok", "service": "backend", "version": "1.0.7-repair"}
+
+
+@app.get("/debug/routes")
+def list_routes():
+    """列出所有註冊的路由（除錯用）"""
+    url_list = [{"path": route.path, "name": route.name, "methods": list(route.methods)} for route in app.routes]
+    return {"routes": url_list}
 
 
 @app.get("/health/db")
