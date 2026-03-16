@@ -103,6 +103,16 @@ const nextConfig: NextConfig = {
     ];
   },
 
+  // 代理設定
+  async rewrites() {
+    return [
+      {
+        source: "/api/:path*",
+        destination: "https://api.kingjam.app/:path*",
+      },
+    ];
+  },
+
   // 實驗性功能
   experimental: {
     // 優化套件打包
