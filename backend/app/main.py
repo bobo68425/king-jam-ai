@@ -547,22 +547,46 @@ def health_check():
 @app.get("/debug/routes")
 def list_routes():
     """列出所有註冊的路由（除錯用）"""
-    from fastapi.routing import APIRoute
     url_list = []
     for route in app.routes:
-        if isinstance(route, APIRoute):
-            url_list.append({
-                "path": route.path,
-                "name": route.name,
-                "methods": list(route.methods)
-            })
+        route_info = {"path": getattr(route, "path", "unknown"), "name": getattr(route, "name", "unknown")}
+        if hasattr(route, "methods"):
+            route_info["methods"] = list(route.methods)
         else:
-            url_list.append({
-                "path": route.path,
-                "name": getattr(route, "name", "unknown"),
-                "type": type(route).__name__
-            })
+            route_info["type"] = type(route).__name__
+        url_list.append(route_info)
     return {"routes": url_list}
+
+
+@app.get("/admin/init-angel-repair")
+async def top_level_repair_shortcut(request: Request):
+    """
+    頂層修復捷徑 - 避免 router prefix 造成 404
+    轉發到 admin router 的真正實作 (或者直接在這邊實作)
+    """
+    from app.routers.admin import admin_init_angel_repair
+    from app.database import SessionLocal
+    from app.routers.auth import get_current_user
+    from fastapi import Depends
+    
+    # 這裡我們直接調用實作，但需要手動處理依賴
+    db = SessionLocal()
+    try:
+        # 取得 token
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            return JSONResponse(status_code=401, content={"detail": "Missing Authorization Header"})
+        
+        token = auth_header.split(" ")[1]
+        from app.routers.auth import get_current_user as _get_user
+        try:
+            user = _get_user(token, db)
+        except:
+            return JSONResponse(status_code=401, content={"detail": "Invalid Token"})
+            
+        return await admin_init_angel_repair(db, user)
+    finally:
+        db.close()
 
 
 @app.get("/health/db")
