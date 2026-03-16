@@ -73,16 +73,19 @@ jobs:
       - name: 🔗 Start Cloud SQL Proxy
         run: |
           echo "Connecting to ${{ env.PROJECT_ID }}:${{ env.REGION }}:kingjam-db on port 5433"
-          ./cloud_sql_proxy -instances=${{ env.PROJECT_ID }}:${{ env.REGION }}:kingjam-db=tcp:5433 > cloud_sql_proxy.log 2>&1 &
-          sleep 8
+          ./cloud_sql_proxy -instances=${{ env.PROJECT_ID }}:${{ env.REGION }}:kingjam-db=tcp:0.0.0.0:5433 > cloud_sql_proxy.log 2>&1 &
+          sleep 12
+          echo "--- Cloud SQL Proxy Log ---"
           cat cloud_sql_proxy.log
+          echo "--- Network Status (Port 5433) ---"
+          netstat -tuln | grep 5433 || echo "Port 5433 is NOT listening"
       
       - name: 🗄️ Run Migration
         env:
           _DB_PASS: ${{ secrets.DB_PASSWORD }}
         run: |
           cd backend
-          export DATABASE_URL="postgresql://postgres:${_DB_PASS}@localhost:5433/kingjam"
+          export DATABASE_URL="postgresql://postgres:${_DB_PASS}@127.0.0.1:5433/kingjam"
           
           if [ -z "${_DB_PASS}" ]; then
             echo "❌ DB_PASSWORD secret 未設定"
@@ -96,7 +99,7 @@ jobs:
             upgrade)
               echo "🔍 [DEBUG] 檢查 Alembic 狀態..."
               echo "📌 當前目錄: $(pwd)"
-              echo "📌 版本目錄內容: $(ls versions/)"
+              echo "📌 版本目錄內容: $(ls migrations/versions/)"
               echo "📌 Alembic Heads:"
               alembic heads
               echo "📌 Alembic Branches:"
@@ -108,6 +111,8 @@ jobs:
               alembic upgrade head > alembic_output.log 2>&1 || { 
                 echo "❌ Alembic 遷移失敗！內容如下："
                 cat alembic_output.log
+                echo "🔍 [DEBUG] Cloud SQL Proxy 狀態回報:"
+                cat ../cloud_sql_proxy.log
                 echo "🔍 [DEBUG] 失敗後的完整路徑紀錄:"
                 alembic history --verbose | tail -n 50
                 exit 1 
