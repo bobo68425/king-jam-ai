@@ -477,6 +477,20 @@ def _auto_init_db():
         db.commit()
         print("[Startup] ✅ line_messages 表已初始化")
 
+        # ── 8. users 表: is_angel 欄位（天使投資人）──
+        # 此處使用 raw SQL 確保欄位存在，不依賴 Alembic 遷移鏈
+        db.execute(text("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='users' AND column_name='is_angel') THEN
+                    ALTER TABLE users ADD COLUMN is_angel BOOLEAN NOT NULL DEFAULT false;
+                    CREATE INDEX IF NOT EXISTS ix_users_is_angel ON users(is_angel);
+                END IF;
+            END $$;
+        """))
+        db.commit()
+        print("[Startup] ✅ users.is_angel 欄位已確認")
+
         db.close()
     except Exception as e:
         print(f"[Startup] ⚠️ DB 自動初始化跳過: {e}")
