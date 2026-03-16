@@ -660,7 +660,7 @@ export default function AngelManagementPage() {
                             ref={fileInputRef} 
                             onChange={handleFileUpload} 
                             className="hidden" 
-                            accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                            accept=".pdf"
                           />
                           {editContractUrl && (
                             <a href={editContractUrl} target="_blank" className="text-[10px] text-blue-400 hover:underline block mt-1 px-1">
