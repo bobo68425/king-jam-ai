@@ -65,7 +65,7 @@ export const ShortVideo: React.FC<ShortVideoProps> = ({
             {/* ========== 場景層 ========== */}
             {scenes.map((scene, idx) => {
                 const startFrame = sceneOffsets[idx];
-                const transitionDuration = 15; // 轉場持續 frames
+                const transitionDuration = Math.round(fps * 0.5); // WARN-02 fix: 轉場持續 0.5 秒 (動態計算)
                 const prevTransition = idx > 0 ? scenes[idx - 1].transition || "fade" : "none";
 
                 return (

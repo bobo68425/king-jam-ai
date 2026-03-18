@@ -104,12 +104,21 @@ export const AIVideoClip: React.FC<AIVideoClipProps> = ({
     // 3. 主題漸變背景 (fallback)
     const gradient = sceneGradients[scene.type] || sceneGradients.hook;
 
-    // 動態微粒效果
-    const particles = Array.from({ length: 6 }, (_, i) => ({
-        x: (Math.sin(frame * 0.02 + i * 1.2) + 1) * 50,
-        y: (Math.cos(frame * 0.015 + i * 0.8) + 1) * 50,
-        size: 100 + i * 60,
-        opacity: 0.08 + (Math.sin(frame * 0.03 + i) + 1) * 0.04,
+    // WARN-04 fix: 使用 useMemo 預計算粒子參數，減少每一幀的重複計算
+    const particleParams = React.useMemo(() => 
+        Array.from({ length: 6 }, (_, i) => ({
+            freqX: 0.02, phaseX: i * 1.2,
+            freqY: 0.015, phaseY: i * 0.8,
+            size: 100 + i * 60,
+            freqO: 0.03, phaseO: i,
+        })), []
+    );
+
+    const particles = particleParams.map((p, i) => ({
+        x: (Math.sin(frame * p.freqX + p.phaseX) + 1) * 50,
+        y: (Math.cos(frame * p.freqY + p.phaseY) + 1) * 50,
+        size: p.size,
+        opacity: 0.08 + (Math.sin(frame * p.freqO + p.phaseO) + 1) * 0.04,
     }));
 
     return (

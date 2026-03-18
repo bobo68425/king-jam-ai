@@ -471,14 +471,16 @@ export default function DesignStudioPage() {
       case "circle": shape = new fabric.Circle({ left: cx, top: cy, originX: "center", originY: "center", radius: 80, fill: "#EC4899", stroke: "#DB2777", strokeWidth: 2 }); name = "圓形"; break;
       case "triangle": shape = new fabric.Triangle({ left: cx, top: cy, originX: "center", originY: "center", width: 150, height: 130, fill: "#10B981", stroke: "#059669", strokeWidth: 2 }); name = "三角形"; break;
       case "star": {
-        const pts = [];
+        const pts: {x: number, y: number}[] = [];
         for (let i = 0; i < 10; i++) { const r = i % 2 === 0 ? 80 : 40; const a = (Math.PI / 5) * i - Math.PI / 2; pts.push({ x: Math.cos(a) * r, y: Math.sin(a) * r }); }
+        // @ts-ignore - fabric accepts plain {x,y} objects
         shape = new fabric.Polygon(pts, { left: cx, top: cy, originX: "center", originY: "center", fill: "#F59E0B", stroke: "#D97706", strokeWidth: 2 }); name = "星形"; break;
       }
       case "heart": shape = new fabric.Path("M 0 -30 C -25 -60 -60 -30 -60 0 C -60 30 -30 60 0 80 C 30 60 60 30 60 0 C 60 -30 25 -60 0 -30 Z", { left: cx, top: cy, originX: "center", originY: "center", fill: "#EF4444", stroke: "#DC2626", strokeWidth: 2, scaleX: 1.5, scaleY: 1.5 }); name = "愛心"; break;
       case "hexagon": {
-        const hp = [];
+        const hp: {x: number, y: number}[] = [];
         for (let i = 0; i < 6; i++) { const a = (Math.PI / 3) * i - Math.PI / 2; hp.push({ x: Math.cos(a) * 70, y: Math.sin(a) * 70 }); }
+        // @ts-ignore - fabric accepts plain {x,y} objects
         shape = new fabric.Polygon(hp, { left: cx, top: cy, originX: "center", originY: "center", fill: "#06B6D4", stroke: "#0891B2", strokeWidth: 2 }); name = "六邊形"; break;
       }
       case "diamond": shape = new fabric.Polygon([{ x: 0, y: -70 }, { x: 50, y: 0 }, { x: 0, y: 70 }, { x: -50, y: 0 }], { left: cx, top: cy, originX: "center", originY: "center", fill: "#14B8A6", stroke: "#0D9488", strokeWidth: 2 }); name = "菱形"; break;

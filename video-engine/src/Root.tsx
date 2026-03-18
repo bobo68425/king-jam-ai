@@ -1,3 +1,4 @@
+import React from "react";
 import { Composition } from "remotion";
 import { ShortVideo } from "./compositions/ShortVideo";
 import { defaultTheme } from "./themes";
@@ -58,7 +59,8 @@ export const RemotionRoot: React.FC = () => {
         <>
             <Composition
                 id="ShortVideo"
-                component={ShortVideo as any}
+                // BUG-04 fix: use ComponentType after unknown for proper casting
+                component={ShortVideo as unknown as React.ComponentType<Record<string, unknown>>}
                 durationInFrames={defaultProps.script.totalDurationInFrames}
                 fps={defaultProps.script.fps}
                 width={defaultProps.script.width}

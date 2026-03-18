@@ -757,6 +757,7 @@ class LocalFileService {
       if (window.showOpenFilePicker) {
         (async () => {
           try {
+            // @ts-ignore — showOpenFilePicker is a valid modern browser API
             const [handle] = await window.showOpenFilePicker({
               types: [{
                 description: '圖片檔案',

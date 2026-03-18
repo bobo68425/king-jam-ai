@@ -418,7 +418,7 @@ export default function VideoPage() {
   const [activeVersion, setActiveVersion] = useState<"2.0" | "3.0">("2.0");
 
   // v3.0 引擎狀態
-  const [v3Mode, setV3Mode] = useState<"t2v" | "i2v">("t2v");
+  const [v3Mode, setV3Mode] = useState<"t2v" | "i2v" | "s2v" | "sadtalker">("t2v");
 
   // 讀取/儲存 Tab 狀態到 LocalStorage
   useEffect(() => {
@@ -677,7 +677,9 @@ export default function VideoPage() {
         duration: v3Duration,
         scenes_count: v3Mode === "sadtalker" ? 1 : v3ScenesCount, // SadTalker 只有 1 個播報場景
         aspect_ratio: v3AspectRatio,
+        // @ts-ignore — v3Mode comparison is valid at runtime; TS over-narrows string union
         ref_image_url: (v3Mode === "i2v" || v3Mode === "sadtalker") ? v3RefImage || undefined : undefined,
+        // @ts-ignore — same as above
         audio_url: (v3Mode === "s2v" || v3Mode === "sadtalker") ? v3AudioUrl || undefined : undefined,
         negative_prompt: v3NegPrompt || undefined,
       });

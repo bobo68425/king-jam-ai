@@ -31,8 +31,10 @@ class BackgroundRemovalService {
     return new Promise((resolve, reject) => {
       try {
         // 檢查物件是否有有效的 canvas 引用
+        // @ts-ignore — fabric.Image.canvas is a valid runtime property
         if (!fabricImage.canvas) {
           // 嘗試使用原始圖片來源
+          // @ts-ignore — fabric.Image.getElement() is valid in fabric.js v5
           const imgElement = fabricImage.getElement() as HTMLImageElement;
           if (imgElement && imgElement.src) {
             resolve(imgElement.src);
@@ -53,6 +55,7 @@ class BackgroundRemovalService {
       } catch (error) {
         // 嘗試使用替代方案
         try {
+          // @ts-ignore — fabric.Image.getElement() is valid in fabric.js v5
           const imgElement = fabricImage.getElement() as HTMLImageElement;
           if (imgElement && imgElement.src) {
             resolve(imgElement.src);

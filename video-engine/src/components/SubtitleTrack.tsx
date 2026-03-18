@@ -47,16 +47,36 @@ export const SubtitleTrack: React.FC<SubtitleTrackProps> = ({
     const translateY = interpolate(entryProgress, [0, 1], [20, 0]);
     const scale = interpolate(entryProgress, [0, 1], [0.95, 1]);
 
-    // 位置
-    const positionStyle: React.CSSProperties = {
-        top: style.position === "top" ? "12%" : undefined,
-        bottom: style.position === "bottom" ? "12%" : style.position === "center" ? undefined : undefined,
-        ...(style.position === "center" ? { top: "50%", transform: `translateY(calc(-50% + ${translateY}px)) scale(${scale})` } : {}),
-    };
+    // BUG-05 fix: 統一計算一次 style，避免重複覆蓋與邏輯混亂
+    const containerStyle: React.CSSProperties = (() => {
+        const base: React.CSSProperties = {
+            position: "absolute",
+            left: 0,
+            right: 0,
+            display: "flex",
+            justifyContent: "center",
+            padding: "0 40px",
+            opacity,
+            zIndex: 50,
+            pointerEvents: "none",
+        };
 
-    const transformStr = style.position !== "center"
-        ? `translateY(${translateY}px) scale(${scale})`
-        : positionStyle.transform as string;
+        const transform = `translateY(${translateY}px) scale(${scale})`;
+
+        switch (style.position) {
+            case "top":
+                return { ...base, top: "12%", transform };
+            case "center":
+                return { 
+                    ...base, 
+                    top: "50%", 
+                    transform: `translateY(calc(-50% + ${translateY}px)) scale(${scale})` 
+                };
+            case "bottom":
+            default:
+                return { ...base, bottom: "12%", transform };
+        }
+    })();
 
     // 文字描邊效果
     const textShadow = style.outlineWidth > 0
@@ -70,23 +90,7 @@ export const SubtitleTrack: React.FC<SubtitleTrackProps> = ({
         : "0 2px 8px rgba(0,0,0,0.5)";
 
     return (
-        <div
-            style={{
-                position: "absolute",
-                left: 0,
-                right: 0,
-                ...(style.position === "bottom" ? { bottom: "12%" } : {}),
-                ...(style.position === "top" ? { top: "12%" } : {}),
-                ...(style.position === "center" ? { top: "45%" } : {}),
-                display: "flex",
-                justifyContent: "center",
-                padding: "0 40px",
-                opacity,
-                transform: transformStr,
-                zIndex: 50,
-                pointerEvents: "none",
-            }}
-        >
+        <div style={containerStyle}>
             <p
                 style={{
                     color: style.fontColor,

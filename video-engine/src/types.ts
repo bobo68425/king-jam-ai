@@ -7,7 +7,7 @@ export interface SceneData {
     index: number;
     type: "hook" | "problem" | "solution" | "demonstration" | "cta";
     durationInFrames: number;
-    /** AI 生成影片片段 URL (fal.ai) */
+    /** AI 生成影片片段 URL（Veo 3 / Kling AI 生成後上傳至 R2 的公開 URL） */
     videoUrl?: string;
     /** 備用靜態圖片 URL */
     imageUrl?: string;

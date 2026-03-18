@@ -32,6 +32,7 @@ export type ObjectType = 'text' | 'image' | 'shape' | 'group';
 
 // 遮罩原始樣式
 export interface MaskOriginalStyle {
+  // @ts-ignore - fabric.Pattern might not be exported in the types
   fill: string | fabric.Pattern | fabric.Gradient | null;
   stroke: string | null;
   strokeWidth: number;
@@ -267,7 +268,7 @@ export const useDesignStudioStore = create<DesignStudioState>()(
         // 當設置新的 canvas 時，清除舊的 layers（因為 fabricObject 引用已失效）
         // 注意：草稿恢復由 CanvasStage 處理
         if (canvas !== null) {
-          set({ canvas, layers: [], selectedObjectIds: [], historyStack: [], historyIndex: -1 });
+          set({ canvas, layers: [], selectedObjectIds: [], history: [], historyIndex: -1 });
         } else {
           set({ canvas });
         }

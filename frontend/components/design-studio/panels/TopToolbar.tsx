@@ -1453,7 +1453,7 @@ export default function TopToolbar() {
                             )}
                             <div>
                               <div className="text-white">{p.name}</div>
-                              <div className="text-slate-500">{storageService.formatSize(p.size)}</div>
+                              <div className="text-slate-500">{storageService.formatSize(p.size || 0)}</div>
                             </div>
                           </div>
                           <Button
@@ -1547,7 +1547,7 @@ export default function TopToolbar() {
                       </div>
                     </div>
                     <div className="text-xs text-slate-500">
-                      {storageService.formatSize(p.size)}
+                      {storageService.formatSize(p.size || 0)}
                     </div>
                   </button>
                 ))}

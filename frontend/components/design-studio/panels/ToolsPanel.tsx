@@ -201,7 +201,7 @@ export default function ToolsPanel() {
         break;
 
       case "star":
-        const starPoints = [];
+        const starPoints: {x: number, y: number}[] = [];
         const outerRadius = 80;
         const innerRadius = 40;
         const spikes = 5;
@@ -259,7 +259,7 @@ export default function ToolsPanel() {
         break;
 
       case "hexagon":
-        const hexPoints = [];
+        const hexPoints: {x: number, y: number}[] = [];
         for (let i = 0; i < 6; i++) {
           const angle = (Math.PI / 3) * i - Math.PI / 2;
           hexPoints.push({

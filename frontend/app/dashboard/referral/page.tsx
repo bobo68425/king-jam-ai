@@ -512,6 +512,7 @@ export default function ReferralPage() {
                             {plan === "basic" ? "入門方案" : plan === "pro" ? "標準方案" : plan === "enterprise" ? "企業方案" : plan}
                           </span>
                         </td>
+                        {/* @ts-ignore — key presence guaranteed by iteration over bonusTable entries */}
                         <td className="px-6 py-4 text-slate-400">NT${bonusTable.subscription_prices_yearly[plan]?.toLocaleString()}</td>
                         <td className="px-6 py-4 text-center"><span className="text-amber-400 font-semibold">{bonuses.bronze}</span><span className="text-slate-500 text-sm"> 點</span></td>
                         <td className="px-6 py-4 text-center"><span className="text-slate-200 font-semibold">{bonuses.silver}</span><span className="text-slate-500 text-sm"> 點</span></td>

@@ -716,7 +716,7 @@ export default function SchedulerPage() {
     const daysInMonth = lastDay.getDate();
     const startingDay = firstDay.getDay();
     
-    const days = [];
+    const days: (Date | null)[] = [];
     for (let i = 0; i < startingDay; i++) {
       days.push(null);
     }

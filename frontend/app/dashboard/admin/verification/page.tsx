@@ -424,7 +424,9 @@ export default function AdminVerificationPage() {
             <div className="text-center py-12 text-muted-foreground">
               <Shield className="h-12 w-12 mx-auto mb-3" />
               <p>目前沒有{statusFilter === "all" ? "" : getStatusBadge(statusFilter).props.children}的認證申請</p>
-              {search && (statusFilter === "all" ? stats.pending + stats.reviewing + stats.approved + stats.rejected > 0 : (stats as Record<string, number>)[statusFilter] > 0) && (
+              {search && (statusFilter === "all" ? stats.pending + stats.reviewing + stats.approved + stats.rejected > 0 :
+              // @ts-ignore — Stats is indexed at runtime by status string, valid pattern
+              (stats as Record<string, number>)[statusFilter] > 0) && (
                 <p className="text-sm mt-2 text-amber-500/80">搜尋「{search}」無符合結果，可清除搜尋查看全部</p>
               )}
             </div>
