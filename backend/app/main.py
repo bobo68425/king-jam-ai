@@ -22,8 +22,6 @@ origins = [
     "https://www.kingjam.app",
     "http://kingjam.app",
     "http://www.kingjam.app",
-    "https://kingjam-frontend-wck4tgzywa-de.a.run.app",  # Cloud Run staging
-    "https://kingjam-api-wck4tgzywa-de.a.run.app",       # Cloud Run API (internal)
 ]
 
 import sentry_sdk
@@ -592,7 +590,7 @@ def read_root():
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "service": "backend", "version": "2.0.3-route-merged"}
+    return {"status": "ok", "service": "backend", "version": "2.0.4-ltx-fix"}
 
 
 @app.get("/debug/angels")

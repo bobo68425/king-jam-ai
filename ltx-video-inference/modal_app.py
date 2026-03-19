@@ -231,215 +231,139 @@ class LTXVideoInference:
             ledger.build_model_builders()
         print(f"[LTX-2.3] StateDictRegistry({id(shared_registry)}) 已注入並同步 Builders")
 
-        # --- [修復 RecursionError] ---
-        # 必須在替換之前儲存原始函式，否則在 _patched_transformer 內部讀取時會讀到 Patch 自己導致無限遞迴
-        self._orig_transformer_fn = self.pipeline.stage_1_model_ledger.transformer
+        import threading
 
-        def _patched_transformer(*args, **kwargs):
-            import gc
+        self._transformer_prepare_lock = threading.RLock()
+        self._request_lock = threading.RLock()
+        self._orig_transformer_fn = self.pipeline.stage_1_model_ledger.transformer
+        self._transformer_cache = None
+
+        def _ensure_cuda(obj):
+            import torch
+            if torch.is_tensor(obj):
+                return obj if obj.device.type == "cuda" else obj.to("cuda")
+            if isinstance(obj, dict):
+                return {k: _ensure_cuda(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [_ensure_cuda(v) for v in obj]
+            if isinstance(obj, tuple):
+                return tuple(_ensure_cuda(v) for v in obj)
+            return obj
+
+        def _configure_block_devices(x0_model):
+            import torch
+            v_model = x0_model.velocity_model
+            dynamic_offload = bool(getattr(x0_model, "_dynamic_offload", False))
+
+            for name, child in v_model.named_children():
+                if name != "transformer_blocks":
+                    child.to("cuda")
+
+            if hasattr(v_model, "transformer_blocks"):
+                for block in v_model.transformer_blocks:
+                    block.to("cpu" if dynamic_offload else "cuda")
+
+            if dynamic_offload:
+                torch.cuda.empty_cache()
+
+        def _install_runtime_hooks(x0_model):
             import torch
             import types
-            print(f"[LTX-2.3] [setup] 啟動 Ghost Buster 8.0 (管線掃描 + 轉發保護)...")
-            
-            # --- 1. 蒐集保護名單 ---
-            protected_ids = set()
-            def collect_tensors(obj, depth=0):
-                if depth > 5: return
-                if torch.is_tensor(obj):
-                    protected_ids.add(id(obj))
-                    try: protected_ids.add(id(obj.data))
-                    except: pass
-                elif isinstance(obj, (list, tuple)):
-                    for x in obj: collect_tensors(x, depth + 1)
-                elif isinstance(obj, dict):
-                    for x in obj.values(): collect_tensors(x, depth + 1)
-                elif hasattr(obj, "__dict__"):
-                    for k, v in obj.__dict__.items():
-                        if not k.startswith('_'): collect_tensors(v, depth + 1)
 
-            # 先切斷大塊頭權重，避免掃描時保護到權重
-            for attr in ['text_encoder', 'vae_encoder', 'spatial_upsampler', 'vae_decoder', 'vocoder']:
-                if hasattr(self.pipeline, attr): setattr(self.pipeline, attr, None)
-            
-            # 掃描剩餘活動 Tensor
-            collect_tensors(self.pipeline)
-            collect_tensors(args)
-            collect_tensors(kwargs)
-            print(f"[LTX-2.3] [setup] 已鎖定並保護 {len(protected_ids)} 個活動專用 Tensor")
+            if getattr(x0_model, "_safe_hooks_installed", False):
+                return
 
-            # --- 2. 切斷 Ledger 與 Registry ---
-            for ledger in [self.pipeline.stage_1_model_ledger, self.pipeline.stage_2_model_ledger]:
-                for attr in ['text_encoder_builder', 'embeddings_processor_builder', 'vae_encoder_builder', 'transformer_builder', 'vae_decoder_builder']:
-                    if hasattr(ledger, attr): setattr(ledger, attr, None)
-                ledger.build_model_builders()
-                if hasattr(ledger, 'registry') and ledger.registry:
-                    ledger.registry.clear()
-            shared_registry.clear()
-            
-            # --- 3. [強力驅逐] 全域 Tensor 掃描 ---
-            evicted_count = 0
-            evicted_bytes = 0
-            THRESHOLD = 0.1 * 1024 * 1024 # 100KB
-            
-            for obj in gc.get_objects():
-                try:
-                    target = None
-                    if torch.is_tensor(obj) and obj.is_cuda and id(obj) not in protected_ids:
-                        target = obj
-                    elif isinstance(obj, torch.nn.Parameter) and obj.data.is_cuda and id(obj.data) not in protected_ids:
-                        target = obj.data
-                    
-                    if target is not None:
-                        sz = target.numel() * target.element_size()
-                        if sz > THRESHOLD:
-                            target.data = target.data.to("cpu")
-                            evicted_count += 1
-                            evicted_bytes += sz
-                    
-                    if isinstance(obj, torch.nn.Module):
-                        name = type(obj).__name__
-                        if any(k in name for k in ["Gemma", "Encoder", "VAE", "Processor"]):
-                            obj.to("cpu")
-                except: continue
-
-            # 重力清理
-            for _ in range(3):
-                gc.collect()
-                torch.cuda.synchronize()
-                torch.cuda.empty_cache()
-            
-            pre_alloc = torch.cuda.memory_allocated() / (1024**3)
-            print(f"[LTX-2.3] [setup] 驅逐完成! 釋放了 {evicted_bytes/(1024**3):.1f} GB. 目前 VRAM: {pre_alloc:.2f} GB")
-
-            # --- 4. 獲取原始 Transformer ---
-            # 直接使用 setup 中儲存的原始函式
-            print(f"[LTX-2.3] [setup] 載入原生 Transformer...")
-            x0_model = self._orig_transformer_fn(*args, **kwargs)
             v_model = x0_model.velocity_model
-            
-            # --- 5. [Wan2GP] TeaCache & 動態 Offload 保護盾 ---
-            # 從 self.current_req 讀取使用者設定
-            req = getattr(self, 'current_req', None)
-            x0_model._teacache_threshold = getattr(req, 'teacache_threshold', 0.0) if req else 0.0
-            x0_model._dynamic_offload = getattr(req, 'dynamic_offload', False) if req else False
-            
-            if x0_model._dynamic_offload:
-                print(f"[LTX-2.3] [setup] 啟用管線動態 Forward Offload (Profile 4)")
-            
-            if not x0_model._dynamic_offload:
-                print(f"[LTX-2.3] [setup] 逐塊搬移至 GPU (保持常駐)...")
-                for name, child in v_model.named_children():
-                    if name != "transformer_blocks": child.to("cuda")
-                if hasattr(v_model, "transformer_blocks"):
-                    for i, block in enumerate(v_model.transformer_blocks):
-                        block.to("cuda")
-                        if (i + 1) % 10 == 0: torch.cuda.empty_cache()
-            
-            v_model.to("cuda") if not x0_model._dynamic_offload else None
-
-            # --- 6. [解決 Device Mismatch & 整合優化] ---
-            def ensure_cuda(inner_obj, name="tensor"):
-                if torch.is_tensor(inner_obj): 
-                    if inner_obj.device.type != 'cuda': 
-                        return inner_obj.to("cuda")
-                    return inner_obj
-                if isinstance(inner_obj, dict): return {k: ensure_cuda(v, f"{name}[{k}]") for k, v in inner_obj.items()}
-                if isinstance(inner_obj, (list, tuple)): return type(inner_obj)(ensure_cuda(x, f"{name}[{i}]") for i, x in enumerate(inner_obj))
-                
-                if hasattr(inner_obj, "to") and callable(inner_obj.to):
-                    try: return inner_obj.to("cuda")
-                    except: pass
-                return inner_obj
-
-            # TeaCache 狀態緩存
             x0_model._last_latent_input = None
             x0_model._last_output = None
 
             orig_forward = x0_model.forward
+
             def optimized_forward(*f_args, **f_kwargs):
-                # 1. 確保輸入在 CUDA
-                f_args = ensure_cuda(f_args)
-                f_kwargs = ensure_cuda(f_kwargs)
-                
-                # 2. TeaCache 核心跳過邏輯
-                if x0_model._teacache_threshold > 0:
-                    x = f_args[0] if f_args else f_kwargs.get('x')
+                f_args = _ensure_cuda(f_args)
+                f_kwargs = _ensure_cuda(f_kwargs)
+
+                threshold = float(getattr(x0_model, "_teacache_threshold", 0.0) or 0.0)
+                if threshold > 0:
+                    x = f_args[0] if f_args else f_kwargs.get("x")
                     if x is not None:
                         if x0_model._last_latent_input is not None and x0_model._last_output is not None:
                             diff = (x - x0_model._last_latent_input).abs().mean()
                             base = x0_model._last_latent_input.abs().mean()
                             rel_diff = diff / (base + 1e-6)
-                            
-                            if rel_diff < x0_model._teacache_threshold:
-                                # 緩存命中！跳過算繪，直接返回上一次的結果
-                                # print(f"[LTX-2.3] TeaCache Hit! Skip computation (diff={rel_diff:.4f})")
+                            if rel_diff < threshold:
                                 return x0_model._last_output
-                        
                         x0_model._last_latent_input = x.clone()
 
-                # 3. 動態節能模式 (Profile 4)
-                if x0_model._dynamic_offload:
-                    # 確保基礎權重在 GPU
-                    for name, child in v_model.named_children():
-                        if name != "transformer_blocks": 
-                            child.to("cuda")
-                            ensure_cuda(child, name) # 深層同步
-                    
-                    # 封裝所有 Blocks
-                    if hasattr(v_model, "transformer_blocks"):
-                        for block in v_model.transformer_blocks:
-                            if not hasattr(block, "_is_wrapped"):
-                                block._orig_block_forward = block.forward
-                                def make_wrapped_f(b):
-                                    def wrapped(self_b, *b_args, **b_kwargs):
-                                        self_b.to("cuda")
-                                        # 確保 Block 輸入也在 CUDA
-                                        res = self_b._orig_block_forward(*ensure_cuda(b_args, "args"), **ensure_cuda(b_kwargs, "kwargs"))
-                                        self_b.to("cpu")
-                                        
-                                        # 【關鍵修復】動態卸載模式必須手動清理快取，否則 OOM
-                                        import torch
-                                        torch.cuda.empty_cache()
-                                        
-                                        return res
-                                    return wrapped
-                                block.forward = types.MethodType(make_wrapped_f(block), block)
-                                block._is_wrapped = True
-
-                # 執行原始算繪
                 result = orig_forward(*f_args, **f_kwargs)
-                
-                # 更新 TeaCache 輸出緩存
-                if x0_model._teacache_threshold > 0:
+
+                if threshold > 0:
                     x0_model._last_output = result
-                    
+
                 return result
-            
-            if not x0_model._dynamic_offload:
-                print(f"[LTX-2.3] [setup] 逐塊搬移至 GPU (保持常駐)...")
-                x0_model.to("cuda")
-                ensure_cuda(x0_model, "x0_model") # 超強深層同步
-                if hasattr(v_model, "transformer_blocks"):
-                    for i, block in enumerate(v_model.transformer_blocks):
-                        block.to("cuda")
-                        if (i + 1) % 10 == 0: torch.cuda.empty_cache()
-            
+
             x0_model.forward = optimized_forward
-            
-            # --- 7. 初始化動態 Offload 狀態 ---
-            if x0_model._dynamic_offload and hasattr(v_model, "transformer_blocks"):
-                print(f"[LTX-2.3] [setup] 將 {len(v_model.transformer_blocks)} 個 Blocks 預先卸載至 CPU...")
+
+            if hasattr(v_model, "transformer_blocks"):
                 for block in v_model.transformer_blocks:
-                    block.to("cpu")
-            
-            print(f"[LTX-2.3] [setup] 最終 VRAM: {torch.cuda.memory_allocated()/(1024**3):.2f} GB. 開始算繪...")
+                    if getattr(block, "_safe_wrapped", False):
+                        continue
+
+                    block._orig_block_forward = block.forward
+
+                    def make_wrapped_f(b):
+                        def wrapped(self_b, *b_args, **b_kwargs):
+                            import torch
+                            if getattr(x0_model, "_dynamic_offload", False):
+                                self_b.to("cuda")
+                                res = self_b._orig_block_forward(
+                                    *_ensure_cuda(b_args), **_ensure_cuda(b_kwargs)
+                                )
+                                self_b.to("cpu")
+                                torch.cuda.empty_cache()
+                                return res
+                            return self_b._orig_block_forward(
+                                *_ensure_cuda(b_args), **_ensure_cuda(b_kwargs)
+                            )
+                        return wrapped
+
+                    block.forward = types.MethodType(make_wrapped_f(block), block)
+                    block._safe_wrapped = True
+
+            x0_model._safe_hooks_installed = True
+
+        def _apply_request_profile(x0_model):
+            req = getattr(self, "current_req", None)
+            x0_model._teacache_threshold = float(getattr(req, "teacache_threshold", 0.0) or 0.0)
+            x0_model._dynamic_offload = bool(getattr(req, "dynamic_offload", False))
+            _configure_block_devices(x0_model)
+
+        def _cached_transformer(*args, **kwargs):
             import gc
-            gc.collect()
-            torch.cuda.empty_cache()
-            return x0_model
-        
-        # 替換！
-        self.pipeline.stage_1_model_ledger.transformer = _patched_transformer
+            import torch
+
+            with self._transformer_prepare_lock:
+                if self._transformer_cache is None:
+                    print("[LTX-2.3] [setup] 初始化 transformer cache...")
+                    for _ in range(2):
+                        gc.collect()
+                        torch.cuda.empty_cache()
+
+                    x0_model = self._orig_transformer_fn(*args, **kwargs)
+                    _install_runtime_hooks(x0_model)
+                    self._transformer_cache = x0_model
+                    print("[LTX-2.3] [setup] Transformer cache 已建立")
+                else:
+                    print("[LTX-2.3] [setup] 使用既有 transformer cache")
+
+                _apply_request_profile(self._transformer_cache)
+                print(
+                    f"[LTX-2.3] [setup] profile: teacache={getattr(self._transformer_cache, '_teacache_threshold', 0.0):.3f}, "
+                    f"dynamic_offload={getattr(self._transformer_cache, '_dynamic_offload', False)}"
+                )
+                return self._transformer_cache
+
+        self.pipeline.stage_1_model_ledger.transformer = _cached_transformer
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         elapsed = time.time() - start_time
@@ -453,115 +377,116 @@ class LTXVideoInference:
         import tempfile
         import uuid
         import random
-        import boto3
         import numpy as np
 
         task_id = str(uuid.uuid4())
-        self.current_req = req  # 讓 _patched_transformer 能讀取優化參數
         start_time = time.time()
-        print(f"[LTX-2.3] [{task_id}] 開始生成, prompt: {req.prompt[:80]}...")
 
-        try:
-            width, height = map(int, req.resolution.split("x"))
-            # Two-stage pipeline 要求必須是 64 的倍數
-            width = (width // 64) * 64
-            height = (height // 64) * 64
+        with self._request_lock:
+            self.current_req = req
+            print(f"[LTX-2.3] [{task_id}] 開始生成, prompt: {req.prompt[:80]}...")
 
-            # ── VRAM 保護: A100-80GB 限制 (Gemma-3-12B + LTX-22B + 激活值)
-            # 768x1280 + 161幀 大約需要 ~72-76 GiB; 更大的配置會 OOM
-            MAX_PIXELS = 768 * 1280
-            if width * height > MAX_PIXELS:
-                # 等比縮小到最大像素限制, 對齊到 64
-                scale = (MAX_PIXELS / (width * height)) ** 0.5
-                width = int((width * scale) // 64) * 64
-                height = int((height * scale) // 64) * 64
-                print(f"[LTX-2.3] [{task_id}] 解析度已縮小至 {width}x{height} (VRAM 保護)")
+            try:
+                width, height = map(int, req.resolution.split("x"))
+                width = (width // 64) * 64
+                height = (height // 64) * 64
 
-            num_frames = int(req.duration * req.frame_rate)
-            num_frames = (num_frames // 8) * 8 + 1
-            # 最多 161 幀 (~6.7s at 24fps) 以避免激活值 OOM
-            MAX_FRAMES = 161
-            if num_frames > MAX_FRAMES:
-                num_frames = ((MAX_FRAMES - 1) // 8) * 8 + 1  # 最近的合法值
-                print(f"[LTX-2.3] [{task_id}] 幀數已限制至 {num_frames} (VRAM 保護)")
+                MAX_PIXELS = 768 * 1280
+                if width * height > MAX_PIXELS:
+                    scale = (MAX_PIXELS / (width * height)) ** 0.5
+                    width = int((width * scale) // 64) * 64
+                    height = int((height * scale) // 64) * 64
+                    print(f"[LTX-2.3] [{task_id}] 解析度已縮小至 {width}x{height} (VRAM 保護)")
 
-            actual_seed = req.seed if req.seed is not None else random.randint(0, 2147483647)
-            print(f"[LTX-2.3] [{task_id}] res={width}x{height}, frames={num_frames}, steps={req.num_inference_steps}, seed={actual_seed}")
+                num_frames = int(req.duration * req.frame_rate)
+                num_frames = (num_frames // 8) * 8 + 1
+                MAX_FRAMES = 161
+                if num_frames > MAX_FRAMES:
+                    num_frames = ((MAX_FRAMES - 1) // 8) * 8 + 1
+                    print(f"[LTX-2.3] [{task_id}] 幀數已限制至 {num_frames} (VRAM 保護)")
 
-            # 清理 CUDA 快取, 讓 model ledger 重載 transformer 時有连续空間
-            torch.cuda.empty_cache()
+                actual_seed = req.seed if req.seed is not None else random.randint(0, 2147483647)
+                print(
+                    f"[LTX-2.3] [{task_id}] res={width}x{height}, frames={num_frames}, "
+                    f"steps={req.num_inference_steps}, seed={actual_seed}"
+                )
 
-            from ltx_core.components.guiders import MultiModalGuiderParams
-            from ltx_pipelines.utils.args import ImageConditioningInput
+                torch.cuda.empty_cache()
 
-            guider_params = MultiModalGuiderParams(
-                cfg_scale=req.cfg_guidance_scale,
-            )
+                from ltx_core.components.guiders import MultiModalGuiderParams
+                from ltx_pipelines.utils.args import ImageConditioningInput
 
-            images = []
-            if req.image_uri:
-                images = [ImageConditioningInput(
-                    image=req.image_uri,
-                    frame_index=0,
-                    strength=0.8,
-                )]
+                guider_params = MultiModalGuiderParams(cfg_scale=req.cfg_guidance_scale)
 
-            video_iter, audio = self.pipeline(
-                prompt=req.prompt,
-                negative_prompt=req.negative_prompt,
-                seed=actual_seed,
-                height=height,
-                width=width,
-                num_frames=num_frames,
-                frame_rate=req.frame_rate,
-                num_inference_steps=req.num_inference_steps,
-                video_guider_params=guider_params,
-                audio_guider_params=guider_params,
-                images=images,
-            )
+                images = []
+                if req.image_uri:
+                    images = [
+                        ImageConditioningInput(
+                            image=req.image_uri,
+                            frame_index=0,
+                            strength=0.8,
+                        )
+                    ]
 
-            video = None
-            for frame_chunk in video_iter:
-                video = frame_chunk
+                video_iter, audio = self.pipeline(
+                    prompt=req.prompt,
+                    negative_prompt=req.negative_prompt,
+                    seed=actual_seed,
+                    height=height,
+                    width=width,
+                    num_frames=num_frames,
+                    frame_rate=req.frame_rate,
+                    num_inference_steps=req.num_inference_steps,
+                    video_guider_params=guider_params,
+                    audio_guider_params=guider_params,
+                    images=images,
+                )
 
-            # ── 匯出為 MP4 ──
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
-                output_path = tmp.name
+                video = None
+                for frame_chunk in video_iter:
+                    video = frame_chunk
 
-            self._export_video(video, audio, output_path, fps=req.frame_rate)
-            inference_time = time.time() - start_time
-            print(f"[LTX-2.3] [{task_id}] 推論完成 (耗時: {inference_time:.1f}s)")
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
+                    output_path = tmp.name
 
-            # ── 上傳至 R2 ──
-            video_url = self._upload_to_r2(req, task_id, output_path)
-            print(f"[LTX-2.3] [{task_id}] 上傳成功: {video_url}")
+                self._export_video(video, audio, output_path, fps=req.frame_rate)
+                inference_time = time.time() - start_time
+                print(f"[LTX-2.3] [{task_id}] 推論完成 (耗時: {inference_time:.1f}s)")
 
-            return {
-                "success": True,
-                "task_id": task_id,
-                "video_url": video_url,
-                "object_key": video_url.split("/")[-4:] if video_url else None,
-                "model": req.model,
-                "inference_time_s": round(inference_time, 1),
-            }
+                video_url = self._upload_to_r2(req, task_id, output_path)
+                print(f"[LTX-2.3] [{task_id}] 上傳成功: {video_url}")
 
-        except torch.OutOfMemoryError as e:
-            # OOM 後 GPU 狀態已髙化, 強制重啟 container 避免後續請求繼續失敗
-            print(f"[LTX-2.3] [{task_id}] CUDA OOM, 重啟 container: {e}")
-            import sys
-            sys.exit(1)  # Modal 會自動重啟 container 且重試請求
-        except Exception as e:
-            print(f"[LTX-2.3] [{task_id}] 執行錯誤: {e}")
-            import traceback
-            traceback.print_exc()
-            return {
-                "success": False,
-                "task_id": task_id,
-                "error": str(e),
-            }
-        finally:
-            if "output_path" in locals() and os.path.exists(output_path):
-                os.remove(output_path)
+                object_key = None
+                if video_url and "/videos/" in video_url:
+                    object_key = video_url.split("/videos/", 1)[1]
+                    object_key = f"videos/{object_key}"
+
+                return {
+                    "success": True,
+                    "task_id": task_id,
+                    "video_url": video_url,
+                    "object_key": object_key,
+                    "model": req.model,
+                    "inference_time_s": round(inference_time, 1),
+                }
+
+            except torch.OutOfMemoryError as e:
+                print(f"[LTX-2.3] [{task_id}] CUDA OOM, 重啟 container: {e}")
+                import sys
+                sys.exit(1)
+            except Exception as e:
+                print(f"[LTX-2.3] [{task_id}] 執行錯誤: {e}")
+                import traceback
+                traceback.print_exc()
+                return {
+                    "success": False,
+                    "task_id": task_id,
+                    "error": str(e),
+                }
+            finally:
+                self.current_req = None
+                if "output_path" in locals() and os.path.exists(output_path):
+                    os.remove(output_path)
 
     def _export_video(self, video, audio, output_path: str, fps: float = 24.0):
         """將 pipeline 輸出匯出為帶音訊的 MP4"""
