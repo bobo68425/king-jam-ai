@@ -107,6 +107,7 @@ class LTXVideoInference:
     @modal.enter()
     def setup(self):
         """冷啟動時下載並載入 LTX-2.3 模型權重"""
+        print("[LTX-2.3] SAFE_CACHE_BUILD_V1")
         import torch
         from huggingface_hub import hf_hub_download, snapshot_download
 
