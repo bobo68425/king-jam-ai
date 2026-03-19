@@ -185,7 +185,34 @@ class LTXVideoInference:
         # ── [關鍵修復] 使用 StateDictRegistry 讓所有模型由 CPU 載入再移 GPU ──
         # 原因: DummyRegistry 下, _target_device() == "cuda"
         #   載入 22B transformer 時先將 bf16 44GB 載入 CUDA, 再 cast fp8 = 峰値 ~66GB
-        #   加上 Gemma-3-12B (~24GB) + VAE         self._transformer_prepare_lock = threading.RLock()
+        #   加上 Gemma-3-12B (~24GB) + VAE 超過 79GB → OOM
+        # 解法: StateDictRegistry 讓 _target_device() 回傳 "cpu"
+        #   所有模型先在 CPU RAM 讀入, 再 .to(cuda) 逐層移動
+        #   CUDA 峰値僅 ~22GB (fp8 transformer)
+        #   stage_1 與 stage_2 共享同一 registry 避免重複載入
+        #
+        # 注意: TI2VidTwoStagesPipeline 不接受 registry 參數,
+        #   所以在建立 pipeline 後再將 registry 注入兩個 model ledger
+        shared_registry = StateDictRegistry()
+        self.current_req = None  # 用於在 generate 時動態傳遞優化參數
+
+        self.pipeline = TI2VidTwoStagesPipeline(
+            checkpoint_path=distilled_path,
+            spatial_upsampler_path=upscaler_path,
+            gemma_root=GEMMA_DIR,
+            distilled_lora=[
+                LoraPathStrengthAndSDOps(path=lora_path, strength=1, sd_ops=None)
+            ],
+            loras=[],
+            quantization=QuantizationPolicy.fp8_cast(),
+        )
+        # [重要] 注入 StateDictRegistry 並同步 Builders
+        for ledger in [self.pipeline.stage_1_model_ledger, self.pipeline.stage_2_model_ledger]:
+            ledger.registry = shared_registry
+            ledger.build_model_builders()
+        print(f"[LTX-2.3] StateDictRegistry({id(shared_registry)}) 已注入並同步 Builders")
+
+        self._transformer_prepare_lock = threading.RLock()
         self._request_lock = threading.RLock()
         self._orig_transformer_fn = self.pipeline.stage_1_model_ledger.transformer
         self._transformer_cache = None

@@ -182,8 +182,30 @@ async def _upload_video_bytes(video_data: bytes, job_id: str) -> str:
 
 
 async def check_scene_status(request_id: str, model_id: str) -> Dict[str, Any]:
-    """LTX-2.3 狀態查詢 (追蹤由 in-memory job store 完成)"""
-    return {"request_id": request_id, "status": "pending", "video_url": None}
+    """LTX-2.3 狀態查詢 (呼叫 Modal API)"""
+    endpoint = f"{LTX_INFERENCE_URL}/v1/status/{request_id}"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(endpoint)
+            if resp.status_code == 200:
+                data = resp.json()
+                # Modal 回傳: { "status": "completed", "video_url": "..." }
+                # 注意: Backend 預期 status 要小寫 (pending, completed, error)
+                status = data.get("status", "pending").lower()
+                video_url = data.get("video_url")
+                
+                if status == "completed" and video_url:
+                    return {"request_id": request_id, "status": "completed", "video_url": video_url}
+                if status == "error":
+                    return {"request_id": request_id, "status": "error", "error": data.get("error")}
+                    
+                return {"request_id": request_id, "status": "pending", "video_url": None}
+            else:
+                logger.warning(f"[LTX-2.3] Status check failed: {resp.status_code}")
+                return {"request_id": request_id, "status": "pending", "video_url": None}
+    except Exception as e:
+        logger.error(f"[LTX-2.3] Status check exception: {e}")
+        return {"request_id": request_id, "status": "pending", "video_url": None}
 
 
 async def handle_webhook(payload: Dict[str, Any]) -> Dict[str, Any]:
