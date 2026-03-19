@@ -41,6 +41,8 @@ def _get_v3_admin(current_user: User = Depends(get_current_user)) -> User:
     require_super_admin(current_user)
     return current_user
 
+router = APIRouter(prefix="/video/v3", tags=["Video V3 Engine"])
+
 # ---------------------------------------------------------------------------
 # Redis-backed job store（取代 in-memory router._ltx_jobs，存活於重啟之間）
 # ---------------------------------------------------------------------------
