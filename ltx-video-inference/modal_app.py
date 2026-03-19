@@ -4,6 +4,7 @@ import io
 import time
 from typing import Optional, List, Tuple
 from pydantic import BaseModel
+import threading
 
 # ── Modal App ────────────────────────────────────────────────────────
 app_name = "kingjam-ltx-video"
@@ -87,7 +88,7 @@ class VideoRequest(BaseModel):
     frame_rate: Optional[float] = 24.0
     two_stage: Optional[bool] = False
     teacache_threshold: Optional[float] = 0.0  # 0.0 to 1.0, 0.15 is a good start
-    dynamic_offload: Optional[bool] = False    # True for extreme VRAM saving
+    dynamic_offload: Optional[bool] = True     # True for extreme VRAM saving
 
 
 @app.cls(
@@ -107,7 +108,6 @@ class LTXVideoInference:
     @modal.enter()
     def setup(self):
         """冷啟動時下載並載入 LTX-2.3 模型權重"""
-        print("[LTX-2.3] SAFE_CACHE_BUILD_V1")
         import torch
         from huggingface_hub import hf_hub_download, snapshot_download
 
@@ -185,56 +185,7 @@ class LTXVideoInference:
         # ── [關鍵修復] 使用 StateDictRegistry 讓所有模型由 CPU 載入再移 GPU ──
         # 原因: DummyRegistry 下, _target_device() == "cuda"
         #   載入 22B transformer 時先將 bf16 44GB 載入 CUDA, 再 cast fp8 = 峰値 ~66GB
-        #   加上 Gemma-3-12B (~24GB) + VAE 超過 79GB → OOM
-        # 解法: StateDictRegistry 讓 _target_device() 回傳 "cpu"
-        #   所有模型先在 CPU RAM 讀入, 再 .to(cuda) 逐層移動
-        #   CUDA 峰値僅 ~22GB (fp8 transformer)
-        #   stage_1 與 stage_2 共享同一 registry 避免重複載入
-        #
-        # 注意: TI2VidTwoStagesPipeline 不接受 registry 參數,
-        #   所以在建立 pipeline 後再將 registry 注入兩個 model ledger
-        shared_registry = StateDictRegistry()
-        self.current_req = None  # 用於在 generate 時動態傳遞優化參數
-
-        # --- [Surgical Device Fix] ---
-        try:
-            import ltx_core.model.transformer.transformer as transformer_mod
-            if hasattr(transformer_mod, "apply_cross_attention_adaln"):
-                orig_adaln = transformer_mod.apply_cross_attention_adaln
-                def safe_adaln(*args, **kwargs):
-                    # args: (video, context, context_indices, adaln_parameters, is_causal)
-                    # 強制對齊所有輸入至第一個參數的設備
-                    device = args[0].device
-                    new_args = list(args)
-                    for i in range(1, len(new_args)):
-                        if hasattr(new_args[i], "to") and hasattr(new_args[i], "device"):
-                            if new_args[i].device != device:
-                                new_args[i] = new_args[i].to(device)
-                    return orig_adaln(*new_args, **kwargs)
-                transformer_mod.apply_cross_attention_adaln = safe_adaln
-                print("[LTX-2.3] [setup] 已應用 apply_cross_attention_adaln 設備防護補丁")
-        except Exception as e:
-            print(f"[LTX-2.3] [setup] 無法應用設備補丁: {e}")
-
-        self.pipeline = TI2VidTwoStagesPipeline(
-            checkpoint_path=distilled_path,
-            spatial_upsampler_path=upscaler_path,
-            gemma_root=GEMMA_DIR,
-            distilled_lora=[
-                LoraPathStrengthAndSDOps(path=lora_path, strength=1, sd_ops=None)
-            ],
-            loras=[],
-            quantization=QuantizationPolicy.fp8_cast(),
-        )
-        # [重要] 注入 StateDictRegistry 並同步 Builders
-        for ledger in [self.pipeline.stage_1_model_ledger, self.pipeline.stage_2_model_ledger]:
-            ledger.registry = shared_registry
-            ledger.build_model_builders()
-        print(f"[LTX-2.3] StateDictRegistry({id(shared_registry)}) 已注入並同步 Builders")
-
-        import threading
-
-        self._transformer_prepare_lock = threading.RLock()
+        #   加上 Gemma-3-12B (~24GB) + VAE         self._transformer_prepare_lock = threading.RLock()
         self._request_lock = threading.RLock()
         self._orig_transformer_fn = self.pipeline.stage_1_model_ledger.transformer
         self._transformer_cache = None
@@ -368,6 +319,7 @@ class LTXVideoInference:
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         elapsed = time.time() - start_time
+        print("[LTX-2.3] SAFE_CACHE_BUILD_V1")
         print(f"[LTX-2.3] Setup 完成 (耗時: {elapsed:.1f}s), GPU: {self.device}")
 
 
@@ -378,116 +330,115 @@ class LTXVideoInference:
         import tempfile
         import uuid
         import random
+        import boto3
         import numpy as np
 
         task_id = str(uuid.uuid4())
+        self.current_req = req  # 讓 _patched_transformer 能讀取優化參數
         start_time = time.time()
+        print(f"[LTX-2.3] [{task_id}] 開始生成, prompt: {req.prompt[:80]}...")
 
-        with self._request_lock:
-            self.current_req = req
-            print(f"[LTX-2.3] [{task_id}] 開始生成, prompt: {req.prompt[:80]}...")
+        try:
+            width, height = map(int, req.resolution.split("x"))
+            # Two-stage pipeline 要求必須是 64 的倍數
+            width = (width // 64) * 64
+            height = (height // 64) * 64
 
-            try:
-                width, height = map(int, req.resolution.split("x"))
-                width = (width // 64) * 64
-                height = (height // 64) * 64
+            # ── VRAM 保護: A100-80GB 限制 (Gemma-3-12B + LTX-22B + 激活值)
+            # 768x1280 + 161幀 大約需要 ~72-76 GiB; 更大的配置會 OOM
+            MAX_PIXELS = 768 * 1280
+            if width * height > MAX_PIXELS:
+                # 等比縮小到最大像素限制, 對齊到 64
+                scale = (MAX_PIXELS / (width * height)) ** 0.5
+                width = int((width * scale) // 64) * 64
+                height = int((height * scale) // 64) * 64
+                print(f"[LTX-2.3] [{task_id}] 解析度已縮小至 {width}x{height} (VRAM 保護)")
 
-                MAX_PIXELS = 768 * 1280
-                if width * height > MAX_PIXELS:
-                    scale = (MAX_PIXELS / (width * height)) ** 0.5
-                    width = int((width * scale) // 64) * 64
-                    height = int((height * scale) // 64) * 64
-                    print(f"[LTX-2.3] [{task_id}] 解析度已縮小至 {width}x{height} (VRAM 保護)")
+            num_frames = int(req.duration * req.frame_rate)
+            num_frames = (num_frames // 8) * 8 + 1
+            # 最多 161 幀 (~6.7s at 24fps) 以避免激活值 OOM
+            MAX_FRAMES = 161
+            if num_frames > MAX_FRAMES:
+                num_frames = ((MAX_FRAMES - 1) // 8) * 8 + 1  # 最近的合法值
+                print(f"[LTX-2.3] [{task_id}] 幀數已限制至 {num_frames} (VRAM 保護)")
 
-                num_frames = int(req.duration * req.frame_rate)
-                num_frames = (num_frames // 8) * 8 + 1
-                MAX_FRAMES = 161
-                if num_frames > MAX_FRAMES:
-                    num_frames = ((MAX_FRAMES - 1) // 8) * 8 + 1
-                    print(f"[LTX-2.3] [{task_id}] 幀數已限制至 {num_frames} (VRAM 保護)")
+            actual_seed = req.seed if req.seed is not None else random.randint(0, 2147483647)
+            print(f"[LTX-2.3] [{task_id}] res={width}x{height}, frames={num_frames}, steps={req.num_inference_steps}, seed={actual_seed}")
 
-                actual_seed = req.seed if req.seed is not None else random.randint(0, 2147483647)
-                print(
-                    f"[LTX-2.3] [{task_id}] res={width}x{height}, frames={num_frames}, "
-                    f"steps={req.num_inference_steps}, seed={actual_seed}"
-                )
+            # 清理 CUDA 快取, 讓 model ledger 重載 transformer 時有连续空間
+            torch.cuda.empty_cache()
 
-                torch.cuda.empty_cache()
+            from ltx_core.components.guiders import MultiModalGuiderParams
+            from ltx_pipelines.utils.args import ImageConditioningInput
 
-                from ltx_core.components.guiders import MultiModalGuiderParams
-                from ltx_pipelines.utils.args import ImageConditioningInput
+            guider_params = MultiModalGuiderParams(
+                cfg_scale=req.cfg_guidance_scale,
+            )
 
-                guider_params = MultiModalGuiderParams(cfg_scale=req.cfg_guidance_scale)
+            images = []
+            if req.image_uri:
+                images = [ImageConditioningInput(
+                    image=req.image_uri,
+                    frame_index=0,
+                    strength=0.8,
+                )]
 
-                images = []
-                if req.image_uri:
-                    images = [
-                        ImageConditioningInput(
-                            image=req.image_uri,
-                            frame_index=0,
-                            strength=0.8,
-                        )
-                    ]
+            video_iter, audio = self.pipeline(
+                prompt=req.prompt,
+                negative_prompt=req.negative_prompt,
+                seed=actual_seed,
+                height=height,
+                width=width,
+                num_frames=num_frames,
+                frame_rate=req.frame_rate,
+                num_inference_steps=req.num_inference_steps,
+                video_guider_params=guider_params,
+                audio_guider_params=guider_params,
+                images=images,
+            )
 
-                video_iter, audio = self.pipeline(
-                    prompt=req.prompt,
-                    negative_prompt=req.negative_prompt,
-                    seed=actual_seed,
-                    height=height,
-                    width=width,
-                    num_frames=num_frames,
-                    frame_rate=req.frame_rate,
-                    num_inference_steps=req.num_inference_steps,
-                    video_guider_params=guider_params,
-                    audio_guider_params=guider_params,
-                    images=images,
-                )
+            video = None
+            for frame_chunk in video_iter:
+                video = frame_chunk
 
-                video = None
-                for frame_chunk in video_iter:
-                    video = frame_chunk
+            # ── 匯出為 MP4 ──
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
+                output_path = tmp.name
 
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
-                    output_path = tmp.name
+            self._export_video(video, audio, output_path, fps=req.frame_rate)
+            inference_time = time.time() - start_time
+            print(f"[LTX-2.3] [{task_id}] 推論完成 (耗時: {inference_time:.1f}s)")
 
-                self._export_video(video, audio, output_path, fps=req.frame_rate)
-                inference_time = time.time() - start_time
-                print(f"[LTX-2.3] [{task_id}] 推論完成 (耗時: {inference_time:.1f}s)")
+            # ── 上傳至 R2 ──
+            video_url = self._upload_to_r2(req, task_id, output_path)
+            print(f"[LTX-2.3] [{task_id}] 上傳成功: {video_url}")
 
-                video_url = self._upload_to_r2(req, task_id, output_path)
-                print(f"[LTX-2.3] [{task_id}] 上傳成功: {video_url}")
+            return {
+                "success": True,
+                "task_id": task_id,
+                "video_url": video_url,
+                "object_key": video_url.split("/")[-4:] if video_url else None,
+                "model": req.model,
+                "inference_time_s": round(inference_time, 1),
+            }
 
-                object_key = None
-                if video_url and "/videos/" in video_url:
-                    object_key = video_url.split("/videos/", 1)[1]
-                    object_key = f"videos/{object_key}"
-
-                return {
-                    "success": True,
-                    "task_id": task_id,
-                    "video_url": video_url,
-                    "object_key": object_key,
-                    "model": req.model,
-                    "inference_time_s": round(inference_time, 1),
-                }
-
-            except torch.OutOfMemoryError as e:
-                print(f"[LTX-2.3] [{task_id}] CUDA OOM, 重啟 container: {e}")
-                import sys
-                sys.exit(1)
-            except Exception as e:
-                print(f"[LTX-2.3] [{task_id}] 執行錯誤: {e}")
-                import traceback
-                traceback.print_exc()
-                return {
-                    "success": False,
-                    "task_id": task_id,
-                    "error": str(e),
-                }
-            finally:
-                self.current_req = None
-                if "output_path" in locals() and os.path.exists(output_path):
-                    os.remove(output_path)
+        except torch.OutOfMemoryError as e:
+            # OOM 後 GPU 狀態已髙化, 強制重啟 container 避免後續請求繼續失敗
+            print(f"[LTX-2.3] [{task_id}] CUDA OOM, 重啟 container: {e}")
+            import sys
+            sys.exit(1)  # Modal 會自動重啟 container 且重試請求
+        except Exception as e:
+            print(f"[LTX-2.3] [{task_id}] 執行錯誤: {e}")
+            import traceback
+            traceback.print_exc()
+            return {
+                "success": False,
+                "task_id": task_id,
+                "error": str(e),
+            }
+        finally:
+            if "output_path" in locals() and os.path.exists(output_path):
+                os.remove(output_path)
 
     def _export_video(self, video, audio, output_path: str, fps: float = 24.0):
         """將 pipeline 輸出匯出為帶音訊的 MP4"""
