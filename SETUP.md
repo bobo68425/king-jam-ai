@@ -121,66 +121,6 @@ docker-compose down -v
 
 ---
 
-## Google Cloud 設定
-
-### 1. 登入 Google Cloud
-
-```bash
-gcloud auth login
-gcloud config set project king-jam-ai
-```
-
-### 2. 設定 Docker 認證
-
-```bash
-gcloud auth configure-docker asia-east1-docker.pkg.dev
-```
-
-### 3. 驗證設定
-
-```bash
-gcloud config list
-# 應顯示 project = king-jam-ai
-```
-
----
-
-## 部署到生產環境
-
-### 部署後端
-
-```bash
-cd backend
-
-# 建置並推送 Docker 映像
-gcloud builds submit --tag asia-east1-docker.pkg.dev/king-jam-ai/kingjam-repo/kingjam-backend:latest .
-
-# 部署到 Cloud Run
-gcloud run deploy kingjam-api \
-  --image=asia-east1-docker.pkg.dev/king-jam-ai/kingjam-repo/kingjam-backend:latest \
-  --region=asia-east1 \
-  --platform=managed \
-  --allow-unauthenticated
-```
-
-### 部署前端
-
-```bash
-cd frontend
-
-# 建置並推送 Docker 映像
-gcloud builds submit --tag asia-east1-docker.pkg.dev/king-jam-ai/kingjam-repo/kingjam-frontend:latest .
-
-# 部署到 Cloud Run
-gcloud run deploy kingjam-frontend \
-  --image=asia-east1-docker.pkg.dev/king-jam-ai/kingjam-repo/kingjam-frontend:latest \
-  --region=asia-east1 \
-  --platform=managed \
-  --allow-unauthenticated
-```
-
----
-
 ## 常用指令
 
 ### Git
@@ -225,16 +165,6 @@ docker exec kingjam_db pg_dump -U kingjam kingjam_db > backup.sql
 
 # 恢復資料庫
 cat backup.sql | docker exec -i kingjam_db psql -U kingjam -d kingjam_db
-```
-
-### Cloud Run 日誌
-
-```bash
-# 查看後端日誌
-gcloud run services logs read kingjam-api --region=asia-east1 --limit=50
-
-# 查看前端日誌
-gcloud run services logs read kingjam-frontend --region=asia-east1 --limit=50
 ```
 
 ---
