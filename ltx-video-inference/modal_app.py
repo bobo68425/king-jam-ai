@@ -231,6 +231,10 @@ class LTXVideoInference:
             ledger.build_model_builders()
         print(f"[LTX-2.3] StateDictRegistry({id(shared_registry)}) 已注入並同步 Builders")
 
+        # --- [修復 RecursionError] ---
+        # 必須在替換之前儲存原始函式，否則在 _patched_transformer 內部讀取時會讀到 Patch 自己導致無限遞迴
+        self._orig_transformer_fn = self.pipeline.stage_1_model_ledger.transformer
+
         def _patched_transformer(*args, **kwargs):
             import gc
             import torch
@@ -308,10 +312,7 @@ class LTXVideoInference:
             print(f"[LTX-2.3] [setup] 驅逐完成! 釋放了 {evicted_bytes/(1024**3):.1f} GB. 目前 VRAM: {pre_alloc:.2f} GB")
 
             # --- 4. 獲取原始 Transformer ---
-            # 儲存原始載入函式並調用，以獲取原生穩定的 Transformer 實例
-            if not hasattr(self, '_orig_transformer_fn'):
-                self._orig_transformer_fn = self.pipeline.stage_1_model_ledger.transformer
-            
+            # 直接使用 setup 中儲存的原始函式
             print(f"[LTX-2.3] [setup] 載入原生 Transformer...")
             x0_model = self._orig_transformer_fn(*args, **kwargs)
             v_model = x0_model.velocity_model
