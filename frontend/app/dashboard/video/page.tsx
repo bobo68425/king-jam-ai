@@ -684,7 +684,9 @@ export default function VideoPage() {
         negative_prompt: v3NegPrompt || undefined,
       });
       setV3Result(res.data);
-      setV3Scenes(res.data.scenes ? [...res.data.scenes] : []);
+      // 防禦性處理：確保 scenes 是陣列再展開，避免非迭代對象導致客戶端崩潰
+      const rawScenes = res.data?.scenes;
+      setV3Scenes(Array.isArray(rawScenes) ? [...rawScenes] : []);
       setV3EditingIdx(null);
       const modeLabels: Record<string, string> = { t2v: "文字生成", i2v: "圖片生成", s2v: "語音驅動", sadtalker: "數字人播報" };
       toast.success(`🎬 ${modeLabels[v3Mode] || v3Mode} 完成！${res.data.scenes?.length || 0} 個場景`);
@@ -3461,7 +3463,7 @@ export default function VideoPage() {
                                       )}
                                     </div>
                                     <textarea
-                                      value={scene.narration}
+                                      value={scene.narration || ""}
                                       onChange={(e) => updateSceneField(idx, 'narration', e.target.value)}
                                       className={cn(
                                         "w-full h-16 px-2 py-1.5 text-xs text-white bg-slate-800 border rounded-lg resize-none focus:outline-none focus:border-cyan-500",
@@ -4499,7 +4501,7 @@ export default function VideoPage() {
                           <div className="flex items-center gap-2 text-xs">
                             <select
                               className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 font-medium uppercase text-xs border-none focus:outline-none cursor-pointer"
-                              value={scene.type}
+                              value={scene.type || "story"}
                               onChange={(e) => {
                                 const updated = [...v3Scenes];
                                 updated[i] = { ...updated[i], type: e.target.value };
@@ -4543,7 +4545,7 @@ export default function VideoPage() {
                                 <label className="text-[10px] text-slate-500 block mb-0.5">🎙️ 旁白</label>
                                 <textarea
                                   className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white text-sm resize-none h-16 focus:outline-none focus:border-cyan-500"
-                                  value={scene.narration}
+                                  value={scene.narration || ""}
                                   onChange={(e) => {
                                     const updated = [...v3Scenes];
                                     updated[i] = { ...updated[i], narration: e.target.value };
@@ -4556,7 +4558,7 @@ export default function VideoPage() {
                                 <label className="text-[10px] text-slate-500 block mb-0.5">📹 Visual Prompt</label>
                                 <textarea
                                   className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-slate-300 text-xs resize-none h-16 focus:outline-none focus:border-cyan-500"
-                                  value={scene.visualPrompt}
+                                  value={scene.visualPrompt || ""}
                                   onChange={(e) => {
                                     const updated = [...v3Scenes];
                                     updated[i] = { ...updated[i], visualPrompt: e.target.value };
@@ -4570,7 +4572,7 @@ export default function VideoPage() {
                                   <label className="text-[10px] text-slate-500 block mb-0.5">🎬 運鏡</label>
                                   <select
                                     className="w-full bg-slate-800 border border-slate-700 rounded-lg p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500"
-                                    value={scene.cameraMove}
+                                    value={scene.cameraMove || "static"}
                                     onChange={(e) => {
                                       const updated = [...v3Scenes];
                                       updated[i] = { ...updated[i], cameraMove: e.target.value };
@@ -4591,7 +4593,7 @@ export default function VideoPage() {
                                   <label className="text-[10px] text-slate-500 block mb-0.5">↔ 轉場</label>
                                   <select
                                     className="w-full bg-slate-800 border border-slate-700 rounded-lg p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500"
-                                    value={scene.transition}
+                                    value={scene.transition || "fade"}
                                     onChange={(e) => {
                                       const updated = [...v3Scenes];
                                       updated[i] = { ...updated[i], transition: e.target.value };
@@ -4626,8 +4628,8 @@ export default function VideoPage() {
                                   </a>
                                 )}
                               </div>
-                              <p className="text-white text-sm leading-relaxed">🎙️ {scene.narration}</p>
-                              <p className="text-slate-500 text-xs italic mt-1 line-clamp-2">📹 {scene.visualPrompt}</p>
+                              <p className="text-white text-sm leading-relaxed">🎙️ {scene.narration || "無旁白"}</p>
+                              <p className="text-slate-500 text-xs italic mt-1 line-clamp-2">📹 {scene.visualPrompt || "未設置提示詞"}</p>
                             </div>
                           )}
                         </div>
@@ -4849,14 +4851,19 @@ export default function VideoPage() {
                       <div className="absolute bottom-6 inset-x-6 z-20">
                         <div className="flex justify-between items-center text-[10px] text-slate-500 font-mono mb-2 px-1">
                           <span>00:00</span>
-                          <span>{v3Scenes.length ? `00:${('0' + (v3Scenes.reduce((acc, s) => acc + parseInt(s.durationInFrames || 150) / 30, 0))).slice(-2)}` : '00:00'}</span>
+                          <span>{v3Scenes.length ? (() => {
+                            const totalSeconds = Math.floor(v3Scenes.reduce((acc, s) => acc + (parseInt(s.durationInFrames || 150) / 30), 0));
+                            const mins = Math.floor(totalSeconds / 60);
+                            const secs = totalSeconds % 60;
+                            return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+                          })() : '00:00'}</span>
                         </div>
                         <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden backdrop-blur-sm group-hover:h-2 transition-all cursor-pointer relative">
                           {v3Scenes.length > 0 && !v3VideoGenerating && !v3Synthesizing && (
                             // 畫出場景節點
                             <div className="absolute inset-0 flex">
                               {v3Scenes.map((s, idx) => (
-                                <div key={idx} className="h-full border-r border-black/50" style={{ width: `${100 / v3Scenes.length}%` }} />
+                                <div key={idx} className="h-full border-r border-black/50" style={{ width: `${v3Scenes.length > 0 ? (100 / v3Scenes.length) : 0}%` }} />
                               ))}
                             </div>
                           )}
