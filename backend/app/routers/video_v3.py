@@ -35,7 +35,11 @@ from app.core.admin_security import require_super_admin
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/video/v3", tags=["Video V3 Engine"])
+# --- 權限檢查依賴 ---
+def _get_v3_admin(current_user: User = Depends(get_current_user)) -> User:
+    """確保為超級管理員的依賴項"""
+    require_super_admin(current_user)
+    return current_user
 
 # ---------------------------------------------------------------------------
 # Redis-backed job store（取代 in-memory router._ltx_jobs，存活於重啟之間）
@@ -247,7 +251,7 @@ async def generate_scene(
     request: SceneGenerateRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    _: User = Depends(require_super_admin)
+    _: User = Depends(_get_v3_admin)
 ):
     """
     單場景 AI 影片片段生成 (LTX-2.3)
@@ -311,7 +315,7 @@ async def generate_tts(
     request: TTSRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    _: User = Depends(require_super_admin)
+    _: User = Depends(_get_v3_admin)
 ):
     """
     OpenAI TTS 配音生成
@@ -383,7 +387,7 @@ async def submit_render(
     request: RenderRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    _: User = Depends(require_super_admin)
+    _: User = Depends(_get_v3_admin)
 ):
     """
     提交 Remotion 渲染任務
@@ -566,7 +570,7 @@ async def generate_clips(
     request: BatchClipRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    _: User = Depends(require_super_admin)
+    _: User = Depends(_get_v3_admin)
 ):
     """
     批次提交場景到 LTX-2.3 生成 AI 影片片段
@@ -799,7 +803,7 @@ async def generate_video_api(
     request: FullGenerateRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    _: User = Depends(require_super_admin)
+    _: User = Depends(_get_v3_admin)
 ):
     """
     全自動影片生成 API — 支援 T2V / I2V / S2V 三種模式
