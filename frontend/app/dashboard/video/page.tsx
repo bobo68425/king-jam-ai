@@ -702,7 +702,7 @@ export default function VideoPage() {
         msg = detail;
       } else if (Array.isArray(detail)) {
         // 處理 Pydantic 驗證錯誤格式 [{msg, loc, type, input}]
-        msg = detail.map((d: any) => d.msg || JSON.stringify(d)).join("；");
+        msg = detail.map((d: any) => `${d.loc?.join('.') || '参数'}: ${d.msg}`).join("；");
       } else if (err.message) {
         msg = err.message;
       }
