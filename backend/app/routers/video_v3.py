@@ -187,7 +187,7 @@ class FullGenerateRequest(BaseModel):
     voice: str = Field(default="alloy", description="配音語音")
     duration: int = Field(default=30, ge=10, le=120, description="影片秒數")
     aspect_ratio: str = Field(default="9:16")
-    scenes_count: int = Field(default=3, ge=2, le=8, description="場景數")
+    scenes_count: int = Field(default=3, ge=1, le=8, description="場景數")
     ref_image_url: Optional[str] = Field(default=None, description="I2V 模式: 參考圖片 URL")
     audio_url: Optional[str] = Field(default=None, description="S2V 模式: 語音/音頻 URL")
     negative_prompt: Optional[str] = Field(default=None, description="負面提示")

@@ -683,6 +683,8 @@ export default function VideoPage() {
         audio_url: (v3Mode === "s2v" || v3Mode === "sadtalker") ? v3AudioUrl || undefined : undefined,
         negative_prompt: v3NegPrompt || undefined,
       });
+
+      console.log("[Video Generation] API Response Success:", res.data);
       setV3Result(res.data);
       // 防禦性處理：確保 scenes 是陣列再展開，避免非迭代對象導致客戶端崩潰
       const rawScenes = res.data?.scenes;
@@ -691,7 +693,20 @@ export default function VideoPage() {
       const modeLabels: Record<string, string> = { t2v: "文字生成", i2v: "圖片生成", s2v: "語音驅動", sadtalker: "數字人播報" };
       toast.success(`🎬 ${modeLabels[v3Mode] || v3Mode} 完成！${res.data.scenes?.length || 0} 個場景`);
     } catch (err: any) {
-      const msg = err?.response?.data?.detail || err.message || "生成失敗";
+      console.error("[Video Generation] API Request Failed:", err);
+      
+      let msg = "生成失敗";
+      const detail = err?.response?.data?.detail;
+      
+      if (typeof detail === 'string') {
+        msg = detail;
+      } else if (Array.isArray(detail)) {
+        // 處理 Pydantic 驗證錯誤格式 [{msg, loc, type, input}]
+        msg = detail.map((d: any) => d.msg || JSON.stringify(d)).join("；");
+      } else if (err.message) {
+        msg = err.message;
+      }
+      
       setV3Error(msg);
       toast.error(`生成失敗: ${msg}`);
     } finally {
@@ -875,6 +890,22 @@ export default function VideoPage() {
   // 排程上架狀態
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
   const [scheduleContent, setScheduleContent] = useState<ScheduleContent | null>(null);
+
+  // 除錯：捕獲全域錯誤並顯示 (防止 React Error #31 等崩潰)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleError = (event: ErrorEvent) => {
+      console.error("[VideoPage Critical Error]", event.error);
+      const errorMsg = event.error?.message || event.message || "未知錯誤";
+      const finalMsg = typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg);
+      toast.error(`偵測到客戶端異常: ${finalMsg}`, {
+        description: "請開啟瀏覽器控制台查看更多資訊",
+        duration: 10000,
+      });
+    };
+    window.addEventListener('error', handleError);
+    return () => window.removeEventListener('error', handleError);
+  }, []);
 
   // 自訂場景圖片（基礎合成用）
   const [customImages, setCustomImages] = useState<{ [key: number]: { file: File; preview: string; base64: string } }>({});
