@@ -5,7 +5,10 @@
     "private": true,
     "scripts": {
         "dev": "remotion studio",
-        "build": "remotion bundle",
+        "build": "npm run build:remotion && npm run build:server",
+        "build:remotion": "remotion bundle",
+        "build:server": "tsc",
+        "start": "node dist/render-server.js",
         "render": "remotion render ShortVideo out/video.mp4",
         "render-server": "ts-node src/render-server.ts",
         "test": "jest",

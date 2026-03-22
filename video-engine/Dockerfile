@@ -95,4 +95,4 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
   CMD curl -f http://localhost:8080/health || exit 1
 
 # Start render server
-CMD ["node", "dist/render-server.js"]
+CMD ["npm", "run", "start"]
