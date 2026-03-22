@@ -1,2 +1,4 @@
-// King Jam AI — Video Engine Entry Point
-export { RemotionRoot as default } from "./Root";
+import { registerRoot } from "remotion";
+import { RemotionRoot } from "./Root";
+
+registerRoot(RemotionRoot);

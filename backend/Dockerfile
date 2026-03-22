@@ -21,12 +21,12 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# 安裝 Python 依賴（從 backend/ 子目錄）
-COPY backend/requirements.txt .
+# 安裝 Python 依賴
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 複製 backend 應用程式代碼
-COPY backend/ .
+COPY . .
 
 # 建立非 root 用戶
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app

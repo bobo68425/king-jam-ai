@@ -39,7 +39,7 @@ RUN npx tsc --outDir dist
 
 # Pre-bundle Remotion for faster cold starts
 ENV REMOTION_CHROME_EXECUTABLE=/usr/bin/chromium
-RUN npx remotion bundle src/Root.tsx --out-dir remotion-bundle 2>/dev/null || mkdir -p remotion-bundle
+RUN npx remotion bundle src/index.ts --out-dir remotion-bundle
 
 # Stage 2: Production (slim image)
 FROM node:20-slim AS runner

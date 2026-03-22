@@ -313,7 +313,7 @@ class DirectorEngine:
     """
     
     def __init__(self):
-        self.model = genai.GenerativeModel('gemini-2.5-flash') if GOOGLE_GEMINI_KEY else None
+        self.model = genai.GenerativeModel('gemini-1.5-flash') if GOOGLE_GEMINI_KEY else None
     
     async def generate_video_script(
         self,
@@ -591,8 +591,8 @@ class DirectorEngine:
 
         full_prompt = f"{system_prompt}\n\n---\n\n{user_prompt}"
 
-        # 重試設定：3 次嘗試，最後一次降級到 flash-lite
-        _RETRY_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash", "gemini-1.5-flash-8b"]
+        # 重試設定：3 次嘗試
+        _RETRY_MODELS = ["gemini-1.5-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b"]
         _RETRY_DELAYS = [5, 15, 30]   # 秒
         _RATE_LIMIT_CODES = {"429", "resource_exhausted", "resourceexhausted"}
 

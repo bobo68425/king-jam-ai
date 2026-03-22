@@ -34,7 +34,9 @@ async def submit_render_job(
     quality: str = "medium",
 ) -> Dict[str, Any]:
     """
-    執行本地 FFmpeg 渲染 (取代原本的 Cloud Run Remotion 渲染)
+    提交渲染任務。
+    如果 REMOTION_RENDER_URL 已設定且非空，則發送到雲端/遠端 Remotion 服務。
+    否則，執行本地 FFmpeg 渲染作為回退。
     
     Args:
         props: ShortVideoProps (JSON 格式)，包含 scenes, tts_url, bgm 等
@@ -42,7 +44,47 @@ async def submit_render_job(
         quality: low / medium / high
     
     Returns:
-        { "jobId": str, "status": "done", "videoUrl": "..." }
+        { "jobId": str, "status": "done/rendering", "videoUrl": "..." }
+    """
+    if RENDER_SERVICE_URL:
+        return await submit_render_job_remote(props, output_format, quality)
+    else:
+        return await submit_render_job_local(props, output_format, quality)
+
+
+async def submit_render_job_remote(
+    props: Dict[str, Any],
+    output_format: str = "mp4",
+    quality: str = "medium",
+) -> Dict[str, Any]:
+    """呼叫遠端 Remotion 渲染服務"""
+    import httpx
+    
+    payload = {
+        "props": props,
+        "outputFormat": output_format,
+        "quality": quality,
+    }
+    
+    logger.info(f"[RenderClient] 提交遠端渲染任務: {RENDER_SERVICE_URL}/render")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(
+            f"{RENDER_SERVICE_URL}/render",
+            json=payload,
+            headers=_get_gcp_auth_headers()
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def submit_render_job_local(
+    props: Dict[str, Any],
+    output_format: str = "mp4",
+    quality: str = "medium",
+) -> Dict[str, Any]:
+    """
+    執行本地 FFmpeg 渲染 (回退方案)
     """
     import httpx
     import asyncio

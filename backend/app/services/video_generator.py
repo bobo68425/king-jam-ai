@@ -785,7 +785,8 @@ static image, no motion, frozen frame, glitch, artifact"""
                             os.remove(upload_path)
                             if upload_path != str(static_path) and os.path.exists(static_path):
                                 os.remove(static_path)
-                        except:
+                        except Exception as e:
+                            print(f"[VideoGenerator] Error removing local file: {e}")
                             pass
                     else:
                         print(f"[VideoGenerator] ⚠️ Kling 雲端上傳失敗: {upload_result.get('error')}")
@@ -1505,7 +1506,8 @@ STRICTLY AVOID (NEGATIVE PROMPTS EMBEDDED)
                         # 刪除本地檔案
                         try:
                             os.remove(video_path)
-                        except:
+                        except Exception as e:
+                            print(f"[VideoGenerator] Error removing local file: {e}")
                             pass
                     else:
                         print(f"[VideoGenerator] ⚠️ 雲端上傳失敗: {upload_result.get('error')}")
@@ -1731,7 +1733,7 @@ Format: Authentic photography aesthetic
             font_size = width // 18
             try:
                 font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
-            except:
+            except Exception:
                 font = ImageFont.load_default()
             
             text = text[:40] if len(text) > 40 else text
@@ -2022,7 +2024,7 @@ Format: Authentic photography aesthetic
                     os.remove(tts_path)
                 if music_path and os.path.exists(music_path):
                     os.remove(music_path)
-            except:
+            except Exception:
                 pass
             
             print(f"[VideoGenerator] ✅ 音訊合成完成")
@@ -2058,16 +2060,25 @@ Format: Authentic photography aesthetic
         """
         try:
             import aiohttp
+            from urllib.parse import urlparse
             
             music_path = self.output_dir / f"bgm_ext_{project_id}.mp3"
+            
+            # 動態解析 Referer
+            domain = urlparse(music_url).netloc
+            referer = f"https://{domain}/"
+            if "pixabay" in domain:
+                referer = "https://pixabay.com/"
+            elif "mixkit" in domain:
+                referer = "https://mixkit.co/"
             
             # 添加瀏覽器標頭以繞過防盜鏈
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "Accept": "audio/mpeg, audio/*, */*",
                 "Accept-Language": "en-US,en;q=0.9,zh-TW;q=0.8,zh;q=0.7",
-                "Referer": "https://pixabay.com/",
-                "Origin": "https://pixabay.com",
+                "Referer": referer,
+                "Origin": referer.rstrip("/"),
             }
             
             async with aiohttp.ClientSession(headers=headers) as session:
@@ -2079,7 +2090,7 @@ Format: Authentic photography aesthetic
                         print(f"[VideoGenerator] 🎵 外部音樂下載完成: {len(content) / 1024:.1f} KB")
                         return str(music_path)
                     else:
-                        print(f"[VideoGenerator] 外部音樂下載失敗: HTTP {response.status}")
+                        print(f"[VideoGenerator] 外部音樂下載失敗: HTTP {response.status} (URL: {music_url})")
                         # 嘗試備用方法：使用 httpx
                         return await self._download_music_httpx(music_url, project_id)
                         
@@ -2098,13 +2109,22 @@ Format: Authentic photography aesthetic
         """
         try:
             import httpx
+            from urllib.parse import urlparse
             
             music_path = self.output_dir / f"bgm_ext_{project_id}.mp3"
+            
+            # 動態解析 Referer
+            domain = urlparse(music_url).netloc
+            referer = f"https://{domain}/"
+            if "pixabay" in domain:
+                referer = "https://pixabay.com/"
+            elif "mixkit" in domain:
+                referer = "https://mixkit.co/"
             
             headers = {
                 "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "Accept": "*/*",
-                "Referer": "https://pixabay.com/",
+                "Referer": referer,
             }
             
             async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
@@ -2374,7 +2394,7 @@ Format: Authentic photography aesthetic
             await result.communicate()
             if result.returncode != 0:
                 return None
-        except:
+        except Exception:
             print("[VideoGenerator] FFmpeg 未安裝")
             return None
         
