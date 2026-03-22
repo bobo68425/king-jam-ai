@@ -28,11 +28,14 @@ RUN apt-get update && \
 WORKDIR /app
 
 # Install ALL dependencies (including devDependencies for TypeScript build)
-COPY package*.json ./
+# 使用通配符以支援不同的 Build Context（根目錄或 video-engine 子目錄）
+COPY package*.json video-engine/package*.json ./
 RUN npm install
 
-# Copy source code
+# Copy source code, support both root and subdirectory contexts
 COPY . .
+# If we were at root, this is okay because only matching files were copied by previous step?
+# Actually COPY . . is context-relative.
 
 # Compile TypeScript
 RUN npx tsc --outDir dist

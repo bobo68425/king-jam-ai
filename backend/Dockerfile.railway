@@ -21,7 +21,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # 安裝 Python 依賴
-COPY requirements.txt .
+# 使用通配符以支援不同的 Build Context（根目錄或 backend 子目錄）
+COPY requirements.txt* backend/requirements.txt* ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 複製應用程式代碼

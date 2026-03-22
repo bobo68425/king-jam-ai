@@ -3,13 +3,13 @@
   "services": {
     "kingjam-api": {
       "name": "kingjam-api",
-      "root": "backend",
-      "config": "railway.toml"
+      "source": "backend",
+      "config": "backend/railway.toml"
     },
     "video-engine": {
       "name": "video-engine",
-      "root": "video-engine",
-      "config": "railway.toml"
+      "source": "video-engine",
+      "config": "video-engine/railway.toml"
     }
   }
 }
