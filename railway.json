@@ -1,0 +1,15 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "services": {
+    "kingjam-api": {
+      "name": "kingjam-api",
+      "root": "backend",
+      "config": "railway.toml"
+    },
+    "video-engine": {
+      "name": "video-engine",
+      "root": "video-engine",
+      "config": "railway.toml"
+    }
+  }
+}
