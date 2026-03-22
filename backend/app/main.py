@@ -127,6 +127,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ============================================================
+# 核心健康檢查 (優先註冊，避免後續 Router 錯誤導致伺服器無法回應)
+# ============================================================
+@app.get("/health")
+def health_check():
+    """標準健康檢查"""
+    return {"status": "ok", "service": "backend", "version": "2.0.5-deploy-fix"}
+
+@app.get("/")
+def read_root():
+    """根目錄健康檢查"""
+    return {"message": "King Jam AI API is running"}
+
 # Gzip 壓縮 — 回應大於 500 bytes 時自動壓縮
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
@@ -583,14 +596,7 @@ def _auto_init_db():
         print(f"[Startup] ⚠️ 診斷資料導出失敗: {e}")
 
 
-@app.get("/")
-def read_root():
-    return {"message": "Welcome to King Jam AI - System Operational 🚀"}
-
-
-@app.get("/health")
-def health_check():
-    return {"status": "ok", "service": "backend", "version": "2.0.4-ltx-fix"}
+# 健康檢查與診斷路徑已移至上方
 
 
 @app.get("/debug/angels")
