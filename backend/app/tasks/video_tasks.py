@@ -5,6 +5,7 @@
 - 縮圖生成
 """
 
+import asyncio
 import logging
 import os
 import time
@@ -454,3 +455,95 @@ def generate_ltx_video_task(
     except Exception as e:
         logger.error(f"[LTX] 影片生成失敗: {e}")
         raise self.retry(exc=e)
+
+
+@celery_app.task(
+    name="app.tasks.video_tasks.render_video_v2_task",
+    base=VideoRenderTask,
+    bind=True,
+    queue="queue_video",
+)
+def render_video_v2_task(
+    self,
+    user_id: int,
+    script: Dict[str, Any],
+    quality: str = "standard",
+    custom_images: Optional[Dict[int, str]] = None,
+    custom_music_base64: Optional[str] = None,
+    custom_music_name: Optional[str] = None,
+    history_id: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    v2.0 影片渲染任務 (Imagen + FFmpeg)
+    """
+    from app.services.video_generator import video_generator
+    
+    logger.info(f"[Video v2] 開始渲染影片 - 用戶 #{user_id}, 專案: {script.get('project_id')}")
+    
+    db = SessionLocal()
+    start_time = time.time()
+    
+    try:
+        # 1. 更新歷史記錄狀態
+        history = None
+        if history_id:
+            history = db.query(GenerationHistory).filter(
+                GenerationHistory.id == history_id
+            ).first()
+            if history:
+                history.status = "processing"
+                db.commit()
+
+        # 2. 執行非同步渲染
+        # 由於 Celery 是同步執行，我們需要使用 asyncio 來執行非同步的 generate_video
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+        result = loop.run_until_complete(
+            video_generator.generate_video(
+                script,
+                quality=quality,
+                custom_images=custom_images,
+                custom_music_base64=custom_music_base64,
+                custom_music_name=custom_music_name
+            )
+        )
+        
+        generation_duration = int((time.time() - start_time) * 1000)
+        
+        # 3. 更新歷史記錄
+        if history:
+            history.status = "completed"
+            history.media_cloud_url = result.video_url
+            history.thumbnail_url = result.thumbnail_url
+            history.generation_duration_ms = generation_duration
+            history.file_size_bytes = result.file_size
+            history.output_data = {
+                **(history.output_data or {}),
+                "video_url": result.video_url,
+                "thumbnail_url": result.thumbnail_url,
+                "format": result.format,
+            }
+            db.commit()
+            
+        logger.info(f"[Video v2] 影片渲染完成 - 耗時 {generation_duration}ms")
+        
+        return {
+            "success": True,
+            "video_url": result.video_url,
+            "thumbnail_url": result.thumbnail_url,
+            "duration_ms": generation_duration,
+            "file_size": result.file_size
+        }
+        
+    except Exception as e:
+        logger.error(f"[Video v2] 影片渲染失敗: {e}")
+        if history:
+            history.status = "failed"
+            history.error_message = str(e)
+            db.commit()
+        raise self.retry(exc=e)
+    finally:
+        db.close()

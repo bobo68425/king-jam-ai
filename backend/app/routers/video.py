@@ -1313,13 +1313,14 @@ class RenderVideoRequest(BaseModel):
 
 class RenderVideoResponse(BaseModel):
     """影片渲染回應"""
-    video_url: str
+    video_url: Optional[str] = None
     thumbnail_url: Optional[str] = None
-    duration: float
-    format: str
-    file_size: int
-    credits_used: int
+    duration: Optional[float] = 0
+    format: Optional[str] = None
+    file_size: Optional[int] = 0
+    credits_used: Optional[int] = 0
     scene_images: Optional[List[str]] = None  # 場景圖片列表
+    task_id: Optional[str] = None  # 非同步任務 ID
 
 
 class RenderProgressResponse(BaseModel):
@@ -1434,50 +1435,50 @@ async def render_video(
         print(f"[video_render] 使用自訂音樂: {custom_music_name}")
     
     try:
-        result = await video_generator.generate_video(
-            script, 
-            quality=quality,
-            custom_images=custom_images_dict,
-            custom_music_base64=custom_music_base64,
-            custom_music_name=custom_music_name
-        )
-        generation_duration = int((time.time() - start_time) * 1000)
+        from app.tasks.video_tasks import render_video_v2_task
         
-        # 記錄生成歷史（包含完整資訊）
-        # 從 script 中提取原始 topic
+        # 建立初始歷史記錄 (status="pending")
         topic = script.get("topic") or script.get("input_topic") or script.get("title", "")
-        
-        # 計算總點數（腳本生成 + 影片渲染）
-        script_credits = script.get("credits_used", 0)  # 腳本生成階段的點數
-        total_credits = script_credits + cost  # 總消耗
+        script_credits = script.get("credits_used", 0)
+        total_credits = script_credits + cost
         
         history = GenerationHistory(
             user_id=current_user.id,
             generation_type="short_video",
-            status="completed",
+            status="pending",
             input_params={
-                "topic": topic,  # 記錄原始主題
+                "topic": topic,
                 "project_id": script.get("project_id"),
                 "title": script.get("title"),
                 "quality": quality,
                 "duration": duration,
                 "scenes_count": len(script.get("scenes", [])),
-                "script_credits": script_credits,  # 腳本點數
-                "render_credits": cost,  # 渲染點數
+                "script_credits": script_credits,
+                "render_credits": cost,
             },
-            output_data={
-                "video_url": result.video_url,
-                "thumbnail_url": result.thumbnail_url,
-                "format": result.format,
-            },
-            media_cloud_url=result.video_url,
-            thumbnail_url=result.thumbnail_url,
-            credits_used=total_credits,  # 記錄總消耗
-            generation_duration_ms=generation_duration,
-            file_size_bytes=result.file_size,
+            credits_used=total_credits,
         )
         db.add(history)
         db.commit()
+        db.refresh(history)
+        
+        # 提交非同步任務
+        task = render_video_v2_task.delay(
+            user_id=current_user.id,
+            script=script,
+            quality=quality,
+            custom_images=custom_images_dict,
+            custom_music_base64=custom_music_base64,
+            custom_music_name=custom_music_name,
+            history_id=history.id
+        )
+        
+        return RenderVideoResponse(
+            task_id=task.id,
+            duration=float(duration),
+            format=script.get("format", "9:16"),
+            credits_used=total_credits
+        )
         
     except Exception as e:
         # 記錄失敗歷史

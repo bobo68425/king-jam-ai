@@ -2166,13 +2166,72 @@ export default function VideoPage() {
         quality,
         custom_images: customImagesData
       });
-      setRenderProgress(100);
 
+      // 處理非同步任務 (Polling)
+      if (response.data.task_id) {
+        const taskId = response.data.task_id;
+        console.log(`[Video] 收到任務 ID: ${taskId}，開始輪詢進度...`);
+        
+        let attempts = 0;
+        const maxAttempts = 120; // 10 分鐘 (5s * 120)
+        
+        while (attempts < maxAttempts) {
+          attempts++;
+          await new Promise(r => setTimeout(r, 5000));
+          
+          try {
+            const statusRes = await api.get(`/tasks/status/${taskId}`);
+            const statusData = statusRes.data;
+            
+            if (statusData.status === "SUCCESS" && statusData.result) {
+              const taskResult = statusData.result;
+              if (taskResult.video_url) {
+                let finalUrl = taskResult.video_url;
+                
+                // 後端 API 地址
+                const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://api.kingjam.app";
+                
+                if (finalUrl.startsWith("/video/")) {
+                  finalUrl = `${API_BASE}${finalUrl}`;
+                }
+                
+                setVideoUrl(finalUrl);
+                setRenderProgress(100);
+                toast.success("🎬 影片生成完成！", {
+                  description: "⚠️ 影片保留 7 天，請及時下載",
+                  duration: 8000,
+                });
+                refreshCredits();
+                return;
+              }
+            } else if (statusData.status === "FAILURE" || statusData.status === "REVOKED") {
+              throw new Error(statusData.error || "影片生成失敗");
+            } else {
+              // 更新模擬進度
+              setRenderProgress(prev => {
+                const step = 95 / maxAttempts;
+                return Math.min(95, prev + step);
+              });
+              console.log(`[Video] 任務狀態: ${statusData.status}`);
+            }
+          } catch (pollingError: any) {
+            console.error("[Video] 輪詢出錯:", pollingError);
+            // 如果是 404 可能是 Task 還沒寫入，繼續等待
+            if (pollingError.response?.status !== 404) {
+              throw pollingError;
+            }
+          }
+        }
+        throw new Error("影片生成超時，請稍後在歷史記錄中查看");
+      }
+
+      // 相容舊版：直接回傳 video_url
+      setRenderProgress(100);
       if (response.data.video_url) {
         let finalUrl = response.data.video_url;
 
         // 後端 API 地址
-        const API_BASE = "http://localhost:8000";
+        const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://api.kingjam.app";
 
         // 如果是後端 URL，使用後端地址
         if (finalUrl.startsWith("/video/")) {
@@ -2195,8 +2254,8 @@ export default function VideoPage() {
         }
 
         setVideoUrl(finalUrl);
-        toast.success("🎬 影片生成完成！", {
-          description: "⚠️ 影片保留 7 天（排程上架 30 天），請及時下載",
+        toast.success("🎬 影片生成完成！（同步模式）", {
+          description: "⚠️ 影片保留 7 天，請及時下載",
           duration: 8000,
         });
         // 即時更新導覽列點數
