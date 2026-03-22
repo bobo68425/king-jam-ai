@@ -10,6 +10,11 @@
       "name": "video-engine",
       "source": "video-engine",
       "config": "video-engine/railway.toml"
+    },
+    "kingjam-frontend": {
+      "name": "kingjam-frontend",
+      "source": "frontend",
+      "config": "frontend/railway.toml"
     }
   }
 }

@@ -14,8 +14,8 @@ RUN apk add --no-cache libc6-compat
 
 WORKDIR /app
 
-# 複製套件管理檔案
-COPY package.json package-lock.json* ./
+# 複製套件管理檔案 (相容性最佳化)
+COPY package.json package-lock.json* ./frontend/package.json ./frontend/package-lock.json* ./
 
 # 安裝依賴（使用 ci 確保一致性）
 RUN npm ci --legacy-peer-deps
