@@ -150,10 +150,12 @@ services:
 
   # ============================================================
   # Celery Worker - 影片佇列（主節點）
-  # 處理：Veo/Kling 影片渲染（耗時任務，獨立隔離）
-  # 
-  # 彈性化架構：
-  # - 使用獨立 Redis (redis-video) 隔離，避免影響驗證碼/登入
+  # 處理：Veo/Kling 影片渲染（耗時任務）
+  #
+  # 必須與 API 共用同一 REDIS_URL / CELERY_BROKER_URL / CELERY_RESULT_BACKEND，
+  # 否則任務會進主 Redis、worker 卻聽另一個 Redis，且 AsyncResult 會連錯後端。
+  # 若需獨立 Redis，請設 CELERY_ENABLE_VIDEO_REDIS_ISOLATION=true 並讓 API 與 worker
+  # 都指向同一組 broker/result（見 backend/app/celery_app.py）。
   # - 支援水平擴展：docker-compose up --scale celery-worker-video=N
   # - 自動擴展腳本：scripts/video_autoscaler.py
   # 
@@ -180,19 +182,14 @@ services:
       - ./backend/static/thumbnails:/app/static/thumbnails  # 縮圖目錄
     environment:
       <<: *backend-env
-      # 🔑 影片任務使用獨立 Redis（隔離）
-      VIDEO_REDIS_URL: redis://redis-video:6379/0
-      VIDEO_BROKER_URL: redis://redis-video:6379/0
-      VIDEO_RESULT_BACKEND: redis://redis-video:6379/1
       # OOM 保護相關環境變數
       MALLOC_ARENA_MAX: 2  # 減少 glibc 記憶體碎片
       PYTHONMALLOC: malloc
-      # Worker 標識（用於監控）
+      # Worker 標識（用於監控／日誌；broker 仍與 API 相同）
       WORKER_TYPE: video
     depends_on:
       - db
       - redis
-      - redis-video
     networks:
       - kingjam_net
     restart: unless-stopped
@@ -303,8 +300,8 @@ services:
       retries: 5
 
   # ============================================================
-  # Redis Video - 影片任務專用（隔離避免影響核心服務）
-  # 用途：影片渲染佇列、影片任務結果
+  # Redis Video（可選）— 預設流程已改為與主 redis 共用 broker/result。
+  # 僅在自行啟用 CELERY_ENABLE_VIDEO_REDIS_ISOLATION 並統一 API+worker 連線時使用。
   # ============================================================
   redis-video:
     image: redis:7-alpine

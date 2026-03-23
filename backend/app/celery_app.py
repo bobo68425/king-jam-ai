@@ -18,7 +18,7 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", REDIS_URL)
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", REDIS_URL)
 
-# 影片專用 Redis：影片渲染任務（隔離，避免高負載影響登入/驗證碼）
+# 影片專用 Redis（僅在 CELERY_ENABLE_VIDEO_REDIS_ISOLATION=true 時啟用）
 VIDEO_REDIS_URL = os.getenv("VIDEO_REDIS_URL", "redis://localhost:6380/0")
 VIDEO_BROKER_URL = os.getenv("VIDEO_BROKER_URL", VIDEO_REDIS_URL)
 VIDEO_RESULT_BACKEND = os.getenv("VIDEO_RESULT_BACKEND", "redis://localhost:6380/1")
@@ -26,18 +26,28 @@ VIDEO_RESULT_BACKEND = os.getenv("VIDEO_RESULT_BACKEND", "redis://localhost:6380
 # ============================================================
 # 建立 Celery 應用
 # ============================================================
-# 根據 Worker 類型選擇 Redis（支援隔離架構）
-WORKER_TYPE = os.getenv("WORKER_TYPE", "default")
+# API 與所有 Worker 必須共用「同一個」broker，任務才會被收到；
+# result backend 也必須一致，/tasks/status 的 AsyncResult 才讀得到。
+# 若只讓 WORKER_TYPE=video 連 VIDEO_*，而 API 仍連主 Redis，queue_video 任務永遠不會被消費。
+_WORKER_TYPE = os.getenv("WORKER_TYPE", "default")
+_USE_VIDEO_ISOLATION = os.getenv("CELERY_ENABLE_VIDEO_REDIS_ISOLATION", "").lower() in (
+    "1",
+    "true",
+    "yes",
+)
 
-if WORKER_TYPE == "video":
-    # 影片 Worker 使用獨立 Redis
+if _WORKER_TYPE == "video" and _USE_VIDEO_ISOLATION:
     ACTIVE_BROKER_URL = VIDEO_BROKER_URL
     ACTIVE_RESULT_BACKEND = VIDEO_RESULT_BACKEND
-    print(f"[Celery] 🎬 Video Worker 使用獨立 Redis: {VIDEO_BROKER_URL}")
+    print(f"[Celery] 🎬 Video Worker 使用獨立 Redis（CELERY_ENABLE_VIDEO_REDIS_ISOLATION）: {VIDEO_BROKER_URL}")
 else:
-    # 其他 Worker 使用主 Redis
     ACTIVE_BROKER_URL = CELERY_BROKER_URL
     ACTIVE_RESULT_BACKEND = CELERY_RESULT_BACKEND
+    if _WORKER_TYPE == "video" and not _USE_VIDEO_ISOLATION:
+        print(
+            "[Celery] 🎬 Video Worker 使用與 API 相同之 broker/result backend "
+            f"({ACTIVE_BROKER_URL.split('@')[-1] if '@' in ACTIVE_BROKER_URL else ACTIVE_BROKER_URL})"
+        )
 
 celery_app = Celery(
     "kingjam_worker",
@@ -118,6 +128,10 @@ CELERY_TASK_ROUTES = {
 # Celery 配置
 # ============================================================
 celery_app.conf.update(
+    # Redis 短暫斷線時重試（降低「Retry limit exceeded … result store」機率）
+    broker_connection_retry_on_startup=True,
+    broker_connection_retry=True,
+    broker_connection_max_retries=100,
     # 佇列設定
     task_queues=CELERY_QUEUES,
     task_routes=CELERY_TASK_ROUTES,

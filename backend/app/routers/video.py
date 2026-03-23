@@ -1463,11 +1463,16 @@ async def render_video(
         db.refresh(history)
         
         # 提交非同步任務
+        # 確保 custom_images 使用字串 Key，避免 JSON 序列化問題
+        task_custom_images = None
+        if custom_images_dict:
+            task_custom_images = {str(k): v for k, v in custom_images_dict.items()}
+            
         task = render_video_v2_task.delay(
             user_id=current_user.id,
             script=script,
             quality=quality,
-            custom_images=custom_images_dict,
+            custom_images=task_custom_images,
             custom_music_base64=custom_music_base64,
             custom_music_name=custom_music_name,
             history_id=history.id
@@ -1509,20 +1514,6 @@ async def render_video(
     finally:
         # OOM 預防：任務完成，釋放配額
         video_rate_limiter.complete_task(current_user.id, task_id)
-    
-    # 計算總點數（腳本生成 + 影片渲染）用於回應
-    script_credits = script.get("credits_used", 0)
-    total_credits = script_credits + cost
-    
-    return RenderVideoResponse(
-        video_url=result.video_url,
-        thumbnail_url=result.thumbnail_url,
-        duration=result.duration,
-        format=result.format,
-        file_size=result.file_size,
-        credits_used=total_credits,  # 返回總消耗點數
-        scene_images=result.scene_images
-    )
 
 
 @router.post("/render-preview")

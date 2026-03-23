@@ -1373,8 +1373,10 @@ STRICTLY AVOID (NEGATIVE PROMPTS EMBEDDED)
         scene_audios: List[Optional[str]] = []
         
         for i, scene in enumerate(scenes):
-            # 檢查是否有用戶自訂圖片
-            custom_image = self._custom_images.get(i) if hasattr(self, '_custom_images') else None
+            # 檢查是否有用戶自訂圖片 (同時檢查 int 和 str Key，因為 Celery JSON 序列化會轉為字串)
+            custom_image = None
+            if hasattr(self, '_custom_images'):
+                custom_image = self._custom_images.get(i) or self._custom_images.get(str(i))
             
             # 先獲取場景的通用資料（TTS 等會用到）
             narration = scene.get("narration_text", "")
