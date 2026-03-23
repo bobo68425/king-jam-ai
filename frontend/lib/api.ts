@@ -3,13 +3,15 @@ import axios from 'axios';
 // API 基礎網址（支援環境變數配置）
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-// AI 生成類的端點需要更長的超時時間（影片渲染可能需要 60-180 秒）
+// 影片渲染：正常應快速回 task_id；若後端啟用 Celery eager（同進程同步跑完）或 broker 阻塞，可能需數分鐘
+const VIDEO_RENDER_SUBMIT_PATH = '/video/render';
+
+// AI 生成類的端點需要更長的超時時間
 const AI_GENERATE_PATHS = [
   '/social/generate',
   '/api/design-studio/generate-image',
   '/api/design-studio/remove-background',
   '/video/generate',
-  '/video/render',
   '/video/preview',
   '/video/render-preview',
   '/blog/generate',
@@ -50,9 +52,14 @@ api.interceptors.request.use((config) => {
   const url = config.url || '';
   if (LTX_LONG_TIMEOUT_PATHS.some(path => url.includes(path))) {
     config.timeout = 1800000; // 30 分鐘
-  } else if (AI_GENERATE_PATHS.some(path => url.includes(path))) {
-    // AI 生成端點使用更長的超時時間（180 秒）
-    config.timeout = 180000;
+  } else {
+    const pathOnly = url.split('?')[0].replace(/\/$/, '') || '';
+    if (pathOnly === VIDEO_RENDER_SUBMIT_PATH) {
+      // 須大於最長單次渲染（例如 Kling 10s 在 worker 上常 >3 分鐘）；避免 eager 同步時 180s 誤判失敗
+      config.timeout = 900000; // 15 分鐘
+    } else if (AI_GENERATE_PATHS.some((p) => url.includes(p))) {
+      config.timeout = 180000; // 180 秒
+    }
   }
 
   return config;

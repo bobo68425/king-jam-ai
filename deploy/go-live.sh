@@ -37,20 +37,7 @@ echo -e "${BLUE}========================================${NC}"
 }
 
 echo -e "\n${BLUE}========================================${NC}"
-echo -e "${BLUE}  步驟 2: 設定最小執行個體${NC}"
-echo -e "${BLUE}========================================${NC}"
-
-if [ -n "$GCP_PROJECT_ID" ]; then
-    echo -e "${YELLOW}設定 Cloud Run 最小執行個體為 1（減少冷啟動）...${NC}"
-    
-    gcloud run services update kingjam-api \
-        --min-instances=1 \
-        --region=${GCP_REGION:-asia-east1} \
-        2>/dev/null || echo "跳過（可能尚未部署）"
-fi
-
-echo -e "\n${BLUE}========================================${NC}"
-echo -e "${BLUE}  步驟 3: 驗證關鍵功能${NC}"
+echo -e "${BLUE}  步驟 2: 驗證關鍵功能${NC}"
 echo -e "${BLUE}========================================${NC}"
 
 echo -e "${YELLOW}請手動驗證以下功能:${NC}"
@@ -69,7 +56,7 @@ if [ "$verified" != "y" ]; then
 fi
 
 echo -e "\n${BLUE}========================================${NC}"
-echo -e "${BLUE}  步驟 4: 記錄上線時間${NC}"
+echo -e "${BLUE}  步驟 3: 記錄上線時間${NC}"
 echo -e "${BLUE}========================================${NC}"
 
 LAUNCH_TIME=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
@@ -86,8 +73,8 @@ echo -e "前端網址: ${GREEN}https://kingjam.app${NC}"
 echo -e "API 網址: ${GREEN}https://api.kingjam.app${NC}"
 echo ""
 echo -e "${YELLOW}接下來請:${NC}"
-echo "1. 監控 Cloud Run 日誌，注意任何錯誤"
-echo "2. 監控 Cloud SQL 效能"
+echo "1. 在後端託管（如 Railway）查看日誌與資源用量"
+echo "2. 監控資料庫與 Redis 配額／連線"
 echo "3. 設定告警通知"
 echo "4. 公告上線消息"
 echo ""

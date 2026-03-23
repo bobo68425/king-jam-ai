@@ -1,174 +1,46 @@
-# King Jam AI 部署指南
+# King Jam AI — 部署說明
 
-## 快速開始
+正式環境以 **Vercel（或同類前端託管）** + **Railway（或同類 API／DB 託管）** 為主；**不包含** GCP Cloud Run、Cloud SQL、Cloud Run 網域對應或 Cloud Run Jobs 腳本（已自 repo 移除）。
 
-### 前置需求
+## 文件
 
-1. 安裝 [Google Cloud SDK](https://cloud.google.com/sdk/docs/install)
-2. 安裝 [Docker](https://docs.docker.com/get-docker/)
-3. 擁有 GCP 專案並啟用計費
+| 檔案 | 說明 |
+|------|------|
+| [部署線上.md](./部署線上.md) | 上線流程與檢查 |
+| [部署失敗排查.md](./部署失敗排查.md) | 常見錯誤 |
+| [PRODUCTION_CHECKLIST.md](./PRODUCTION_CHECKLIST.md) | 上線檢查清單 |
+| [smoke-test.sh](./smoke-test.sh) | 部署後冒煙測試 |
+| [run-migrations.sh](./run-migrations.sh) | 本機 Docker 執行 Alembic |
+| [go-live.sh](./go-live.sh) | 上線前檢查與確認 |
 
-### 部署流程
-
-```bash
-# 1. 設置環境變數
-export GCP_PROJECT_ID=your-project-id
-export GCP_REGION=asia-east1
-
-# 2. 登入 GCP
-gcloud auth login
-gcloud config set project $GCP_PROJECT_ID
-
-# 3. 建立基礎設施
-cd deploy
-chmod +x *.sh
-./gcp-setup.sh
-
-# 4. 準備環境變數
-cp env-production-template.txt .env.production
-# 編輯 .env.production 填入實際值
-
-# 5. 設置 Secret Manager
-./setup-secrets.sh .env.production
-
-# 6. 部署後端
-./deploy-backend.sh
-
-# 7. 部署前端 (Vercel)
-# - 連接 GitHub 到 Vercel
-# - 設置環境變數
-# - 觸發部署
-
-# 8. 設置網域
-./domain-setup.sh
-```
-
-## 目錄結構
-
-```
-deploy/
-├── README.md                    # 本文件
-├── PRODUCTION_CHECKLIST.md      # 上線檢查清單
-├── gcp-setup.sh                 # GCP 基礎設施設置
-├── setup-secrets.sh             # Secret Manager 設置
-├── deploy-backend.sh            # 後端部署腳本
-├── domain-setup.sh              # 網域設置指南
-├── cors-config.json             # Cloud Storage CORS 設定
-└── env-production-template.txt  # 環境變數模板
-```
-
-## 架構說明
-
-```
-                     用戶
-                      │
-                      ▼
-              ┌─────────────┐
-              │ Cloudflare  │ (CDN + SSL)
-              └─────────────┘
-                      │
-        ┌─────────────┼─────────────┐
-        ▼             ▼             ▼
-┌─────────────┐ ┌─────────────┐ ┌─────────────┐
-│   Vercel    │ │ Cloud Run   │ │   Cloud     │
-│  (前端)     │ │   (API)     │ │  Storage    │
-│ kingjam.app │ │api.kingjam  │ │  (檔案)     │
-└─────────────┘ └─────────────┘ └─────────────┘
-                      │
-        ┌─────────────┼─────────────┐
-        ▼             ▼             ▼
-┌─────────────┐ ┌─────────────┐ ┌─────────────┐
-│ Cloud SQL   │ │ Memorystore │ │   Cloud     │
-│ (PostgreSQL)│ │   (Redis)   │ │   Tasks     │
-└─────────────┘ └─────────────┘ └─────────────┘
-```
-
-## 服務清單
-
-| 服務 | 用途 | 網址 |
-|------|------|------|
-| 前端 | Next.js 應用程式 | https://kingjam.app |
-| API | FastAPI 後端 | https://api.kingjam.app |
-| 資料庫 | PostgreSQL 15 | Cloud SQL (內部) |
-| 快取 | Redis 7 | Memorystore (內部) |
-| 檔案儲存 | 用戶上傳、影片 | Cloud Storage |
-
-## 費用估算
-
-| 服務 | 規格 | 月費 (USD) |
-|------|------|-----------|
-| Cloud SQL | db-f1-micro | ~$10 |
-| Memorystore | 1GB Basic | ~$35 |
-| Cloud Run | 按使用量 | ~$30-50 |
-| Cloud Storage | 10GB | ~$0.5 |
-| Vercel | Pro Plan (可選) | $20 |
-| **總計** | | **~$75-115** |
-
-## 維護指南
-
-### 查看日誌
+## 本機開發（Docker）
 
 ```bash
-# Cloud Run 日誌
-gcloud run services logs read kingjam-api --region=asia-east1
-
-# 即時日誌
-gcloud run services logs tail kingjam-api --region=asia-east1
+docker compose up -d
+# 遷移
+./deploy/run-migrations.sh
 ```
 
-### 更新部署
+詳見專案根目錄 `SETUP.md`。
 
-```bash
-# 重新部署後端
-./deploy-backend.sh
+## 環境變數
 
-# 或使用 Cloud Build
-gcloud builds submit --config=../backend/cloudbuild.yaml ../backend
+複製 `.env.example`（根目錄與 `backend`）並在託管平台設定對應變數；機密請用平台內建 Secrets，勿提交 git。
+
+## 架構（概念）
+
+```
+使用者 → CDN / 前端託管 → Next.js
+              ↓ API
+        後端託管 (FastAPI) → 託管 Postgres / Redis
+              ↓
+        R2 或其他物件儲存（若已設定）
 ```
 
-### 擴展服務
+## 已移除的 GCP 腳本（可從 git 歷史找回）
 
-```bash
-# 調整 Cloud Run 執行個體
-gcloud run services update kingjam-api \
-  --min-instances=1 \
-  --max-instances=20 \
-  --region=asia-east1
-```
+- `gcp-setup.sh`、`domain-setup.sh`、`setup-secrets.sh`、`setup-github-actions.sh`
+- 根目錄 `cloudbuild.yaml`
+- `ltx-video-inference/deploy.sh`（Cloud Run GPU 部署）
 
-### 資料庫備份
-
-Cloud SQL 自動備份已開啟。手動備份:
-
-```bash
-gcloud sql backups create --instance=kingjam-db
-```
-
-## 故障排除
-
-### API 無法存取
-
-1. 檢查 Cloud Run 狀態
-2. 檢查 VPC Connector 連線
-3. 確認環境變數正確
-
-### 資料庫連線失敗
-
-1. 確認 Cloud SQL 執行個體運行中
-2. 檢查 VPC Connector
-3. 驗證連線字串格式
-
-### Redis 連線失敗
-
-1. 確認 Memorystore 執行個體運行中
-2. 檢查 IP 位址是否正確
-3. 確認 VPC 設定
-
-## 聯絡資訊
-
-- 技術支援: service@kingjam.app
-- GCP 支援: https://cloud.google.com/support
-
----
-
-© 2026 King Jam AI
+若仍需在 GCP 跑單一服務（例如 GPU 推論），請另建獨立 repo 或文件，勿與本專案預設部署混用。

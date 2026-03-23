@@ -1,7 +1,7 @@
 """
-LTX-2.3 Local / Cloud Run Inference Server
-===========================================
-本地開發或 Cloud Run 部署用。
+LTX-2.3 Local / Container Inference Server
+==========================================
+本地開發或以容器部署（Docker / 雲端 GPU 等）。
 使用 ltx-pipelines 官方套件載入 LTX-2.3 模型。
 
 Usage (local):

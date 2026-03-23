@@ -6,6 +6,11 @@ backups/
 kingjam_slim.sql
 Cloud_SQL_Export_*.sql
 
+# 本機虛擬環境（勿打入映像，體積大且易造成平台混淆）
+test_env/
+venv/
+.venv/
+
 # Exclude non-backend directories
 frontend/
 ltx-video-inference/

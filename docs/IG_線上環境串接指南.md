@@ -15,7 +15,7 @@
 | **Instagram Login** | **King Jam AIG** | `1207276628272799` | **核心 IG 功能來源**<br>Instagram App ID: `2470376900051701` |
 
 ### ⚠️ 環境變數檢查點
-請確認 Cloud Run 或部署 Secrets 中的 `INSTAGRAM_APP_ID` 設定正確：
+請確認後端託管（如 Railway）環境變數或 GitHub／平台 Secrets 中的 `INSTAGRAM_APP_ID` 設定正確：
 - `INSTAGRAM_APP_ID`: **`2470376900051701`** (必須是這個值！)
 - `INSTAGRAM_APP_SECRET`: (對應 King Jam AIG 的 Secret)
 

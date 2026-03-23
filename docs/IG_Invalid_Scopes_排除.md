@@ -30,10 +30,10 @@
 
 ### 步驟 3：觸發部署
 
-META_CONFIG_ID 只有在**部署時**才會寫入 Cloud Run，必須重新部署後才會生效。
+META_CONFIG_ID 只有在**部署時**才會寫入後端執行環境，必須重新部署後才會生效。
 
 - 推送任何 `backend/` 變更到 main，或
-- 到 **Actions** 手動執行「Deploy Backend to Cloud Run」
+- 重新部署後端（例如推送觸發 Railway／你的 CI），使執行時環境變數生效
 
 ### 步驟 4：驗證
 

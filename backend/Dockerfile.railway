@@ -38,5 +38,5 @@ RUN mkdir -p /app/static/uploads /app/static/videos /app/static/thumbnails
 # 暴露端口（Railway 會讀取 EXPOSE 指定 port）
 EXPOSE 8080
 
-# 使用 Python 啟動腳本（直接讀取 PORT 環境變數，避免 shell 展開問題）
-CMD ["python", "start.py"]
+# 同時支援 repo 根目錄與 backend 子目錄兩種 build context（見 backend/Dockerfile 註解）
+CMD ["/bin/sh", "-c", "if [ -f /app/backend/start.py ]; then cd /app/backend && exec python start.py; else exec python start.py; fi"]

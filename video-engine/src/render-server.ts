@@ -1,8 +1,8 @@
 /**
- * Remotion Cloud Run Render Server
- * =================================
+ * Remotion Render Server (HTTP)
+ * =============================
  * Express server that accepts render requests and uses @remotion/renderer
- * to produce MP4 videos. Deployed on Google Cloud Run.
+ * to produce MP4 videos. 可部署於 Railway、Cloud Run 等容器環境。
  *
  * POST /render         — Submit render job
  * POST /render-preview — Quick low-res preview render

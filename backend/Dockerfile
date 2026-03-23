@@ -38,4 +38,6 @@ RUN mkdir -p /app/static/uploads /app/static/videos /app/static/thumbnails
 
 EXPOSE 8080
 
-CMD ["python", "start.py"]
+# 同時支援 (1) build context = repo 根目錄 → start.py 在 /app/backend
+# 與 (2) context = backend 子目錄 → start.py 在 /app
+CMD ["/bin/sh", "-c", "if [ -f /app/backend/start.py ]; then cd /app/backend && exec python start.py; else exec python start.py; fi"]

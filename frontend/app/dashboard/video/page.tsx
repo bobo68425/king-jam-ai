@@ -1005,7 +1005,8 @@ export default function VideoPage() {
         title: item.input_params?.title || item.output_data?.title,
         createdAt: item.created_at,
         credits_used: item.credits_used,
-        video_url: item.output_data?.video_url,
+        // 列表 API 為輕量版不回傳 output_data，成片 URL 在 media_cloud_url
+        video_url: item.media_cloud_url || item.output_data?.video_url,
         media_cloud_url: item.media_cloud_url,
       }));
 
@@ -2263,7 +2264,18 @@ export default function VideoPage() {
       }
     } catch (error: any) {
       console.error("[Video] 渲染錯誤:", error);
-      toast.error(error.response?.data?.detail || "生成失敗");
+      const msg = String(error?.message || "");
+      const timedOut =
+        error?.code === "ECONNABORTED" || msg.includes("timeout") || msg.includes("exceeded");
+      if (timedOut) {
+        toast.error("連線逾時：後端可能仍在渲染（尤其啟用同步 Celery 時較久）", {
+          description: "請稍後查看側邊「歷史紀錄」或重新整理頁面；若已完成可直接從雲端連結下載。",
+          duration: 8000,
+        });
+        loadHistory();
+      } else {
+        toast.error(error.response?.data?.detail || msg || "生成失敗");
+      }
     } finally {
       clearInterval(interval);
       setRendering(false);

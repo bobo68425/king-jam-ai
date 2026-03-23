@@ -208,24 +208,9 @@ cat backup.sql | docker exec -i kingjam_db psql -U kingjam -d kingjam_db
 | 後端 API | https://api.kingjam.app |
 | API 文件 | https://api.kingjam.app/docs |
 
-### Google Cloud 資源
+### 正式環境託管（範例）
 
-| 資源 | 名稱 | 區域 |
-|------|------|------|
-| Cloud Run (前端) | kingjam-frontend | asia-east1 |
-| Cloud Run (後端) | kingjam-api | asia-east1 |
-| Cloud SQL | kingjam-db | asia-east1 |
-| Memorystore Redis | kingjam-redis | asia-east1 |
-| Artifact Registry | kingjam-repo | asia-east1 |
-
-### Cloud SQL 連線資訊
-
-```
-Host: 35.194.129.45
-Port: 5432
-Database: kingjam
-User: postgres
-```
+實際資源以你使用的平台為準（例如 **Vercel / Railway**）；連線字串與 Redis 位址請在託管面板查看，**勿**將密碼寫進 git。
 
 ---
 
@@ -262,14 +247,12 @@ npm install --legacy-peer-deps
 npm run dev
 ```
 
-### Cloud Run 部署失敗
+### 雲端 API 部署失敗（Railway 等）
+
+在託管平台查看 **Deploy Logs**；本機可用 Docker 對照：
 
 ```bash
-# 查看建置日誌
-gcloud builds list --limit=5
-
-# 查看服務狀態
-gcloud run services describe kingjam-api --region=asia-east1
+docker compose logs -f backend
 ```
 
 ### API 金鑰問題
@@ -277,13 +260,7 @@ gcloud run services describe kingjam-api --region=asia-east1
 如果遇到 API 金鑰洩漏或失效：
 
 1. 前往 [Google AI Studio](https://aistudio.google.com/app/apikey) 創建新金鑰
-2. 更新 `docker-compose.yml` 中的 `GOOGLE_GEMINI_KEY`
-3. 更新 Cloud Run 環境變數：
-   ```bash
-   gcloud run services update kingjam-api \
-     --region=asia-east1 \
-     --update-env-vars="GOOGLE_GEMINI_KEY=新的金鑰"
-   ```
+2. 更新 `docker-compose.yml` 或 **後端託管環境變數** 中的 `GOOGLE_GEMINI_KEY`
 
 ---
 

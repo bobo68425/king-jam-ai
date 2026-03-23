@@ -1,6 +1,6 @@
 # =============================================================================
 # King Jam AI Frontend - 生產環境 Dockerfile
-# 適用於 Google Cloud Run 部署
+# 適用於容器部署（Railway、Cloud Run 等）
 # 使用多階段建置優化映像檔大小
 # =============================================================================
 
@@ -14,8 +14,8 @@ RUN apk add --no-cache libc6-compat
 
 WORKDIR /app
 
-# 複製套件管理檔案 (相容性最佳化)
-COPY package.json package-lock.json* ./frontend/package.json ./frontend/package-lock.json* ./
+# Build context = frontend/（Railway / Cloud Run 子目錄部署）
+COPY package.json package-lock.json* ./
 
 # 安裝依賴（使用 ci 確保一致性）
 RUN npm ci --legacy-peer-deps

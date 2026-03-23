@@ -57,7 +57,7 @@ https://api.kingjam.app/oauth/meta/callback
 - 必須為 `https`
 - 與 Meta 後台「有效的 OAuth 重新導向 URI」**完全一致**
 
-Cloud Run 部署時會設定 `BACKEND_URL=https://api.kingjam.app`，通常無需額外設定。
+後端託管環境通常會設定 `BACKEND_URL=https://api.kingjam.app`，一般無需額外設定。
 
 ---
 

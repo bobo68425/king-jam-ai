@@ -3,7 +3,7 @@ builder = "dockerfile"
 dockerfilePath = "backend/Dockerfile"
 
 [deploy]
-startCommand = "python start.py"
+# 勿覆蓋 Docker CMD：backend/Dockerfile 已依 build context 自動選擇 /app 或 /app/backend 下的 start.py
 healthcheckPath = "/health"
 healthcheckTimeout = 60
 restartPolicyType = "on_failure"

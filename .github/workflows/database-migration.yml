@@ -1,12 +1,9 @@
 # =============================================================================
-# King Jam AI - 資料庫遷移 (手動觸發)
+# King Jam AI - 資料庫遷移（手動觸發）
 # =============================================================================
-#
-# 使用方式:
-# 1. 前往 GitHub Actions
-# 2. 選擇 "Database Migration" workflow
-# 3. 點擊 "Run workflow"
-# 4. 選擇環境和操作
+# 需於 GitHub → Settings → Secrets → Actions 設定：
+#   DATABASE_URL  — 可連線之 Postgres（例如 Railway 提供之連線字串）
+# 已不再使用 Cloud SQL Proxy / GCP_SA_KEY。
 # =============================================================================
 
 name: Database Migration
@@ -15,33 +12,30 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: '目標環境'
+        description: "目標環境（對應 GitHub Environment，可設定核准規則）"
         required: true
-        default: 'staging'
+        default: "production"
         type: choice
         options:
           - staging
           - production
       action:
-        description: '遷移動作'
+        description: "遷移動作"
         required: true
-        default: 'upgrade'
+        default: "upgrade"
         type: choice
         options:
-          - upgrade        # 升級到最新版本
-          - downgrade      # 回滾一個版本
-          - current        # 顯示當前版本
-          - history        # 顯示遷移歷史
-          - stamp          # 強制標記版本 (需提供 revision)
+          - upgrade
+          - current
+          - history
+          - stamp
       revision:
-        description: '目標版本 (僅用於 stamp 或特定升級)'
+        description: "目標版本（僅 stamp 用）"
         required: false
-        default: 'head'
+        default: "head"
         type: string
 
 env:
-  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  REGION: asia-east1
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -49,110 +43,45 @@ jobs:
     name: 🗄️ 資料庫遷移
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
-    env:
-      DIRECT_DATABASE_URL: ${{ secrets.DATABASE_URL }}
-    
+
     steps:
       - name: 📥 Checkout
         uses: actions/checkout@v4
-      
-      - name: 🔐 Google Auth
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-      
-      - name: ☁️ Setup Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-      
+
       - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-      
+          python-version: "3.10"
+
       - name: 📦 Install dependencies
-        run: |
-          pip install sqlalchemy alembic psycopg2-binary
-      
-      - name: ☁️ Setup Cloud SQL Proxy
-        run: |
-          wget https://dl.google.com/cloudsql/cloud_sql_proxy.linux.amd64 -O cloud_sql_proxy
-          chmod +x cloud_sql_proxy
-      
-      - name: 🔗 Start Cloud SQL Proxy
-        if: env.DIRECT_DATABASE_URL == ''
-        run: |
-          echo "Connecting to ${{ env.PROJECT_ID }}:${{ env.REGION }}:kingjam-db on port 5433"
-          ./cloud_sql_proxy -instances=${{ env.PROJECT_ID }}:${{ env.REGION }}:kingjam-db=tcp:0.0.0.0:5433 > cloud_sql_proxy.log 2>&1 &
-          sleep 12
-          echo "--- Cloud SQL Proxy Log ---"
-          cat cloud_sql_proxy.log
-          echo "--- Network Status (Port 5433) ---"
-          netstat -tuln | grep 5433 || echo "Port 5433 is NOT listening"
-      
-      - name: 🗄️ Run Migration
+        run: pip install sqlalchemy alembic psycopg2-binary
+
+      - name: 🗄️ Run Alembic
         env:
-          _DB_PASS: ${{ secrets.DB_PASSWORD }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          cd backend
-          if [ -n "${DIRECT_DATABASE_URL}" ]; then
-            echo "🚀 使用直接 DATABASE_URL 連線..."
-            export DATABASE_URL="${DIRECT_DATABASE_URL}"
-          else
-            echo "🔗 使用 Cloud SQL Proxy 連線 (127.0.0.1:5433)..."
-            export DATABASE_URL="postgresql://postgres:${_DB_PASS}@127.0.0.1:5433/kingjam"
-          fi
-          
-          if [ -z "${_DB_PASS}" ]; then
-            echo "❌ DB_PASSWORD secret 未設定"
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "❌ 請在 Repository secrets 設定 DATABASE_URL（託管 Postgres 連線字串）"
             exit 1
           fi
-          
-          echo "📌 使用環境: ${{ inputs.environment }}"
+          cd backend
           echo "📌 動作: ${{ inputs.action }}"
-          
           case "${{ inputs.action }}" in
             upgrade)
-              echo "🔍 [DEBUG] 檢查 Alembic 狀態..."
-              echo "📌 當前目錄: $(pwd)"
-              echo "📌 版本目錄內容: $(ls migrations/versions/)"
-              echo "📌 Alembic Heads:"
-              alembic heads
-              echo "📌 Alembic Branches:"
-              alembic branches
-              echo "📌 Alembic Current:"
-              alembic current || echo "⚠️ 無法取得當前版本"
-              
-              echo "🔍 [DEBUG] 檢查資料庫實際狀態..."
-              python3 scripts/debug_db_state.py
-              
-              echo "📈 執行 Alembic 資料庫遷移 (upgrade head)..."
-              alembic upgrade head > alembic_output.log 2>&1 || { 
-                echo "❌ Alembic 遷移失敗！內容如下："
-                cat alembic_output.log
-                echo "🔍 [DEBUG] Cloud SQL Proxy 狀態回報:"
-                cat ../cloud_sql_proxy.log || echo "No proxy log"
-                echo "🔍 [DEBUG] 失敗後的完整路徑紀錄:"
-                alembic history --verbose | tail -n 50
-                exit 1 
-              }
-              cat alembic_output.log
-              
-              echo "📈 執行附加直接資料庫遷移腳本..."
-              python3 scripts/run_direct_migration.py || { echo "❌ 直接遷移腳本失敗"; exit 1; }
+              alembic upgrade head
+              python3 scripts/run_direct_migration.py
               ;;
             current)
-              echo "📍 當前資料庫版本:"
-              alembic current 2>/dev/null || echo "(alembic 無法讀取版本)"
+              alembic current || true
               ;;
             history)
-              echo "📜 遷移歷史:"
-              alembic history --verbose 2>/dev/null || echo "(alembic 無法讀取歷史)"
+              alembic history --verbose || true
               ;;
             stamp)
-              echo "📍 強制標記資料庫版本為: ${{ inputs.revision }}"
-              alembic stamp ${{ inputs.revision }}
+              alembic stamp "${{ inputs.revision }}"
               ;;
             *)
-              echo "⚠️ 不支援的動作: ${{ inputs.action }}"
+              echo "不支援的動作"
+              exit 1
               ;;
           esac

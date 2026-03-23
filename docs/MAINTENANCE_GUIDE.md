@@ -1,5 +1,7 @@
 # King Jam AI 維護與更新指南
 
+> **2026-03**：正式環境以 **Railway（後端／DB）** 與 **Vercel（前端）** 等為主；本文件已改寫，不再列出 `gcloud run`／Cloud SQL 操作步驟。細節見 `deploy/README.md`、`.github/workflows/database-migration.yml`。
+
 ## 目錄
 
 1. [更新部署流程](#一更新部署流程)
@@ -24,8 +26,8 @@
   開發環境                     測試環境                    生產環境
 ┌──────────┐              ┌──────────────┐            ┌──────────────┐
 │ 本地開發  │  git push   │   Staging    │  審核通過  │  Production  │
-│ Docker   │ ──────────▶ │  Cloud Run   │ ────────▶ │  Cloud Run   │
-│ Compose  │              │  (預覽版)    │            │  (正式版)    │
+│ Docker   │ ──────────▶ │  Staging     │ ────────▶ │  Production  │
+│ Compose  │              │  (託管預覽)  │            │  (託管正式)  │
 └──────────┘              └──────────────┘            └──────────────┘
      │                           │                          │
      ▼                           ▼                          ▼
@@ -38,33 +40,11 @@
 ### 1.2 手動部署（快速更新）
 
 ```bash
-# ============================================
-# 方法 1: 使用部署腳本（推薦）
-# ============================================
-cd /Users/jamestsai/Desktop/king-jam-ai/deploy
+# 後端：於 Railway（或你的容器託管）連結 GitHub 後，push main 觸發建置；
+#       或於平台手動 Redeploy。見 deploy/README.md、deploy/部署線上.md。
 
-# 設定環境
-export GCP_PROJECT_ID=your-project-id
-export GCP_REGION=asia-east1
-
-# 執行部署
-./deploy-backend.sh
-
-# ============================================
-# 方法 2: 使用 Cloud Build（CI/CD）
-# ============================================
-cd /Users/jamestsai/Desktop/king-jam-ai/backend
-
-# 觸發建置和部署
-gcloud builds submit --config=cloudbuild.yaml .
-
-# ============================================
-# 方法 3: 直接 gcloud 部署
-# ============================================
-gcloud run deploy kingjam-api \
-    --source . \
-    --region asia-east1 \
-    --platform managed
+# 本機驗證映像（可選）
+cd backend && docker build -f Dockerfile.railway -t kingjam-api:local .
 ```
 
 ### 1.3 前端部署（Vercel）
@@ -83,145 +63,28 @@ vercel deploy --prod
 
 ---
 
-## 二、CI/CD 自動化
+## 二、CI/CD 與 GitHub Actions
 
-### 2.1 GitHub Actions 配置
+### 2.1 後端／前端部署
 
-建立 `.github/workflows/deploy.yml`:
+- **後端**：多由 **Railway**（或同等平台）在 `git push` 後建置 Dockerfile 並部署。
+- **前端**：多由 **Vercel** 連結 GitHub 自動建置。
 
-```yaml
-name: Deploy to GCP
+### 2.2 資料庫遷移 Workflow
 
-on:
-  push:
-    branches: [main]
-    paths:
-      - 'backend/**'
-  workflow_dispatch:  # 允許手動觸發
+專案內建 **`.github/workflows/database-migration.yml`**（手動 `workflow_dispatch`）。
 
-env:
-  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  REGION: asia-east1
-  SERVICE: kingjam-api
+| Secret（Repository 或 Environment） | 說明 |
+|--------------------------------------|------|
+| **`DATABASE_URL`** | **必填**。可連線至正式／Staging Postgres 的連線字串（與後端使用相同格式即可）。 |
 
-jobs:
-  # =============================================
-  # 階段 1: 測試
-  # =============================================
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      
-      - name: Install dependencies
-        run: |
-          cd backend
-          pip install -r requirements.txt
-          pip install pytest
-      
-      - name: Run tests
-        run: |
-          cd backend
-          pytest tests/ -v
+可刪除且不再使用於本 workflow 的舊 Secret：`GCP_PROJECT_ID`、`GCP_SA_KEY`、`DB_PASSWORD`（舊 Cloud SQL Proxy 流程）。
 
-  # =============================================
-  # 階段 2: 建置並部署到 Staging
-  # =============================================
-  deploy-staging:
-    needs: test
-    runs-on: ubuntu-latest
-    environment: staging
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Google Auth
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-      
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-      
-      - name: Deploy to Staging
-        run: |
-          cd backend
-          gcloud run deploy kingjam-api-staging \
-            --source . \
-            --region $REGION \
-            --platform managed \
-            --allow-unauthenticated \
-            --tag staging
-      
-      - name: Smoke Test
-        run: |
-          STAGING_URL=$(gcloud run services describe kingjam-api-staging \
-            --region $REGION --format='value(status.url)')
-          curl -f $STAGING_URL/health
+### 2.3 觸發方式
 
-  # =============================================
-  # 階段 3: 部署到生產（需手動審核）
-  # =============================================
-  deploy-production:
-    needs: deploy-staging
-    runs-on: ubuntu-latest
-    environment: production  # 需要審核
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Google Auth
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-      
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-      
-      - name: Deploy to Production
-        run: |
-          cd backend
-          gcloud builds submit --config=cloudbuild.yaml .
-      
-      - name: Verify Deployment
-        run: |
-          sleep 30
-          curl -f https://api.kingjam.app/health
-```
-
-### 2.2 設置 GitHub Secrets
-
-在 GitHub Repository Settings > Secrets 設置：
-
-| Secret Name | 說明 |
-|-------------|------|
-| `GCP_PROJECT_ID` | GCP 專案 ID |
-| `GCP_SA_KEY` | 服務帳戶 JSON 金鑰 |
-
-### 2.3 觸發部署的方式
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                      觸發部署方式                                │
-└─────────────────────────────────────────────────────────────────┘
-
-1. 自動觸發（推薦）
-   └── git push main → 自動測試 → Staging → 審核 → Production
-
-2. 手動觸發
-   └── GitHub Actions → Run workflow → 選擇分支 → 部署
-
-3. 緊急部署（跳過審核）
-   └── ./deploy-backend.sh 直接部署
-
-4. 回滾
-   └── gcloud run services update-traffic → 切換版本
-```
+1. **日常**：`git push` → 託管平台自動建置。  
+2. **DB 遷移**：Actions → **Database Migration** → Run workflow → 選環境與 `upgrade` 等。  
+3. **回滾**：在 Railway／Vercel 使用「還原上一部署」或重新部署指定 commit。
 
 ---
 
@@ -388,27 +251,22 @@ export default function NewFeaturePage() {
   4. 測試功能
 
 部署到生產:
-  1. 部署新版本代碼
-  2. 執行遷移腳本（Cloud Run Job）
+  1. 部署新版本代碼（Railway 等）
+  2. 執行遷移：GitHub Actions → Database Migration（需已設定 DATABASE_URL）
+     或於可連線環境：`cd backend && alembic upgrade head`
   3. 驗證遷移結果
 ```
 
 ### 4.2 生產環境遷移命令
 
 ```bash
-# 方法 1: 透過 Cloud Run Job
-gcloud run jobs create kingjam-migration \
-    --image asia-east1-docker.pkg.dev/PROJECT_ID/kingjam-repo/kingjam-api:latest \
-    --region asia-east1 \
-    --command "alembic,upgrade,head" \
-    --vpc-connector kingjam-connector
+# 建議：GitHub Actions → Database Migration（secrets.DATABASE_URL）
 
-gcloud run jobs execute kingjam-migration --region asia-east1
+# 本機 Docker（與 docker-compose 一致）
+./deploy/run-migrations.sh
 
-# 方法 2: 透過 Cloud SQL Proxy 本地執行
-cloud_sql_proxy -instances=PROJECT:asia-east1:kingjam-db=tcp:5432 &
-DATABASE_URL=postgresql://kingjam:PASSWORD@localhost:5432/kingjam_db \
-  alembic upgrade head
+# 本機（已匯出 DATABASE_URL）
+cd backend && alembic upgrade head
 ```
 
 ### 4.3 遷移最佳實踐
@@ -511,22 +369,12 @@ metrics:
 
 ### 6.2 設置告警
 
-```bash
-# Cloud Monitoring 告警策略
-gcloud alpha monitoring policies create \
-    --policy-from-file=monitoring-policy.yaml
-```
+於 **Railway／Vercel／託管商** 內建告警或外接 Sentry、Better Stack 等設定閾值與通知。
 
 ### 6.3 日誌查詢
 
-```bash
-# 查看錯誤日誌
-gcloud logging read "resource.type=cloud_run_revision AND severity>=ERROR" \
-    --limit 50 --format json
-
-# 即時日誌
-gcloud run services logs tail kingjam-api --region=asia-east1
-```
+- **Railway**：服務 → **Logs** 篩選錯誤與關鍵字。  
+- **本機**：`docker compose logs -f backend`
 
 ---
 
@@ -534,45 +382,12 @@ gcloud run services logs tail kingjam-api --region=asia-east1
 
 ### 7.1 快速回滾
 
-```bash
-# 1. 查看所有版本
-gcloud run revisions list --service kingjam-api --region asia-east1
+1. 在 **Railway**（或 API 託管）選擇**上一筆成功部署**並 Redeploy／Rollback。  
+2. 驗證：`curl -f https://api.kingjam.app/health`（或你的 API 網域）。
 
-# 2. 回滾到前一版本
-gcloud run services update-traffic kingjam-api \
-    --region asia-east1 \
-    --to-revisions kingjam-api-00023-abc=100
+### 7.2 漸進式發布
 
-# 3. 驗證回滾
-curl -f https://api.kingjam.app/health
-```
-
-### 7.2 金絲雀部署（漸進式發布）
-
-```bash
-# 1. 部署新版本，但只導入 10% 流量
-gcloud run deploy kingjam-api \
-    --image NEW_IMAGE \
-    --region asia-east1 \
-    --tag canary \
-    --no-traffic
-
-gcloud run services update-traffic kingjam-api \
-    --region asia-east1 \
-    --to-tags canary=10
-
-# 2. 監控 10 分鐘，確認無問題
-
-# 3. 逐步增加流量
-gcloud run services update-traffic kingjam-api \
-    --region asia-east1 \
-    --to-tags canary=50
-
-# 4. 完全切換
-gcloud run services update-traffic kingjam-api \
-    --region asia-east1 \
-    --to-tags canary=100
-```
+若託管商支援 **預覽環境／多階段部署**，可先對內部或少量流量驗證再全量；細節依平台文件操作。
 
 ### 7.3 回滾檢查清單
 
@@ -590,41 +405,21 @@ gcloud run services update-traffic kingjam-api \
 ## 附錄：常用命令速查
 
 ```bash
-# ==================== 部署相關 ====================
-# 部署後端
-./deploy/deploy-backend.sh
+# ==================== 本機 Docker ====================
+docker compose up -d
+docker compose logs -f backend
 
-# 查看服務狀態
-gcloud run services describe kingjam-api --region asia-east1
-
-# 查看日誌
-gcloud run services logs read kingjam-api --region asia-east1
-
-# ==================== 資料庫相關 ====================
-# 執行遷移
-alembic upgrade head
+# ==================== 資料庫遷移 ====================
+./deploy/run-migrations.sh
+# 或 cd backend && alembic upgrade head
 
 # 新增遷移
-alembic revision --autogenerate -m "描述"
+cd backend && alembic revision --autogenerate -m "描述"
 
-# 回滾遷移
-alembic downgrade -1
-
-# ==================== 版本管理 ====================
-# 查看所有版本
-gcloud run revisions list --service kingjam-api
-
-# 回滾版本
-gcloud run services update-traffic kingjam-api --to-revisions REVISION=100
-
-# ==================== 監控相關 ====================
-# 查看錯誤
-gcloud logging read "severity>=ERROR" --limit 50
-
-# 查看指標
-gcloud monitoring dashboards list
+# ==================== 健康檢查 ====================
+curl -sS https://api.kingjam.app/health
 ```
 
 ---
 
-*最後更新: 2026-01-24*
+*最後更新: 2026-03-23*

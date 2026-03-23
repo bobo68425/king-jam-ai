@@ -206,7 +206,7 @@ curl -s "https://api.kingjam.app/scheduler/platforms" \
 
 1. GitHub → Settings → Secrets → Actions
 2. 新增 `META_CONFIG_ID` = Configuration ID
-3. 重新部署後端（Secret 僅在部署時寫入 Cloud Run）
+3. 重新部署後端（環境變數僅在部署／重啟後生效）
 
 ---
 

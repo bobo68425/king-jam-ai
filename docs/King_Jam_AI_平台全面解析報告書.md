@@ -136,7 +136,7 @@ rembg (U2Net)       - 背景移除 (本地開源)
 Docker              - 容器化
 Docker Compose      - 服務編排
 Cloudflare R2       - 物件儲存
-GCP Cloud Run       - 無伺服器部署
+容器化 API 託管（如 Railway）- 無伺服器風格部署
 ```
 
 <div style="page-break-after: always;"></div>

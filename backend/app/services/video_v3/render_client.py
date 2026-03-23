@@ -1,7 +1,7 @@
 """
 Remotion Render Client
 ======================
-調用 Cloud Run 上的 Remotion 渲染服務
+調用遠端 Remotion 渲染服務（若已設定 REMOTION_RENDER_URL）
 """
 
 import os

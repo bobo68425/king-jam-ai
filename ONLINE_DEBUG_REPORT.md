@@ -1,5 +1,6 @@
 # 🌐 King Jam AI 線上環境偵錯報告
 
+> **備註（2026-03）**：以下內容含當時之 **Cloud Run / Cloud SQL** 敘述；若正式環境已遷至 Railway 等，請以實際託管與變數為準，表格僅供對照歷史。  
 > 檢測時間：2026-02-15 (更新：2026-02-16)  
 > 網站：https://kingjam.app  
 > API：https://api.kingjam.app  
@@ -15,7 +16,7 @@
 | 前端註冊頁 | ✅ 正常 | 表單顯示完整 |
 | 前端 Dashboard | ✅ 正常 | 未登入正確導向 /login |
 | 後端 API | ✅ 正常 | `/health` 回傳 OK |
-| 資料庫連線 | ✅ 正常 | PostgreSQL via Cloud SQL 連線正常 |
+| 資料庫連線 | ✅ 正常 | PostgreSQL（當時經由託管實例）連線正常 |
 | Redis 連線 | ✅ **正常 (Fixed)** | `/admin/health/quick` 回傳 Redis OK |
 | API 文件 | ✅ 正常 | `/docs` 可存取，API v1.0.6 |
 | 資料庫初始化 | ✅ 正常 | 點數方案等已成功 seed |
@@ -30,7 +31,7 @@
 - **端點**: `GET /admin/health/quick`
 - **狀態**: ✅ **已修復** (2026-02-15 16:45)
 - **說明**: 
-  - Cloud Run 環境變數 `REDIS_URL` 已更新指向正確的 Redis 實例 IP (`10.11.222.211`)。
+  - 執行環境變數 `REDIS_URL` 已更新指向正確的 Redis 實例 IP (`10.11.222.211`)。
   - GitHub Secret `REDIS_URL` 已設定，確保下次部署不會覆蓋。
   - 目前連線應已恢復正常。
 - **影響範圍**:
@@ -39,7 +40,7 @@
   - 🔴 Rate limiting 可能失效
   - 🟡 Session 相關功能可能受影響
 - **修復建議**:
-  1. 確認 Cloud Run 是否有配置 Redis (Cloud Memorystore) 連線
+  1. 確認執行環境是否已配置 Redis 連線
   2. 在 GitHub Secrets 中設定 `REDIS_URL` 環境變數
   3. 在部署 workflow 的 `--update-env-vars` 中加入 `REDIS_URL`
   4. 確認 VPC Connector 可以存取 Redis 實例
@@ -95,7 +96,7 @@
   LINE_CHANNEL_ID
   LINE_CHANNEL_SECRET
   ```
-- **說明**: 雖然 LINE 在線上顯示已設定，但在 workflow 中找不到相關設定命令，可能是透過其他方式（如 Cloud Run Console 手動設定）配置的
+- **說明**: 雖然 LINE 在線上顯示已設定，但在 workflow 中找不到相關設定命令，可能是透過託管平台手動設定
 
 ### 🟢 P2 - 輕微問題
 
@@ -136,7 +137,7 @@
 
 ### 資料庫
 - PostgreSQL 連線正常
-- 透過 Cloud SQL Unix Socket 連線：`postgresql://postgres:***@/kingjam?host=/cloudsql/king-jam-ai:asia-east1:kingjam-db`
+- （歷史）曾使用 Unix Socket 形式之 Postgres 連線字串；現況請以目前託管商提供之 `DATABASE_URL` 為準
 - 點數包資料已正確初始化（5 個方案）
 
 ---
@@ -187,14 +188,12 @@ gcloud redis instances create kingjam-redis \
 # 3. 取得 Redis IP
 gcloud redis instances describe kingjam-redis --region=asia-east1 --format='value(host)'
 
-# 4. 在 Cloud Run 設定環境變數
-gcloud run services update kingjam-backend \
-  --region=asia-east1 \
-  --update-env-vars "REDIS_URL=redis://<REDIS_IP>:6379/0"
+# 4. 現況：於 Railway（或後端託管）面板設定 REDIS_URL=redis://... 
 ```
 
-#### Step 2: 更新部署 Workflow
-在 `.github/workflows/deploy-backend-cloudrun.yml` 中補充缺少的環境變數。
+#### Step 2: 更新部署與環境變數
+
+在 **Railway／GitHub Actions** 等流程中補齊缺少的環境變數（舊 `deploy-backend-cloudrun.yml` 若仍存在請改為現用流程）。
 
 ### 短期計畫（本週）
 
