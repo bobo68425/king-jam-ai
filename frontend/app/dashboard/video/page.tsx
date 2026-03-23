@@ -2274,7 +2274,11 @@ export default function VideoPage() {
         });
         loadHistory();
       } else {
-        toast.error(error.response?.data?.detail || msg || "生成失敗");
+        const errorDetail = error.response?.data?.detail || msg || "生成失敗";
+        if (error.response?.status === 500) {
+          console.log("[Video] 🛑 500 渲染錯誤詳情 (請將此截圖給工程師):", errorDetail);
+        }
+        toast.error(errorDetail);
       }
     } finally {
       clearInterval(interval);
