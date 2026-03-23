@@ -7,6 +7,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+import logging
+import traceback
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 from pathlib import Path
@@ -40,6 +42,8 @@ from app.services.storyboard_service import (
     TTSService,
     get_storyboard_service,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/video", tags=["Video Generation"])
 
@@ -1486,30 +1490,41 @@ async def render_video(
         )
         
     except Exception as e:
-        # 記錄失敗歷史
-        script_credits = script.get("credits_used", 0)
-        total_credits = script_credits + cost
+        # 詳細日誌記錄
+        error_traceback = traceback.format_exc()
+        print(f"[video_render] ❌ 渲染失敗: {str(e)}")
+        print(error_traceback)
+        logger.error(f"[video_render] 渲染發生錯誤: {str(e)}\n{error_traceback}")
         
-        history = GenerationHistory(
-            user_id=current_user.id,
-            generation_type="short_video",
-            status="failed",
-            input_params={
-                "project_id": script.get("project_id"),
-                "quality": quality,
-                "duration": duration,
-                "script_credits": script_credits,
-                "render_credits": cost,
-            },
-            credits_used=total_credits,  # 記錄總消耗
-            error_message=str(e),
-        )
-        db.add(history)
-        db.commit()
+        # 記錄失敗歷史
+        try:
+            script_credits = script.get("credits_used", 0)
+            render_cost = cost if 'cost' in locals() else 0
+            total_credits = script_credits + render_cost
+            
+            history = GenerationHistory(
+                user_id=current_user.id,
+                generation_type="short_video",
+                status="failed",
+                input_params={
+                    "project_id": script.get("project_id") if isinstance(script, dict) else "unknown",
+                    "quality": quality if 'quality' in locals() else "unknown",
+                    "duration": duration if 'duration' in locals() else "unknown",
+                    "script_credits": script_credits,
+                    "render_credits": render_cost,
+                },
+                credits_used=total_credits,  # 記錄總消耗
+                error_message=f"{str(e)}\n{error_traceback[:500]}",
+            )
+            db.add(history)
+            db.commit()
+        except Exception as db_err:
+            print(f"[video_render] ⚠️ 記錄失敗歷史時發生二次錯誤: {db_err}")
+            db.rollback()
         
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"影片生成失敗：{str(e)}"
+            detail=f"影片生成失敗：{str(e)} | Trace: {error_traceback.splitlines()[-1]}"
         )
     finally:
         # OOM 預防：任務完成，釋放配額
