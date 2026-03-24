@@ -629,6 +629,7 @@ class DirectorEngine:
                     config=types.GenerateContentConfig(
                         temperature=0.7,
                         max_output_tokens=4096,
+                        response_mime_type="application/json",
                     )
                 )
                 return response.text
