@@ -344,7 +344,7 @@ class DirectorEngine:
             return script
         except Exception as e:
             print(f"Gemini API 錯誤: {e}")
-            return self._generate_fallback_script(request, brand, avatar)
+            return self._generate_fallback_script(request, brand, avatar, error=f"Gemini API Error: {str(e)}")
     
     def _build_system_prompt(self, brand: BrandProfile, avatar: Optional[AvatarAsset]) -> str:
         """
@@ -660,12 +660,12 @@ class DirectorEngine:
         # 提取 JSON
         json_match = re.search(r'\{[\s\S]*\}', response)
         if not json_match:
-            return self._generate_fallback_script(request, brand, avatar)
+            return self._generate_fallback_script(request, brand, avatar, error="Gemini JSON Match Failed. Raw: " + response[:100])
         
         try:
             data = json.loads(json_match.group())
-        except json.JSONDecodeError:
-            return self._generate_fallback_script(request, brand, avatar)
+        except json.JSONDecodeError as e:
+            return self._generate_fallback_script(request, brand, avatar, error=f"JSON Decode Error: {str(e)}")
         
         # 基礎負面提示詞
         base_negative = "blurry, pixelated, low quality, distorted, deformed, bad anatomy, extra limbs, mutated hands, cropped, watermark, text, logo, amateur, stock photo, generic, overexposed, underexposed, noisy, grainy, jpeg artifacts, compression, bad lighting, harsh shadows, cluttered, busy background, AI-generated look, uncanny valley"
@@ -731,7 +731,8 @@ class DirectorEngine:
         self,
         request: VideoRequest,
         brand: BrandProfile,
-        avatar: Optional[AvatarAsset]
+        avatar: Optional[AvatarAsset],
+        error: str = ""
     ) -> VideoScript:
         """生成備用腳本 - 專業級品質"""
         import uuid
@@ -853,8 +854,8 @@ human-crafted aesthetic, analog warmth, natural color grading, authentic atmosph
         
         return VideoScript(
             project_id=str(uuid.uuid4()),
-            title=f"{brand.brand_name} - {request.topic}",
-            description=f"關於{request.topic}的短影音",
+            title=f"{brand.brand_name or '影片'} - {request.topic}",
+            description=f"Fallback generated. Error: {error}" if error else f"關於{request.topic}的短影音",
             format=request.format,
             total_duration=duration,
             brand_profile=brand,
