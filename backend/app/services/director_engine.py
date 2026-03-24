@@ -670,15 +670,46 @@ class DirectorEngine:
         import re
         import uuid
         
-        # 提取 JSON
-        json_match = re.search(r'\{[\s\S]*\}', response)
-        if not json_match:
-            return self._generate_fallback_script(request, brand, avatar, error="Gemini JSON Match Failed. Raw: " + response[:100])
+        import re
+        import uuid
         
-        try:
-            data = json.loads(json_match.group())
-        except json.JSONDecodeError as e:
-            return self._generate_fallback_script(request, brand, avatar, error=f"JSON Decode Error: {str(e)}")
+        def clean_and_parse_json(text: str):
+            # 找到第一個 { 
+            start_idx = text.find('{')
+            if start_idx == -1:
+                return None, "No '{' found in response"
+            
+            # 從最後往前找 }
+            end_idx = text.rfind('}')
+            if end_idx == -1 or end_idx < start_idx:
+                # 遭受截斷，強制加上補齊
+                text = text + '"\n}]}'
+                end_idx = text.rfind('}')
+                
+            json_str = text[start_idx:end_idx+1]
+            
+            # 替換掉可能導致解析失敗的常見錯誤 (例如不合法的控制字元、尾隨逗號)
+            json_str = re.sub(r',\s*\}', '}', json_str)
+            json_str = re.sub(r',\s*\]', ']', json_str)
+            # 將單引號修正
+            # 注意：這裡如果是正規的 JSON，應該是雙引號，但我們在 Prompt 強制他內部用單引號
+            
+            try:
+                return json.loads(json_str), None
+            except json.JSONDecodeError as e:
+                # 若還是失敗，嘗試強制補齊陣列與物件
+                try:
+                    return json.loads(json_str + "}"), None
+                except:
+                    try:
+                        return json.loads(json_str + "]}"), None
+                    except:
+                        pass
+                return None, f"JSON Decode Error: {str(e)}\nRaw JSON snippet: {json_str[:200]}"
+
+        data, err_msg = clean_and_parse_json(response)
+        if not data:
+            return self._generate_fallback_script(request, brand, avatar, error=err_msg)
         
         # 基礎負面提示詞
         base_negative = "blurry, pixelated, low quality, distorted, deformed, bad anatomy, extra limbs, mutated hands, cropped, watermark, text, logo, amateur, stock photo, generic, overexposed, underexposed, noisy, grainy, jpeg artifacts, compression, bad lighting, harsh shadows, cluttered, busy background, AI-generated look, uncanny valley"
