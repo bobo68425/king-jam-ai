@@ -1465,29 +1465,38 @@ async def render_video(
         db.add(history)
         db.commit()
         db.refresh(history)
+        history_id = history.id
         
         # 提交非同步任務
         # 確保 custom_images 使用字串 Key，避免 JSON 序列化問題
         task_custom_images = None
         if custom_images_dict:
             task_custom_images = {str(k): v for k, v in custom_images_dict.items()}
-            
-        task = render_video_v2_task.delay(
-            user_id=current_user.id,
-            script=script,
-            quality=quality,
-            custom_images=task_custom_images,
-            custom_music_base64=custom_music_base64,
-            custom_music_name=custom_music_name,
-            history_id=history.id
+        
+        # ★ ignore_result=True: Celery 跳過 Redis result backend
+        # ★ 任務進度改由 GenerationHistory (PostgreSQL) 追蹤
+        render_video_v2_task.apply_async(
+            kwargs=dict(
+                user_id=current_user.id,
+                script=script,
+                quality=quality,
+                custom_images=task_custom_images,
+                custom_music_base64=custom_music_base64,
+                custom_music_name=custom_music_name,
+                history_id=history_id,
+            ),
+            ignore_result=True,
         )
         
+        print(f"[video_render] ✅ 任務已提交，history_id={history_id}")
+        
         return RenderVideoResponse(
-            task_id=task.id,
+            task_id=str(history_id),  # 前端用 history_id 輪詢 DB 狀態
             duration=float(duration),
             format=script.get("format", "9:16"),
             credits_used=total_credits
         )
+
         
     except Exception as e:
         # 詳細日誌記錄
@@ -1529,6 +1538,51 @@ async def render_video(
     finally:
         # OOM 預防：任務完成，釋放配額
         video_rate_limiter.complete_task(current_user.id, task_id)
+
+
+@router.get("/history/{history_id}/status")
+async def get_render_status(
+    history_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    查詢影片渲染進度（基於 PostgreSQL GenerationHistory）
+    
+    不依賴 Redis result backend，解決「Retry limit exceeded」問題。
+    """
+    history = db.query(GenerationHistory).filter(
+        GenerationHistory.id == history_id,
+        GenerationHistory.user_id == current_user.id,
+    ).first()
+    
+    if not history:
+        raise HTTPException(status_code=404, detail="找不到此渲染任務")
+    
+    # 映射 DB 狀態到 Celery 相容格式（讓前端不需要改判斷邏輯）
+    STATUS_MAP = {
+        "pending": "PENDING",
+        "processing": "STARTED",
+        "completed": "SUCCESS",
+        "failed": "FAILURE",
+    }
+    celery_status = STATUS_MAP.get(history.status, "PENDING")
+    
+    result = None
+    error = None
+    
+    if history.status == "completed" and history.output_data:
+        result = history.output_data  # 包含 video_url 等欄位
+    elif history.status == "failed":
+        error = history.error_message or "影片生成失敗"
+    
+    return {
+        "task_id": str(history_id),
+        "status": celery_status,
+        "db_status": history.status,
+        "result": result,
+        "error": error,
+    }
 
 
 @router.post("/render-preview")

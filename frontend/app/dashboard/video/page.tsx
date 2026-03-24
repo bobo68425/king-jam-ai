@@ -2168,10 +2168,10 @@ export default function VideoPage() {
         custom_images: customImagesData
       });
 
-      // 處理非同步任務 (Polling)
+      // 處理非同步任務 (Polling) — 使用 history_id 輪詢 PostgreSQL
       if (response.data.task_id) {
         const taskId = response.data.task_id;
-        console.log(`[Video] 收到任務 ID: ${taskId}，開始輪詢進度...`);
+        console.log(`[Video] 收到任務 ID (history_id): ${taskId}，開始輪詢進度...`);
         
         let attempts = 0;
         const maxAttempts = 120; // 10 分鐘 (5s * 120)
@@ -2181,7 +2181,8 @@ export default function VideoPage() {
           await new Promise(r => setTimeout(r, 5000));
           
           try {
-            const statusRes = await api.get(`/tasks/status/${taskId}`);
+            // ★ 使用新的 DB-backed 端點，不依賴 Redis
+            const statusRes = await api.get(`/video/history/${taskId}/status`);
             const statusData = statusRes.data;
             
             if (statusData.status === "SUCCESS" && statusData.result) {
@@ -2213,7 +2214,7 @@ export default function VideoPage() {
                 const step = 95 / maxAttempts;
                 return Math.min(95, prev + step);
               });
-              console.log(`[Video] 任務狀態: ${statusData.status}`);
+              console.log(`[Video] 任務狀態: ${statusData.status} (db: ${statusData.db_status})`);
             }
           } catch (pollingError: any) {
             console.error("[Video] 輪詢出錯:", pollingError);
