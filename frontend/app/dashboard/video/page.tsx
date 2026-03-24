@@ -1378,6 +1378,8 @@ export default function VideoPage() {
         duration: actualDuration,
         format: aspectRatio,
         goal: selectedGoal,
+        // Kling 多場景：明確告訴後端要幾個場景（每個場景 = 一次 Kling API 呼叫）
+        ...(model.startsWith("kling") ? { scene_count: 3 } : {}),
       });
 
       // 從回應中提取腳本摘要

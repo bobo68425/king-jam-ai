@@ -294,6 +294,10 @@ class VideoRequest(BaseModel):
     duration: VideoDuration = Field(default=VideoDuration.QUICK_8)
     format: VideoFormat = Field(default=VideoFormat.VERTICAL_9_16)
     
+    # Kling 多場景模式：每個場景各自生成一支短片再串接
+    # scene_count > 1 表示要生成多場景（每個場景 = 一次 Kling API 呼叫）
+    scene_count: Optional[int] = Field(default=None, description="目標場景數（Kling 多場景時設定）")
+    
     # 可選的額外資訊
     product_name: Optional[str] = None
     product_features: Optional[List[str]] = None
@@ -534,6 +538,14 @@ class DirectorEngine:
         else:
             title_line = "🎬 請創作一支精彩的短影音（注意：旁白中請勿提及任何品牌名稱）"
         
+        # 計算場景數：如果有指定就用，否則依們 clip 時長自動推算
+        clip_dur = int(request.duration.value)
+        scene_count = request.scene_count if request.scene_count else (
+            3 if clip_dur <= 5 else
+            2 if clip_dur <= 10 else
+            4 if clip_dur <= 30 else 5
+        )
+        
         return f"""{title_line}
 
 ## 📌 基本需求
@@ -578,11 +590,11 @@ class DirectorEngine:
 - 品牌 logo 或名稱必須出現
 
 ## 🎨 場景類型建議
-根據 {request.duration.value} 秒影片，建議場景分配：
-{self._get_scene_allocation_guide(int(request.duration.value))}
+根據 {clip_dur} 秒/場景、共 {scene_count} 個場景（總時長約 {clip_dur * scene_count} 秒）的影片：
+{self._get_scene_allocation_guide(clip_dur, scene_count)}
 
 請生成完整的 JSON 格式腳本，每個 visual_prompt 都必須是可直接用於 AI 影片生成的專業提示詞！
-確保所有場景的 duration_seconds 加總等於 {request.duration.value} 秒！
+確保 scenes 陣列包含 **恰好 {scene_count} 個場景**，每個場景的 duration_seconds 設為 {clip_dur}！
 """
     
     async def _call_gemini(self, system_prompt: str, user_prompt: str) -> str:
@@ -843,36 +855,37 @@ human-crafted aesthetic, analog warmth, natural color grading, authentic atmosph
             target_platform=request.platform
         )
     
-    def _get_scene_allocation_guide(self, duration: int) -> str:
-        """根據時長生成場景分配建議"""
-        if duration <= 5:
-            return """- **Highlight (單一場景)**：5 秒，一鏡到底的視覺衝擊
-⚠️ 5 秒影片只需 1 個場景，必須在一個畫面內完整傳達訊息！
-🎯 建議：產品特寫 + 品牌元素 + 動態鏡頭運動"""
-        elif duration <= 8:
-            return """- **Hook (開場)**：3 秒，快速抓住注意力
-- **CTA (行動呼籲)**：5 秒，直接展示價值並行動呼籲
-⚠️ 8 秒影片只需 2 個場景，務必精簡有力！"""
-        elif duration == 10:
-            return """- **Hook (開場)**：4 秒，抓住注意力並建立情境
-- **CTA (行動呼籲)**：6 秒，展示核心價值並強力收尾
-⚠️ 10 秒影片只需 2 個場景，節奏緊湊，訊息明確！"""
-        elif duration == 15:
-            return """- **Hook (開場)**：3 秒，抓住注意力
-- **Solution (解方/展示)**：7 秒，核心內容
-- **CTA (行動呼籲)**：5 秒，強力收尾"""
-        elif duration == 30:
-            return """- **Hook (開場)**：3 秒，抓住注意力
-- **Problem (痛點)**：8 秒，展示問題
-- **Solution (解方)**：10 秒，展示解決方案
-- **CTA (行動呼籲)**：9 秒，強力收尾"""
+    def _get_scene_allocation_guide(self, clip_duration: int, scene_count: int) -> str:
+        """根據每個場景時長和場景數生成場景分配建議"""
+        scene_labels = ["Hook (開場)", "Problem (痛點)", "Solution (解方)", "Demonstration (展示)", "CTA (行動呼籲)"]
+        total_sec = clip_duration * scene_count
+        
+        # 根據 scene_count 自動分配場景類型
+        if scene_count == 1:
+            return f"""- **Hook + CTA（單一場景）**：{clip_duration} 秒，一鏡到底，直接展示核心訊息 + 行動呼籲
+⚠️ 只有 1 個場景！必須在單個鏡頭內同時傳達品牌識別和行動呼籲！"""
+        elif scene_count == 2:
+            return f"""- **Hook（開場）**：{clip_duration} 秒，視覺衝擊 + 情感鉤子
+- **CTA（行動呼籲）**：{clip_duration} 秒，核心訊息 + 強力收尾
+共 2 個場景，每場景各 {clip_duration} 秒，串接後共 {total_sec} 秒。"""
+        elif scene_count == 3:
+            return f"""- **Hook（開場）**：{clip_duration} 秒，視覺衝擊 + 情感鉤子
+- **Solution（解方展示）**：{clip_duration} 秒，核心價值 + 產品亮點
+- **CTA（行動呼籲）**：{clip_duration} 秒，強力收尾 + 行動呼籲
+共 3 個場景，每場景各 {clip_duration} 秒，串接後共 {total_sec} 秒。"""
+        elif scene_count == 4:
+            return f"""- **Hook（開場）**：{clip_duration} 秒，視覺衝擊 + 情感鉤子
+- **Problem（痛點）**：{clip_duration} 秒，展示問題/需求
+- **Solution（解方）**：{clip_duration} 秒，核心解決方案
+- **CTA（行動呼籲）**：{clip_duration} 秒，強力收尾
+共 4 個場景，每場景各 {clip_duration} 秒，串接後共 {total_sec} 秒。"""
         else:
-            return """- **Hook (開場)**：3 秒，抓住注意力
-- **Problem (痛點)**：10 秒，展示問題
-- **Solution (解方)**：15 秒，展示解決方案
-- **Demonstration (展示)**：17 秒，效果展示
-- **CTA (行動呼籲)**：15 秒，強力收尾"""
-    
+            lines = []
+            for i in range(scene_count):
+                label = scene_labels[i] if i < len(scene_labels) else f"場景 {i+1}"
+                lines.append(f"- **{label}**：{clip_duration} 秒")
+            lines.append(f"共 {scene_count} 個場景，每場景各 {clip_duration} 秒，串接後共 {total_sec} 秒。")
+            return "\n".join(lines)
     def _get_fallback_narration(
         self,
         scene_type: SceneType,

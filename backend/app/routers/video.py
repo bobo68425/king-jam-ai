@@ -177,6 +177,9 @@ class VideoGenerateRequest(BaseModel):
     key_message: Optional[str] = Field(None, max_length=200)
     reference_style: Optional[str] = Field(None, max_length=200)
     
+    # Kling 多場景模式：場景數（預設 None = 依 clip 時長自動推算）
+    scene_count: Optional[int] = Field(None, ge=1, le=10, description="目標場景數，超過 1 時每場景各自生成 Kling 短片")
+    
     # 品牌設定
     brand: Optional[BrandProfileRequest] = None
     brand_template: Optional[str] = Field(None, description="使用預設模板：tech_startup/lifestyle_brand/food_beverage")
@@ -451,6 +454,7 @@ async def generate_video_script(
         product_features=request.product_features,
         key_message=request.key_message,
         reference_style=request.reference_style,
+        scene_count=request.scene_count,
     )
     
     # 5. 先扣除點數（使用 CreditService 記錄交易）
