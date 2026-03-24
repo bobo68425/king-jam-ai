@@ -599,6 +599,7 @@ class DirectorEngine:
     
     async def _call_gemini(self, system_prompt: str, user_prompt: str) -> str:
         """調用 Gemini API（含 429 重試機制）"""
+        import traceback
         import asyncio
 
         full_prompt = f"{system_prompt}\n\n---\n\n{user_prompt}"
@@ -625,6 +626,8 @@ class DirectorEngine:
 
             except Exception as e:
                 err_str = str(e).lower()
+                print(f"[DirectorEngine] Gemini 嘗試 {attempt} 失敗: {e}")
+                
                 is_rate_limit = any(code in err_str for code in _RATE_LIMIT_CODES)
 
                 if is_rate_limit and attempt < len(_RETRY_MODELS):
@@ -640,6 +643,7 @@ class DirectorEngine:
                     break
 
         # 所有重試皆失敗 → 交給呼叫端 fallback
+        print(f"[DirectorEngine] 所有 Gemini 重試皆失敗: {last_error}")
         raise last_error
     
     def _parse_response(
@@ -762,33 +766,40 @@ class DirectorEngine:
         scenes = []
         scene_types = [SceneType.HOOK, SceneType.PROBLEM, SceneType.SOLUTION, SceneType.DEMONSTRATION, SceneType.CTA]
         
+        # 清理可能包含中文的屬性（因為 Kling prompt 必須是純英文）
+        safe_industry = "commercial" if brand.industry in ["綜合", "General", ""] else brand.industry.replace("綜合", "commercial")
+        safe_style = "cinematic" if any("\u4e00" <= c <= "\u9fff" for c in brand.visual_style) else brand.visual_style
+        
+        # 將主題加入以增加關聯性
+        topic_context = request.topic[:30] if request.topic else safe_industry
+        
         # 專業級視覺提示詞模板
         visual_prompts = {
-            SceneType.HOOK: f"""Cinematic opening shot: Smooth dolly in revealing {brand.industry} scene, 
+            SceneType.HOOK: f"""Cinematic opening shot: Smooth dolly in revealing {topic_context} scene, 
 dramatic rim lighting with {brand.primary_color} color accent creating depth, 
 lens flare catching golden hour light, shallow depth of field with creamy bokeh,
 professional advertising aesthetic, 8K resolution, film grain texture,
 premium commercial quality, broadcast standard, color graded for impact""",
             
-            SceneType.PROBLEM: f"""Intimate push-in shot: Subject with contemplative expression, 
-soft diffused window light creating gentle shadows, {brand.visual_style} environment,
+            SceneType.PROBLEM: f"""Intimate push-in shot: Subject with contemplative expression in {topic_context} context, 
+soft diffused window light creating gentle shadows, {safe_style} environment,
 cool tones transitioning to warm {brand.secondary_color} highlights,
 emotional documentary style, authentic moment captured, shallow focus,
 8K cinematic quality, professional color grading, natural skin tones""",
             
-            SceneType.SOLUTION: f"""Elegant reveal shot: Smooth crane descending to reveal {brand.industry} solution,
-{brand.visual_style} scene bathed in {brand.primary_color} accent lighting,
+            SceneType.SOLUTION: f"""Elegant reveal shot: Smooth crane descending to reveal premium {topic_context} solution,
+{safe_style} scene bathed in {brand.primary_color} accent lighting,
 premium atmosphere with subtle particle effects, glass and metal reflections,
 luxurious depth with multiple focal planes, 8K resolution, film-quality production,
 advertising agency standard, broadcast ready, pristine image quality""",
             
-            SceneType.DEMONSTRATION: f"""Dynamic tracking shot: Camera orbiting around subject showcasing intricate details,
+            SceneType.DEMONSTRATION: f"""Dynamic tracking shot: Camera orbiting around {topic_context} subject showcasing intricate details,
 soft rim lighting creating dimensional separation with {brand.primary_color} glow,
-{brand.visual_style} aesthetic, macro-like clarity on textures,
+{safe_style} aesthetic, macro-like clarity on textures,
 beautiful bokeh spheres in background, 8K quality, professional product photography,
 color graded for premium feel, sharp focus on details, cinematic motion""",
             
-            SceneType.CTA: f"""Powerful establishing shot: Confident composition with {brand.visual_style} aesthetic,
+            SceneType.CTA: f"""Powerful establishing shot: Confident composition with {safe_style} aesthetic related to {topic_context},
 bold {brand.primary_color} accent colors creating visual impact,
 clean negative space for brand message, professional studio lighting,
 uplifting golden hour atmosphere, 8K cinematic quality, broadcast ready,
