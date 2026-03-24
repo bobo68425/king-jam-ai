@@ -618,159 +618,229 @@ class VideoGeneratorService:
         kling_duration = 10 if "10s" in model else 5
         
         try:
-            # 步驟 1: 生成起始圖片
-            print(f"[VideoGenerator] 🖼️ 生成起始圖片...")
+            is_pro = "pro" in model
+            kling_mode = "pro" if is_pro else "standard"
+            kling_duration = 10 if "10s" in model else 5
             
-            # 取第一個場景的視覺描述
-            first_scene = scenes[0] if scenes else {}
-            image_prompt = first_scene.get("visual_prompt", prompt)
+            format_str = script.get("format", "9:16")
             color_palette = script.get("color_palette", ["#6366F1", "#8B5CF6"])
-            
+            title = script.get("title", "")
+
             # 根據比例設置圖片尺寸
             size_map = {
-                "9:16": (720, 1280) if not is_pro else (1080, 1920),
-                "16:9": (1280, 720) if not is_pro else (1920, 1080),
-                "1:1": (1024, 1024),
+                "9:16":  (720, 1280) if not is_pro else (1080, 1920),
+                "16:9":  (1280, 720) if not is_pro else (1920, 1080),
+                "1:1":   (1024, 1024),
             }
             width, height = size_map.get(format_str, (720, 1280))
             
-            import base64
-            import io
-            start_image_data = None
-            
-            # 方法 1: 嘗試使用 Imagen
+            import base64, httpx
             img_client = vertexai_client or genai_client
-            imagen_models = [
-                "models/imagen-4.0-fast-generate-001",
-                "models/gemini-2.5-flash-exp-image-generation",
-            ]
             
-            for model_name in imagen_models:
-                try:
-                    if img_client and hasattr(img_client.models, 'generate_images'):
-                        response = await asyncio.wait_for(
-                            asyncio.to_thread(
-                                img_client.models.generate_images,
-                                model=model_name,
-                                prompt=image_prompt
-                            ),
-                            timeout=60.0
-                        )
-                        
-                        if response and hasattr(response, 'generated_images') and response.generated_images:
-                            img_bytes = response.generated_images[0].image.image_bytes
-                            start_image_data = f"data:image/png;base64,{base64.b64encode(img_bytes).decode()}"
-                            print(f"[VideoGenerator] ✅ 起始圖片生成完成 (Imagen)")
-                            break
-                except Exception as img_err:
-                    continue
-            
-            # 方法 2: 使用明亮起始圖片（專為 Kling 優化）
-            if not start_image_data:
-                print(f"[VideoGenerator] 📐 生成明亮起始圖片...")
-                start_image_data = self._generate_kling_start_image(color_palette, width, height, title)
-                if start_image_data:
-                    print(f"[VideoGenerator] ✅ 明亮起始圖片生成完成")
-            
-            if not start_image_data:
-                print("[VideoGenerator] ❌ 起始圖片生成失敗")
-                return None
-            
-            # 步驟 2: 調用 Kling v2.1 生成影片
-            print(f"[VideoGenerator] 🎥 開始 Kling v2.1 影片生成...")
-            print(f"[VideoGenerator] 📝 提示詞: {prompt[:100]}...")
-            print(f"[VideoGenerator] ⚙️ 模式: {kling_mode}, 時長: {kling_duration}秒")
-            
-            # Kling 專用 negative prompt（避免常見問題）
-            kling_negative = """blurry, out of focus, low resolution, pixelated, 
-grainy noise, compression artifacts, watermark, logo, text overlay, 
-distorted faces, unnatural movements, jittery motion, choppy animation,
-amateur lighting, overexposed, underexposed, washed out colors,
-static image, no motion, frozen frame, glitch, artifact"""
-
-            output = await asyncio.to_thread(
-                client.run,
-                THIRD_PARTY_VIDEO_MODELS["kling"],
-                input={
-                    "prompt": prompt,
-                    "start_image": start_image_data,
-                    "mode": kling_mode,
-                    "duration": kling_duration,
-                    "negative_prompt": kling_negative,
-                }
+            kling_negative = (
+                "blurry, out of focus, low resolution, pixelated, "
+                "grainy noise, compression artifacts, watermark, logo, text overlay, "
+                "distorted faces, unnatural movements, jittery motion, choppy animation, "
+                "amateur lighting, overexposed, underexposed, washed out colors, "
+                "static image, no motion, frozen frame, glitch, artifact"
             )
             
-            # 處理輸出（可能是 URL、FileOutput 或 iterator）
-            video_url_remote = None
-            print(f"[VideoGenerator] 📦 Kling 返回類型: {type(output)}")
-            print(f"[VideoGenerator] 📦 Kling 返回內容: {output}")
-            
-            if isinstance(output, str):
-                video_url_remote = output
-            elif hasattr(output, 'url'):
-                # FileOutput 對象
-                video_url_remote = str(output.url) if hasattr(output.url, '__str__') else output.url
-            elif hasattr(output, '__iter__'):
-                for item in output:
-                    print(f"[VideoGenerator] 📦 迭代項目: {type(item)} - {item}")
-                    if isinstance(item, str) and item.startswith('http'):
-                        video_url_remote = item
-                        break
-                    elif hasattr(item, 'url'):
-                        video_url_remote = str(item.url)
-                        break
-            
-            if not video_url_remote:
-                print("[VideoGenerator] ❌ Kling 未返回影片 URL")
-                return None
-            
-            print(f"[VideoGenerator] ✅ Kling 影片生成成功！URL: {video_url_remote[:80]}...")
-            
-            # 下載影片到本地
-            import httpx
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await client.get(video_url_remote)
-                if response.status_code != 200:
-                    print(f"[VideoGenerator] ❌ 下載 Kling 影片失敗: {response.status_code}")
-                    return None
-                video_bytes = response.content
-            
-            # 保存到靜態目錄
             static_dir = Path("/app/static/videos")
             static_dir.mkdir(parents=True, exist_ok=True)
             
+            # ============================================================
+            # 多場景迴圈：每個場景獨立生成圖片 → Kling 短片
+            # ============================================================
+            scene_clip_paths = []
+            
+            for scene_idx, scene in enumerate(scenes):
+                scene_visual_prompt = scene.get("visual_prompt", "")
+                scene_camera = scene.get("camera_movement", "static")
+                
+                # 1. 建立此場景的 Kling prompt
+                scene_prompt = self._build_kling_scene_prompt(
+                    scene_visual_prompt, scene_camera, script
+                )
+                print(f"[VideoGenerator] 🎬 場景 {scene_idx+1}/{len(scenes)} 提示詞: {scene_prompt[:80]}...")
+                
+                # 2. 取得此場景的起始圖片（優先順序：custom → Imagen → 黑幕）
+                start_image_data = None
+                
+                # 2a. 使用者上傳的自訂圖片
+                if hasattr(self, '_custom_images'):
+                    start_image_data = (
+                        self._custom_images.get(scene_idx)
+                        or self._custom_images.get(str(scene_idx))
+                    )
+                    if start_image_data:
+                        print(f"[VideoGenerator] 🖼️ 場景 {scene_idx+1} 使用自訂圖片")
+                
+                # 2b. Imagen 生成圖片
+                if not start_image_data:
+                    imagen_models = [
+                        "models/imagen-4.0-fast-generate-001",
+                        "models/gemini-2.5-flash-exp-image-generation",
+                    ]
+                    for model_name in imagen_models:
+                        try:
+                            if img_client and hasattr(img_client.models, 'generate_images'):
+                                resp = await asyncio.wait_for(
+                                    asyncio.to_thread(
+                                        img_client.models.generate_images,
+                                        model=model_name,
+                                        prompt=scene_visual_prompt or scene_prompt
+                                    ),
+                                    timeout=60.0
+                                )
+                                if resp and hasattr(resp, 'generated_images') and resp.generated_images:
+                                    img_bytes = resp.generated_images[0].image.image_bytes
+                                    start_image_data = f"data:image/png;base64,{base64.b64encode(img_bytes).decode()}"
+                                    print(f"[VideoGenerator] ✅ 場景 {scene_idx+1} Imagen 圖片生成完成")
+                                    break
+                        except Exception:
+                            continue
+                
+                # 2c. 純黑備用圖片
+                if not start_image_data:
+                    start_image_data = self._generate_kling_start_image(
+                        color_palette, width, height, title
+                    )
+                    print(f"[VideoGenerator] ⬛ 場景 {scene_idx+1} 使用黑幕備用圖片")
+                
+                if not start_image_data:
+                    print(f"[VideoGenerator] ⚠️ 場景 {scene_idx+1} 無法取得起始圖片，跳過")
+                    continue
+                
+                # 3. 呼叫 Kling 生成短片
+                try:
+                    print(f"[VideoGenerator] 🎥 場景 {scene_idx+1} 開始 Kling 生成... (模式={kling_mode}, 時長={kling_duration}s)")
+                    output = await asyncio.to_thread(
+                        client.run,
+                        THIRD_PARTY_VIDEO_MODELS["kling"],
+                        input={
+                            "prompt": scene_prompt,
+                            "start_image": start_image_data,
+                            "mode": kling_mode,
+                            "duration": kling_duration,
+                            "negative_prompt": kling_negative,
+                        }
+                    )
+                    
+                    # 取得影片 URL
+                    video_url_remote = None
+                    if isinstance(output, str):
+                        video_url_remote = output
+                    elif hasattr(output, 'url'):
+                        video_url_remote = str(output.url)
+                    elif hasattr(output, '__iter__'):
+                        for item in output:
+                            if isinstance(item, str) and item.startswith('http'):
+                                video_url_remote = item
+                                break
+                            elif hasattr(item, 'url'):
+                                video_url_remote = str(item.url)
+                                break
+                    
+                    if not video_url_remote:
+                        print(f"[VideoGenerator] ⚠️ 場景 {scene_idx+1} Kling 未返回 URL，跳過")
+                        continue
+                    
+                    # 4. 下載此場景短片
+                    async with httpx.AsyncClient(timeout=120.0) as http:
+                        resp = await http.get(video_url_remote)
+                        if resp.status_code != 200:
+                            print(f"[VideoGenerator] ⚠️ 場景 {scene_idx+1} 下載失敗: {resp.status_code}")
+                            continue
+                        clip_bytes = resp.content
+                    
+                    clip_path = static_dir / f"kling_{project_id}_scene{scene_idx}.mp4"
+                    clip_path.write_bytes(clip_bytes)
+                    scene_clip_paths.append(str(clip_path))
+                    print(f"[VideoGenerator] ✅ 場景 {scene_idx+1} 短片已保存 ({len(clip_bytes)/1024/1024:.1f} MB)")
+                    
+                except Exception as scene_err:
+                    print(f"[VideoGenerator] ❌ 場景 {scene_idx+1} Kling 生成失敗: {scene_err}")
+                    continue
+            
+            if not scene_clip_paths:
+                print("[VideoGenerator] ❌ 所有場景都失敗")
+                return None
+            
+            # ============================================================
+            # FFmpeg 串接所有場景短片
+            # ============================================================
+            if len(scene_clip_paths) == 1:
+                # 只有一個場景，直接用
+                final_clip_path = scene_clip_paths[0]
+                final_clip_bytes = Path(final_clip_path).read_bytes()
+            else:
+                print(f"[VideoGenerator] 🔗 FFmpeg 串接 {len(scene_clip_paths)} 個場景...")
+                concat_list_path = static_dir / f"kling_{project_id}_concat.txt"
+                with open(concat_list_path, "w") as f:
+                    for p in scene_clip_paths:
+                        f.write(f"file '{p}'\n")
+                
+                final_clip_path = str(static_dir / f"kling_{project_id}_concat.mp4")
+                ffmpeg_cmd = [
+                    "ffmpeg", "-y",
+                    "-f", "concat", "-safe", "0",
+                    "-i", str(concat_list_path),
+                    "-c", "copy",
+                    final_clip_path
+                ]
+                proc = await asyncio.create_subprocess_exec(
+                    *ffmpeg_cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                _, ffmpeg_stderr = await proc.communicate()
+                if proc.returncode != 0:
+                    print(f"[VideoGenerator] ⚠️ FFmpeg 串接失敗: {ffmpeg_stderr.decode()[-300:]}")
+                    # Fallback：只用第一個成功的短片
+                    final_clip_path = scene_clip_paths[0]
+                else:
+                    print(f"[VideoGenerator] ✅ FFmpeg 串接完成: {final_clip_path}")
+                
+                # 清理場景短片和 concat list
+                for p in scene_clip_paths:
+                    try:
+                        os.remove(p)
+                    except Exception:
+                        pass
+                try:
+                    os.remove(str(concat_list_path))
+                except Exception:
+                    pass
+                
+                final_clip_bytes = Path(final_clip_path).read_bytes()
+            
             video_filename = f"kling_{project_id}.mp4"
-            static_path = static_dir / video_filename
-            
-            with open(static_path, "wb") as f:
-                f.write(video_bytes)
-            
-            print(f"[VideoGenerator] 📁 Kling 影片已保存: {static_path}, 大小: {len(video_bytes) / 1024 / 1024:.2f} MB")
-            
-            # 🔊 添加音訊處理（TTS + 背景音樂）
+            final_save_path = static_dir / video_filename
+            Path(final_clip_path).rename(final_save_path)
+            final_size = len(final_clip_bytes)
+
+            # 🔊 添加音訊
+            total_kling_duration = kling_duration * len(scene_clip_paths)
             final_video_path = await self._add_audio_to_video(
-                video_path=str(static_path),
+                video_path=str(final_save_path),
                 script=script,
                 project_id=project_id,
-                duration=kling_duration
+                duration=total_kling_duration
             )
             
-            if final_video_path and final_video_path != str(static_path):
-                # 如果生成了新的帶音訊影片，更新路徑
+            if final_video_path and final_video_path != str(final_save_path):
                 video_filename = os.path.basename(final_video_path)
                 final_size = os.path.getsize(final_video_path)
-                print(f"[VideoGenerator] 🔊 音訊已添加，最終影片: {final_video_path}, 大小: {final_size / 1024 / 1024:.2f} MB")
                 upload_path = final_video_path
             else:
-                final_size = len(video_bytes)
-                upload_path = str(static_path)
+                upload_path = str(final_save_path)
             
             # 上傳到雲端儲存
             video_url = f"/video/download/{video_filename}"
             try:
                 from app.services.cloud_storage import cloud_storage
                 if cloud_storage.is_configured():
-                    print(f"[VideoGenerator] ☁️ 正在上傳 Kling 影片到雲端儲存...")
+                    print(f"[VideoGenerator] ☁️ 上傳 Kling 影片到雲端...")
                     upload_result = cloud_storage.upload_file(
                         file_path=upload_path,
                         user_id=0,
@@ -779,25 +849,21 @@ static image, no motion, frozen frame, glitch, artifact"""
                     )
                     if upload_result.get("success"):
                         video_url = upload_result["url"]
-                        print(f"[VideoGenerator] ✅ Kling 雲端上傳成功: {video_url}")
-                        # 刪除本地檔案
-                        try:
-                            os.remove(upload_path)
-                            if upload_path != str(static_path) and os.path.exists(static_path):
-                                os.remove(static_path)
-                        except Exception as e:
-                            print(f"[VideoGenerator] Error removing local file: {e}")
-                            pass
-                    else:
-                        print(f"[VideoGenerator] ⚠️ Kling 雲端上傳失敗: {upload_result.get('error')}")
+                        print(f"[VideoGenerator] ✅ 雲端上傳成功: {video_url}")
+                        for p in [upload_path, str(final_save_path)]:
+                            try:
+                                if os.path.exists(p):
+                                    os.remove(p)
+                            except Exception:
+                                pass
             except Exception as e:
-                print(f"[VideoGenerator] ⚠️ Kling 雲端儲存異常: {e}")
+                print(f"[VideoGenerator] ⚠️ 雲端儲存異常: {e}")
             
             return VideoResult(
                 video_url=video_url,
                 video_base64=None,
                 thumbnail_url=None,
-                duration=int(kling_duration),
+                duration=int(total_kling_duration),
                 format=format_str,
                 file_size=final_size,
                 scene_images=None,
@@ -807,6 +873,29 @@ static image, no motion, frozen frame, glitch, artifact"""
         except Exception as e:
             print(f"[VideoGenerator] ❌ Kling 生成失敗: {e}")
             return None
+
+
+
+    def _build_kling_scene_prompt(
+        self,
+        visual_prompt: str,
+        camera_movement: str,
+        script: Dict[str, Any],
+    ) -> str:
+        """
+        為單一場景建立 Kling 提示詞。
+        
+        直接使用場景自身的 visual_prompt 和 camera_movement，
+        不需要截取整個腳本的第一個場景。
+        """
+        fake_scene = {
+            "visual_prompt": visual_prompt,
+            "camera_movement": camera_movement,
+        }
+        # 建立一個只含此場景的臨時腳本，讓 _build_kling_prompt 處理
+        scene_script = {**script, "scenes": [fake_scene]}
+        return self._build_kling_prompt(scene_script)
+
     
     def _generate_kling_start_image(
         self, 
@@ -862,13 +951,15 @@ static image, no motion, frozen frame, glitch, artifact"""
         color_palette = script.get("color_palette", ["#6366F1", "#8B5CF6"])
         personality = script.get("personality", "professional")
         
-        # 從第一個場景提取視覺提示詞
+        # 從第一個場景提取視覺提示詞（_build_kling_prompt 只用於無圖片的 fallback 情境）
         first_scene = scenes[0] if scenes else {}
         visual_prompt = first_scene.get("visual_prompt", "")
-        camera_movement = first_scene.get("camera_movement", "smooth dolly forward")
+        camera_movement = first_scene.get("camera_movement", "static")
         
         # Kling 專用的運鏡詞彙
+        # ★ 修正：包含 director_engine 輸出的所有底線格式（dolly_in, crane_up 等）
         CAMERA_MOVES = {
+            # 基本格式
             "dolly": "smooth dolly forward revealing the scene",
             "pan": "elegant pan across the environment",
             "tracking": "dynamic tracking shot following the subject",
@@ -877,6 +968,15 @@ static image, no motion, frozen frame, glitch, artifact"""
             "push": "slow push in towards the focal point",
             "pull": "gradual pull back revealing context",
             "static": "locked off shot with subtle subject motion",
+            "handheld": "handheld documentary-style camera with natural sway",
+            "steadicam": "smooth steadicam glide through the environment",
+            # 底線格式（director_engine 實際輸出的值）
+            "dolly_in": "smooth dolly in, gradually approaching the subject",
+            "dolly_out": "slow dolly out revealing the wider scene",
+            "crane_up": "cinematic crane rising up to reveal the environment",
+            "crane_down": "graceful crane descending to focus on subject",
+            "pan_left": "elegant pan left across the scene",
+            "pan_right": "sweeping pan right following the action",
         }
         
         # Kling 專用的動態描述
@@ -897,8 +997,12 @@ static image, no motion, frozen frame, glitch, artifact"""
             "calm": "soft ethereal light with gentle gradients, peaceful luminous atmosphere",
         }
         
-        # 選擇運鏡
-        selected_camera = CAMERA_MOVES.get(camera_movement, random.choice(list(CAMERA_MOVES.values())))
+        # 選擇運鏡（先精確匹配，再前綴匹配，最後 fallback random）
+        selected_camera = CAMERA_MOVES.get(camera_movement)
+        if not selected_camera:
+            # 前綴匹配：dolly_in → 先試 "dolly"
+            prefix = camera_movement.split("_")[0]
+            selected_camera = CAMERA_MOVES.get(prefix, random.choice(list(CAMERA_MOVES.values())))
         
         # 選擇動態風格
         motion_style = MOTION_STYLES.get(personality, MOTION_STYLES["professional"])
@@ -909,47 +1013,32 @@ static image, no motion, frozen frame, glitch, artifact"""
         # 構建提示詞（簡潔但完整）
         prompt_parts = []
         
-        # 1. 核心視覺描述（使用場景的 visual_prompt 或標題）
+        # 1. 核心視覺描述 — 使用完整 visual_prompt，不截斷（Kling 支援豐富描述）
         if visual_prompt:
-            # 清理並使用場景視覺提示詞的核心內容
-            core_visual = visual_prompt.split(",")[0:3]  # 取前3個描述
-            prompt_parts.append(", ".join(core_visual))
+            prompt_parts.append(visual_prompt)
         elif title:
             prompt_parts.append(f"Cinematic scene depicting: {title}")
         elif description:
             prompt_parts.append(f"Visual story about: {description[:80]}")
         
-        # 2. 運鏡描述（Kling 對此反應很好）
-        prompt_parts.append(selected_camera)
+        # 2. 運鏡描述（若 visual_prompt 未包含，補充）
+        if visual_prompt and not any(kw in visual_prompt.lower() for kw in ["dolly", "pan", "tracking", "crane", "orbit", "push", "pull", "handheld"]):
+            prompt_parts.append(selected_camera)
+        elif not visual_prompt:
+            prompt_parts.append(selected_camera)
         
-        # 3. 動態描述
-        prompt_parts.append(motion_style)
+        # 3. 動態 + 光線（若 visual_prompt 不夠完整才補充）
+        if not visual_prompt:
+            prompt_parts.append(motion_style)
+            prompt_parts.append(lighting_style)
         
-        # 4. 光線和氛圍
-        prompt_parts.append(lighting_style)
+        # 4. 品質關鍵詞（固定附加）
+        prompt_parts.append("cinematic 4K quality, professional color grading, shallow depth of field")
         
-        # 5. 品質關鍵詞
-        quality_terms = [
-            "cinematic 4K quality",
-            "professional color grading", 
-            "film grain texture",
-            "shallow depth of field",
-            "broadcast quality production"
-        ]
-        prompt_parts.append(random.choice(quality_terms))
-        
-        # 6. 風格修飾
-        style_terms = [
-            f"{style} aesthetic",
-            "premium visual storytelling",
-            "advertising quality",
-        ]
-        prompt_parts.append(random.choice(style_terms))
-        
-        # 組合提示詞（用逗號分隔，Kling 偏好這種格式）
+        # 組合提示詞
         final_prompt = ", ".join(prompt_parts)
         
-        # 限制長度（Kling 對過長提示詞效果不佳）
+        # 限制長度（Kling 建議 500 字以內）
         if len(final_prompt) > 500:
             final_prompt = final_prompt[:500].rsplit(",", 1)[0]
         
