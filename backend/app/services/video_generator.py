@@ -608,16 +608,9 @@ class VideoGeneratorService:
         scenes = script.get("scenes", [])
         format_str = script.get("format", "9:16")
         title = script.get("title", "")
-        
-        # 構建提示詞
-        prompt = self._build_kling_prompt(script)
-        
-        # Kling 模式：standard (720p) 或 pro (1080p)
-        is_pro = "pro" in model
-        kling_mode = "pro" if is_pro else "standard"
-        kling_duration = 10 if "10s" in model else 5
-        
+
         try:
+
             is_pro = "pro" in model
             kling_mode = "pro" if is_pro else "standard"
             kling_duration = 10 if "10s" in model else 5
@@ -713,7 +706,17 @@ class VideoGeneratorService:
                 
                 # 3. 呼叫 Kling 生成短片
                 try:
-                    print(f"[VideoGenerator] 🎥 場景 {scene_idx+1} 開始 Kling 生成... (模式={kling_mode}, 時長={kling_duration}s)")
+                    img_source = (
+                        "自訂圖片" if hasattr(self, '_custom_images') and (
+                            self._custom_images.get(scene_idx) or self._custom_images.get(str(scene_idx))
+                        ) else
+                        "Imagen生成" if start_image_data and start_image_data.startswith("data:image") else
+                        "黑幕備用"
+                    )
+                    print(f"[VideoGenerator] 🎥 場景 {scene_idx+1}/{len(scenes)} 開始 Kling API")
+                    print(f"[VideoGenerator]   ├─ 模型: kwaivgi/kling-v2.1 | 模式={kling_mode} | 時長={kling_duration}s")
+                    print(f"[VideoGenerator]   ├─ 圖片來源: {img_source}")
+                    print(f"[VideoGenerator]   └─ 完整提示詞: {scene_prompt}")
                     output = await asyncio.to_thread(
                         client.run,
                         THIRD_PARTY_VIDEO_MODELS["kling"],
