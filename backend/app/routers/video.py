@@ -1371,11 +1371,24 @@ async def render_video(
     
     # 1. 計算點數
     cost_table = RENDER_COST.get(quality, RENDER_COST["standard"])
+    scenes = script.get("scenes", [])
+    scene_count = max(1, len(scenes))
+    
     # Kling/Veo 模式用固定價格，標準模式按時長
-    if quality in ["premium", "ultra", "kling", "kling-10s", "kling-pro", "kling-pro-10s"]:
+    if quality in ["premium", "ultra"]:
+        # Veo：整段一次生成，固定費用
         cost = cost_table.get("default", 50)
+        cost_per_scene = cost
+        scene_count_billed = 1
+    elif quality.startswith("kling"):
+        # Kling：每個場景獨立呼叫一次，按場景數計費
+        cost_per_scene = cost_table.get("default", 30)
+        cost = cost_per_scene * scene_count
+        scene_count_billed = scene_count
     else:
         cost = cost_table.get(duration, cost_table.get("30", 80))
+        cost_per_scene = cost
+        scene_count_billed = 1
     
     # 初始化點數服務
     credit_service = CreditService(db)
@@ -1402,12 +1415,19 @@ async def render_video(
         user_id=current_user.id,
         cost=cost,
         transaction_type=tx_type,
-        description=f"影片渲染 - {quality} 品質, {duration}秒",
+        description=(
+            f"影片渲染 - {quality} 品質, {duration}秒, "
+            f"{scene_count_billed} 場景 × {cost_per_scene} 點"
+            if quality.startswith("kling")
+            else f"影片渲染 - {quality} 品質, {duration}秒"
+        ),
         reference_type="video_render",
         metadata={
             "quality": quality,
             "duration": duration,
             "project_id": script.get("project_id"),
+            "scene_count": scene_count_billed,
+            "cost_per_scene": cost_per_scene,
         }
     )
     

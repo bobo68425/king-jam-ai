@@ -978,11 +978,17 @@ export default function VideoPage() {
   const modelDuration = currentModel?.durationSec || 8;
   const scriptCost = SCRIPT_COST_MAP[modelDuration] || 15;
 
-  // 渲染成本：直接使用模型的基礎成本
-  const renderCost = currentModel?.baseCost || 50;
+  // 渲染成本：Kling 按場景數計費，Veo / standard 固定費用
+  const isKlingModel = model.startsWith("kling");
+  const sceneCountFromScript = result?.scenes?.length ?? 0;
+  const renderCostPerScene = currentModel?.baseCost || 50;
+  const renderCost = isKlingModel && sceneCountFromScript > 0
+    ? renderCostPerScene * sceneCountFromScript
+    : renderCostPerScene;  // 腳本未生成前顯示單場景預估
 
   // 總成本 = 腳本 + 渲染（分兩次扣除）
   const creditCost = scriptCost + renderCost;
+
 
   // 從 API 載入歷史記錄
   const loadHistory = async () => {
@@ -2998,6 +3004,17 @@ export default function VideoPage() {
                               <p className="text-center text-xs text-slate-500">
                                 AI 創作中 {Math.round(renderProgress)}%
                               </p>
+
+                              {/* Kling 多場景進度說明 */}
+                              {isKlingModel && sceneCountFromScript > 0 && (
+                                <div className="rounded-lg bg-slate-800/60 border border-slate-700/60 px-3 py-2 text-xs text-slate-400 flex items-center gap-2">
+                                  <Film className="w-3.5 h-3.5 text-pink-400 shrink-0 animate-pulse" />
+                                  <span>
+                                    多場景 Kling 生成中：系統正依序處理 {sceneCountFromScript} 個場景短片，完成後自動串接，請耐心等候…
+                                  </span>
+                                </div>
+                              )}
+
                               {/* 預估等待時間 */}
                               {queueStatus && (
                                 <div className="flex items-center justify-center gap-2 text-xs text-slate-400">
@@ -3012,6 +3029,7 @@ export default function VideoPage() {
                               )}
                             </div>
                           )}
+
                         </div>
                       )}
                     </div>
@@ -3108,7 +3126,12 @@ export default function VideoPage() {
                             {rendering ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Film className="w-4 h-4 mr-2" />}
                             {rendering ? "生成中..." : "直接渲染"}
                             <span className="ml-2 px-1.5 py-0.5 rounded bg-white/20 text-[10px]">
-                              {renderCost} 點
+                              {isKlingModel && sceneCountFromScript > 0
+                                ? `${sceneCountFromScript}場景×${renderCostPerScene}=${renderCost}點`
+                                : isKlingModel
+                                  ? `${renderCostPerScene}點/場景`
+                                  : `${renderCost}點`
+                              }
                             </span>
                           </Button>
                         </div>
@@ -3163,7 +3186,9 @@ export default function VideoPage() {
                                     </div>
                                     <div className="text-right">
                                       <span className="text-pink-400 font-medium text-sm">{m.baseCost}</span>
-                                      <span className="text-[10px] text-slate-500">點</span>
+                                      <span className="text-[10px] text-slate-500">
+                                        {m.value.startsWith("kling") ? "點/場景" : "點"}
+                                      </span>
                                     </div>
                                   </button>
                                 ))}
@@ -3175,6 +3200,31 @@ export default function VideoPage() {
                           <p className="text-xs text-amber-400/70 mt-3 flex items-center gap-1">
                             <AlertCircle className="w-3 h-3" />
                             模型時長不同，正在根據新模型重新生成場景腳本...
+                          </p>
+                        )}
+
+                        {/* Kling 多場景計費說明 */}
+                        {isKlingModel && sceneCountFromScript > 0 && (
+                          <div className="mt-3 rounded-lg bg-amber-500/10 border border-amber-500/30 p-3">
+                            <div className="flex items-start gap-2">
+                              <Zap className="w-3.5 h-3.5 text-amber-400 mt-0.5 shrink-0" />
+                              <div className="text-xs text-amber-300/90 space-y-1">
+                                <p className="font-medium">多場景 Kling 計費說明</p>
+                                <p className="text-amber-300/70">
+                                  每個場景獨立生成圖片 → Kling 短片，最後自動串接。
+                                </p>
+                                <p className="font-mono text-amber-400 bg-amber-500/10 px-2 py-1 rounded text-center">
+                                  {sceneCountFromScript} 場景 × {renderCostPerScene} 點 = <span className="font-bold">{renderCost} 點</span>
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {isKlingModel && sceneCountFromScript === 0 && !scriptGenerating && (
+                          <p className="text-xs text-slate-500 mt-2 flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3" />
+                            生成腳本後將依場景數計費（每場景 {renderCostPerScene} 點）
                           </p>
                         )}
                       </div>
