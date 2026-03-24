@@ -340,8 +340,8 @@ class DirectorEngine:
         
         # 3. 調用 Gemini 生成腳本
         try:
-            response = await self._call_gemini(system_prompt, user_prompt)
-            script = self._parse_response(response, request, brand, avatar)
+            response_text, used_model, api_errors = await self._call_gemini(system_prompt, user_prompt)
+            script = self._parse_response(response_text, request, brand, avatar, used_model=used_model, api_errors=api_errors)
             return script
         except Exception as e:
             print(f"Gemini API 錯誤: {e}")
@@ -604,8 +604,8 @@ class DirectorEngine:
 4. 確保陣列與物件結尾的逗號正確，不要留下多餘的逗號。
 """
     
-    async def _call_gemini(self, system_prompt: str, user_prompt: str) -> str:
-        """調用 Gemini API（含 429 重試機制）"""
+    async def _call_gemini(self, system_prompt: str, user_prompt: str) -> tuple[str, str, list[str]]:
+        """調用 Gemini API（含 429 重試機制，返回 (text, used_model, errors)）"""
         import traceback
         import asyncio
 
@@ -616,6 +616,7 @@ class DirectorEngine:
         _RETRY_DELAYS = [5, 10, 15, 20]   # 秒
 
         last_error: Exception | None = None
+        accumulated_errors = []
         
         # 使用全新的 google-genai SDK 處理路由
         try:
@@ -637,10 +638,11 @@ class DirectorEngine:
                         max_output_tokens=4096,
                     )
                 )
-                return response.text
+                return response.text, model_name, accumulated_errors
 
             except Exception as e:
                 err_str = str(e).lower()
+                accumulated_errors.append(f"{model_name}: {str(e)}")
                 print(f"[DirectorEngine] Gemini 嘗試 {attempt} ({model_name}) 失敗: {e}")
                 
                 if attempt < len(_RETRY_MODELS):
@@ -656,15 +658,17 @@ class DirectorEngine:
                     break
 
         # 所有重試皆失敗 → 交給呼叫端 fallback
-        print(f"[DirectorEngine] 所有 Gemini 重試皆失敗: {last_error}")
-        raise last_error
+        print(f"[DirectorEngine] 所有 Gemini 重試皆失敗. Errors: {accumulated_errors}")
+        raise last_error if last_error else Exception(f"All models failed: {accumulated_errors}")
     
     def _parse_response(
         self,
         response: str,
         request: VideoRequest,
         brand: BrandProfile,
-        avatar: Optional[AvatarAsset]
+        avatar: Optional[AvatarAsset],
+        used_model: str = "unknown",
+        api_errors: list[str] = None
     ) -> VideoScript:
         """解析 Gemini 回應"""
         import re
@@ -705,7 +709,7 @@ class DirectorEngine:
                         return json.loads(json_str + "]}"), None
                     except:
                         pass
-                return None, f"JSON Decode Error: {str(e)}\nRaw JSON snippet: {json_str[:200]}"
+                return None, f"JSON Decode Error: {str(e)}\nModel Used: {used_model}\nPrevious Errors: {api_errors}\nRaw snippet: {json_str[:250]}"
 
         data, err_msg = clean_and_parse_json(response)
         if not data:
