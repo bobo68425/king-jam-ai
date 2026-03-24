@@ -317,7 +317,8 @@ class DirectorEngine:
     """
     
     def __init__(self):
-        self.model = genai.GenerativeModel('gemini-1.5-flash') if GOOGLE_GEMINI_KEY else None
+        # 使用 gemini-1.5-flash-latest 或 gemini-2.0-flash，避免 404 錯誤
+        self.model = genai.GenerativeModel('gemini-1.5-flash-latest') if GOOGLE_GEMINI_KEY else None
     
     async def generate_video_script(
         self,
@@ -604,8 +605,8 @@ class DirectorEngine:
 
         full_prompt = f"{system_prompt}\n\n---\n\n{user_prompt}"
 
-        # 重試設定：3 次嘗試
-        _RETRY_MODELS = ["gemini-1.5-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b"]
+        # 重試設定：3 次嘗試 (使用 latest 後綴避免 404)
+        _RETRY_MODELS = ["gemini-1.5-flash-latest", "gemini-1.5-pro-latest", "gemini-pro"]
         _RETRY_DELAYS = [5, 15, 30]   # 秒
         _RATE_LIMIT_CODES = {"429", "resource_exhausted", "resourceexhausted"}
 
