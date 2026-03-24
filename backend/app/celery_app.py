@@ -127,11 +127,41 @@ CELERY_TASK_ROUTES = {
 # ============================================================
 # Celery 配置
 # ============================================================
+
+# ── SSL 設定（雲端 Redis 如 Upstash 需要 rediss:// + SSL 憑證豁免）──
+import ssl as _ssl
+
+def _redis_ssl_options(url: str) -> dict:
+    """若 URL 以 rediss:// 開頭，回傳 SSL 豁免選項（適用 Upstash 等自簽憑證）"""
+    if url.startswith("rediss://"):
+        return {
+            "ssl_cert_reqs": _ssl.CERT_NONE,
+        }
+    return {}
+
+_broker_ssl = _redis_ssl_options(ACTIVE_BROKER_URL)
+_backend_ssl = _redis_ssl_options(ACTIVE_RESULT_BACKEND)
+
 celery_app.conf.update(
-    # Redis 短暫斷線時重試（降低「Retry limit exceeded … result store」機率）
+    # ── Broker 連線強化 ──
     broker_connection_retry_on_startup=True,
     broker_connection_retry=True,
-    broker_connection_max_retries=100,
+    broker_connection_max_retries=20,
+    broker_pool_limit=10,  # 限制連接池大小，避免 Upstash 超限
+    **( {"broker_use_ssl": _broker_ssl} if _broker_ssl else {} ),
+
+    # ── Result Backend 強化（核心修復：解決 "Retry limit exceeded" 問題）──
+    result_backend_transport_options={
+        "retry_policy": {
+            "timeout": 10.0,        # 每次重試等待最多 10 秒
+        },
+        "visibility_timeout": 3600,
+        **_backend_ssl,
+    },
+    # 定期 ping Redis 防止連線超時被雲端 provider 斷開（每 30 秒）
+    redis_backend_health_check_interval=30,
+    **( {"redis_backend_use_ssl": _backend_ssl} if _backend_ssl else {} ),
+
     # 佇列設定
     task_queues=CELERY_QUEUES,
     task_routes=CELERY_TASK_ROUTES,
@@ -174,7 +204,6 @@ celery_app.conf.update(
     task_track_started=True,
     task_send_sent_event=True,
     worker_send_task_events=True,
-    
 )
 
 # ============================================================
