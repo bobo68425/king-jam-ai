@@ -317,8 +317,8 @@ class DirectorEngine:
     """
     
     def __init__(self):
-        # 使用 gemini-1.5-flash-latest 或 gemini-2.0-flash，避免 404 錯誤
-        self.model = genai.GenerativeModel('gemini-1.5-flash-latest') if GOOGLE_GEMINI_KEY else None
+        # 使用 GOOGLE_GEMINI_KEY 標記是否啟用 Gemini
+        self.has_gemini = bool(GOOGLE_GEMINI_KEY)
     
     async def generate_video_script(
         self,
@@ -329,7 +329,7 @@ class DirectorEngine:
         """
         主入口：生成完整影片腳本
         """
-        if not self.model:
+        if not self.has_gemini:
             return self._generate_fallback_script(request, brand, avatar)
         
         # 1. 構建 System Prompt (注入品牌 DNA)
@@ -605,20 +605,28 @@ class DirectorEngine:
 
         full_prompt = f"{system_prompt}\n\n---\n\n{user_prompt}"
 
-        # 重試設定：3 次嘗試 (使用 latest 後綴避免 404)
-        _RETRY_MODELS = ["gemini-1.5-flash-latest", "gemini-1.5-pro-latest", "gemini-pro"]
-        _RETRY_DELAYS = [5, 15, 30]   # 秒
-        _RATE_LIMIT_CODES = {"429", "resource_exhausted", "resourceexhausted"}
+        # 重試設定：3 次嘗試 (使用標準名稱)
+        _RETRY_MODELS = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
+        _RETRY_DELAYS = [5, 10, 15, 20]   # 秒
 
         last_error: Exception | None = None
+        
+        # 使用全新的 google-genai SDK 處理路由
+        try:
+            from google import genai as new_genai
+            from google.genai import types
+            client = new_genai.Client(api_key=GOOGLE_GEMINI_KEY)
+        except ImportError:
+            raise Exception("Please install google-genai package (>=1.0.0)")
 
         for attempt, (model_name, delay) in enumerate(zip(_RETRY_MODELS, _RETRY_DELAYS), start=1):
             try:
-                model = genai.GenerativeModel(model_name)
+                # 這裡需要呼叫 client.models.generate_content
                 response = await asyncio.to_thread(
-                    model.generate_content,
-                    full_prompt,
-                    generation_config=genai.GenerationConfig(
+                    client.models.generate_content,
+                    model=model_name,
+                    contents=full_prompt,
+                    config=types.GenerateContentConfig(
                         temperature=0.7,
                         max_output_tokens=4096,
                     )
@@ -627,7 +635,7 @@ class DirectorEngine:
 
             except Exception as e:
                 err_str = str(e).lower()
-                print(f"[DirectorEngine] Gemini 嘗試 {attempt} 失敗: {e}")
+                print(f"[DirectorEngine] Gemini 嘗試 {attempt} ({model_name}) 失敗: {e}")
                 
                 if attempt < len(_RETRY_MODELS):
                     print(
