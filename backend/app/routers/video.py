@@ -4,7 +4,7 @@
 使用 Director Engine 生成影片腳本和內容
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 import logging
@@ -1339,6 +1339,7 @@ class RenderProgressResponse(BaseModel):
 @router.post("/render", response_model=RenderVideoResponse)
 async def render_video(
     request: RenderVideoRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -1473,10 +1474,31 @@ async def render_video(
         if custom_images_dict:
             task_custom_images = {str(k): v for k, v in custom_images_dict.items()}
         
-        # ★ ignore_result=True: Celery 跳過 Redis result backend
-        # ★ 任務進度改由 GenerationHistory (PostgreSQL) 追蹤
-        render_video_v2_task.apply_async(
-            kwargs=dict(
+        # ★ 嘗試透過 Celery 提交（Upstash Redis 佇列）
+        # ★ 若 broker 連線失敗（如 REDIS_URL 未設定），自動 fallback 至 FastAPI BackgroundTasks
+        celery_ok = False
+        try:
+            render_video_v2_task.apply_async(
+                kwargs=dict(
+                    user_id=current_user.id,
+                    script=script,
+                    quality=quality,
+                    custom_images=task_custom_images,
+                    custom_music_base64=custom_music_base64,
+                    custom_music_name=custom_music_name,
+                    history_id=history_id,
+                ),
+                ignore_result=True,
+            )
+            celery_ok = True
+            print(f"[video_render] ✅ Celery 任務已提交，history_id={history_id}")
+        except Exception as celery_err:
+            print(f"[video_render] ⚠️ Celery broker 不可用 ({celery_err})，改用 BackgroundTasks 直接執行")
+            logger.warning(f"[video_render] Celery fallback: {celery_err}")
+            # Fallback: 直接在 FastAPI 後台執行（不需 Redis）
+            from app.tasks.video_tasks import _run_video_task_sync
+            background_tasks.add_task(
+                _run_video_task_sync,
                 user_id=current_user.id,
                 script=script,
                 quality=quality,
@@ -1484,11 +1506,7 @@ async def render_video(
                 custom_music_base64=custom_music_base64,
                 custom_music_name=custom_music_name,
                 history_id=history_id,
-            ),
-            ignore_result=True,
-        )
-        
-        print(f"[video_render] ✅ 任務已提交，history_id={history_id}")
+            )
         
         return RenderVideoResponse(
             task_id=str(history_id),  # 前端用 history_id 輪詢 DB 狀態

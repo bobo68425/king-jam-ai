@@ -547,3 +547,84 @@ def render_video_v2_task(
         raise self.retry(exc=e)
     finally:
         db.close()
+
+
+def _run_video_task_sync(
+    user_id: int,
+    script: Dict[str, Any],
+    quality: str = "standard",
+    custom_images: Optional[Dict[int, str]] = None,
+    custom_music_base64: Optional[str] = None,
+    custom_music_name: Optional[str] = None,
+    history_id: Optional[int] = None,
+) -> None:
+    """
+    影片渲染的純函數版本（BackgroundTasks fallback，不需要 Celery/Redis）
+    
+    當 Celery broker 無法連線時由 render_video endpoint 的 BackgroundTasks 呼叫。
+    邏輯與 render_video_v2_task 相同，只是不需要 Celery self 參數。
+    """
+    from app.services.video_generator import video_generator
+    
+    logger.info(f"[Video Sync] 使用 BackgroundTasks 渲染影片 - 用戶 #{user_id}")
+    
+    db = SessionLocal()
+    start_time = time.time()
+    history = None
+    
+    try:
+        # 更新歷史記錄狀態
+        if history_id:
+            history = db.query(GenerationHistory).filter(
+                GenerationHistory.id == history_id
+            ).first()
+            if history:
+                history.status = "processing"
+                db.commit()
+
+        # 執行非同步渲染
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            result = loop.run_until_complete(
+                video_generator.generate_video(
+                    script,
+                    quality=quality,
+                    custom_images=custom_images,
+                    custom_music_base64=custom_music_base64,
+                    custom_music_name=custom_music_name,
+                )
+            )
+        finally:
+            loop.close()
+        
+        generation_duration = int((time.time() - start_time) * 1000)
+        
+        # 更新歷史記錄
+        if history:
+            history.status = "completed"
+            history.media_cloud_url = result.video_url
+            history.thumbnail_url = result.thumbnail_url
+            history.generation_duration_ms = generation_duration
+            history.file_size_bytes = result.file_size
+            history.output_data = {
+                **(history.output_data or {}),
+                "video_url": result.video_url,
+                "thumbnail_url": result.thumbnail_url,
+                "format": result.format,
+            }
+            db.commit()
+        
+        logger.info(f"[Video Sync] 影片渲染完成 - 耗時 {generation_duration}ms")
+        
+    except Exception as e:
+        logger.error(f"[Video Sync] 影片渲染失敗: {e}")
+        if history:
+            history.status = "failed"
+            history.error_message = str(e)
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
+    finally:
+        db.close()
