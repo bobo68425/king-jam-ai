@@ -629,11 +629,9 @@ class DirectorEngine:
                 err_str = str(e).lower()
                 print(f"[DirectorEngine] Gemini 嘗試 {attempt} 失敗: {e}")
                 
-                is_rate_limit = any(code in err_str for code in _RATE_LIMIT_CODES)
-
-                if is_rate_limit and attempt < len(_RETRY_MODELS):
+                if attempt < len(_RETRY_MODELS):
                     print(
-                        f"[DirectorEngine] Gemini 429 配額超限 (attempt {attempt}/{len(_RETRY_MODELS)})，"
+                        f"[DirectorEngine] Gemini 發生錯誤 (attempt {attempt}/{len(_RETRY_MODELS)})，"
                         f"{delay}s 後使用 {_RETRY_MODELS[attempt]} 重試..."
                     )
                     await asyncio.sleep(delay)
