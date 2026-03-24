@@ -596,6 +596,12 @@ class DirectorEngine:
 
 請生成完整的 JSON 格式腳本，每個 visual_prompt 都必須是可直接用於 AI 影片生成的專業提示詞！
 確保 scenes 陣列包含 **恰好 {scene_count} 個場景**，每個場景的 duration_seconds 設為 {clip_dur}！
+
+【嚴格 JSON 格式警告】
+1. 請確保輸出為 **100% 完美的 JSON** 格式，開頭必須是 {{，結尾必須是 }}。
+2. 不要包含任何多餘的文字或 MarkDown 標籤 (例如 ```json )！
+3. 字串內容中**嚴禁使用雙引號 (\")**，如果需要強調請改用單引號 (')，否則會導致 JSON 讀取失敗！
+4. 確保陣列與物件結尾的逗號正確，不要留下多餘的逗號。
 """
     
     async def _call_gemini(self, system_prompt: str, user_prompt: str) -> str:
@@ -629,7 +635,6 @@ class DirectorEngine:
                     config=types.GenerateContentConfig(
                         temperature=0.7,
                         max_output_tokens=4096,
-                        response_mime_type="application/json",
                     )
                 )
                 return response.text
