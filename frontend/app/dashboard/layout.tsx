@@ -251,32 +251,33 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
     />
     <div className="flex min-h-screen flex-col md:flex-row">
       {/* --- 電腦版側邊欄 (Desktop Sidebar) --- */}
-      <aside className="hidden w-64 flex-col border-r border-border bg-sidebar md:flex">
-        <div className="flex items-center justify-center border-b border-sidebar-border px-6 py-6">
-          <Link href="/dashboard" className="flex items-center justify-center p-3">
-            <Image
-              src="/logo.png"
-              alt="King Jam AI"
-              width={200}
-              height={200}
-              className="w-[160px] h-auto rounded-xl object-contain"
-              priority
-              onError={(e) => {
-                // 圖片加載失敗時顯示文字 fallback
-                const target = e.currentTarget;
-                target.style.display = 'none';
-                const parent = target.parentElement;
-                if (parent && !parent.querySelector('.logo-fallback')) {
-                  const fallback = document.createElement('span');
-                  fallback.className = 'logo-fallback text-lg font-bold bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 bg-clip-text text-transparent';
-                  fallback.textContent = 'King Jam AI';
-                  parent.appendChild(fallback);
-                }
-              }}
-            />
-            <span className="logo-fallback text-lg font-bold bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 bg-clip-text text-transparent hidden">
-              King Jam AI
-            </span>
+      <aside className="hidden w-80 flex-col border-r border-border bg-sidebar md:flex">
+        <div className="flex items-center justify-center border-b border-sidebar-border py-10 px-4">
+          <Link href="/dashboard" className="flex items-center justify-center">
+            <div className="p-8 rounded-3xl bg-slate-800/40 border border-indigo-500/10 animate-glow hover:bg-slate-800/60 transition-all duration-500">
+              <Image
+                src="/logo.png"
+                alt="King Jam AI"
+                width={180}
+                height={180}
+                className="w-[180px] h-auto object-contain"
+                priority
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  target.style.display = 'none';
+                  const parent = target.parentElement;
+                  if (parent && !parent.querySelector('.logo-fallback')) {
+                    const fallback = document.createElement('span');
+                    fallback.className = 'logo-fallback text-lg font-bold bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 bg-clip-text text-transparent';
+                    fallback.textContent = 'King Jam AI';
+                    parent.appendChild(fallback);
+                  }
+                }}
+              />
+              <span className="logo-fallback text-lg font-bold bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 bg-clip-text text-transparent hidden">
+                King Jam AI
+              </span>
+            </div>
           </Link>
         </div>
         <div className="flex-1 overflow-auto py-2 px-4">
@@ -297,31 +298,32 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="flex flex-col bg-sidebar border-sidebar-border p-0 w-[280px]">
-              {/* Logo 區域 - 固定在頂部 */}
-              <div className="flex-shrink-0 border-b border-sidebar-border">
-                <Link href="/dashboard" className="flex items-center justify-center py-4">
-                  <Image
-                    src="/logo.png"
-                    alt="King Jam AI"
-                    width={200}
-                    height={200}
-                    className="w-[200px] h-auto rounded-xl object-contain"
-                    priority
-                    onError={(e) => {
-                      const target = e.currentTarget;
-                      target.style.display = 'none';
-                      const parent = target.parentElement;
-                      if (parent && !parent.querySelector('.logo-fallback')) {
-                        const fallback = document.createElement('span');
-                        fallback.className = 'logo-fallback text-lg font-bold bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 bg-clip-text text-transparent';
-                        fallback.textContent = 'King Jam AI';
-                        parent.appendChild(fallback);
-                      }
-                    }}
-                  />
-                  <span className="logo-fallback text-lg font-bold bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 bg-clip-text text-transparent hidden">
-                    King Jam AI
-                  </span>
+              <div className="flex-shrink-0 border-b border-sidebar-border py-6 px-4">
+                <Link href="/dashboard" className="flex items-center justify-center">
+                  <div className="p-6 rounded-2xl bg-slate-800/40 border border-indigo-500/10 animate-glow">
+                    <Image
+                      src="/logo.png"
+                      alt="King Jam AI"
+                      width={140}
+                      height={140}
+                      className="w-[140px] h-auto object-contain"
+                      priority
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        target.style.display = 'none';
+                        const parent = target.parentElement;
+                        if (parent && !parent.querySelector('.logo-fallback')) {
+                          const fallback = document.createElement('span');
+                          fallback.className = 'logo-fallback text-lg font-bold bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 bg-clip-text text-transparent';
+                          fallback.textContent = 'King Jam AI';
+                          parent.appendChild(fallback);
+                        }
+                      }}
+                    />
+                    <span className="logo-fallback text-lg font-bold bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 bg-clip-text text-transparent hidden">
+                      King Jam AI
+                    </span>
+                  </div>
                 </Link>
               </div>
               
