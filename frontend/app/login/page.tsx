@@ -188,7 +188,7 @@ export default function LoginPage() {
               alt="King Jam AI"
               width={400}
               height={400}
-              className="h-[120px] w-auto rounded-2xl"
+              className="w-[200px] h-auto mx-auto rounded-2xl object-contain"
               priority
               onError={(e) => {
                 const target = e.currentTarget;

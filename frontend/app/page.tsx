@@ -980,9 +980,9 @@ function Footer() {
               <Image
                 src="/logo.png" 
                 alt="King Jam AI" 
-                width={56} 
-                height={56} 
-                className="rounded-xl shadow-lg"
+                width={110} 
+                height={110} 
+                className="w-[110px] h-auto rounded-xl shadow-lg object-contain"
               />
             </Link>
             <p className="text-slate-400 mb-6 max-w-sm">

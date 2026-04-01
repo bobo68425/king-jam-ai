@@ -105,10 +105,11 @@ const nextConfig: NextConfig = {
 
   // 代理設定
   async rewrites() {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.kingjam.app";
     return [
       {
         source: "/api/:path*",
-        destination: "https://api.kingjam.app/:path*",
+        destination: `${apiUrl}/:path*`,
       },
     ];
   },
