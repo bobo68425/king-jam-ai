@@ -252,7 +252,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen flex-col md:flex-row">
       {/* --- 電腦版側邊欄 (Desktop Sidebar) --- */}
       <aside className="hidden w-80 flex-col border-r border-border bg-sidebar md:flex">
-        <div className="flex items-center justify-center border-b border-sidebar-border py-4 px-4">
+        <div className="flex items-center justify-center p-0">
           <Link href="/dashboard" className="flex items-center justify-center">
             <Image
               src="/logo.png"
@@ -293,7 +293,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="flex flex-col bg-sidebar border-sidebar-border p-0 w-[280px]">
-              <div className="flex-shrink-0 border-b border-sidebar-border py-3 px-4">
+              <div className="flex-shrink-0 p-0">
                 <Link href="/dashboard" className="flex items-center justify-center">
                   <Image
                     src="/logo.png"
