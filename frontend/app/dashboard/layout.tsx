@@ -252,14 +252,14 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen flex-col md:flex-row">
       {/* --- 電腦版側邊欄 (Desktop Sidebar) --- */}
       <aside className="hidden w-64 flex-col border-r border-border bg-sidebar md:flex">
-        <div className="flex items-center justify-center border-b border-sidebar-border px-4 py-5 lg:px-6">
-          <Link href="/dashboard" className="flex items-center justify-center">
+        <div className="flex items-center justify-center border-b border-sidebar-border px-6 py-6">
+          <Link href="/dashboard" className="flex items-center justify-center p-3">
             <Image
               src="/logo.png"
               alt="King Jam AI"
-              width={110}
-              height={110}
-              className="h-[110px] w-auto rounded-xl"
+              width={200}
+              height={200}
+              className="w-[160px] h-auto rounded-xl object-contain"
               priority
               onError={(e) => {
                 // 圖片加載失敗時顯示文字 fallback
@@ -303,9 +303,9 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                   <Image
                     src="/logo.png"
                     alt="King Jam AI"
-                    width={90}
-                    height={90}
-                    className="h-[90px] w-auto rounded-xl"
+                    width={200}
+                    height={200}
+                    className="w-[200px] h-auto rounded-xl object-contain"
                     priority
                     onError={(e) => {
                       const target = e.currentTarget;
