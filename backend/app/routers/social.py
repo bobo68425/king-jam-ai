@@ -146,9 +146,9 @@ async def analyze_reference_image(image_base64: str, content_type: str = "image/
         return ""
         
     except Exception as e:
-        error_msg = str(e).lower()
+        error_msg = str(e)
         # 檢測是否為模型不支援圖片輸入的錯誤
-        if "does not support image" in error_msg or "cannot read" in error_msg:
+        if "does not support image" in error_msg.lower() or "cannot read" in error_msg.lower():
             print(f"分析參考圖片失敗: 目前的 AI 模型不支援圖片輸入，請使用文字描述")
             return ""  # 返回空字串讓上游處理
         print(f"分析參考圖片失敗: {e}")
