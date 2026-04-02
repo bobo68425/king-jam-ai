@@ -97,13 +97,13 @@ services:
       retries: 3
 
   # ============================================================
-  # Celery Worker - 高優先級佇列
-  # 處理：驗證碼發送、即時通知、緊急 Token 刷新、健康檢查
+  # Celery Worker - 合併 worker (高優先 + 預設佇列)
+  # 處理：驗證碼發送、即時通知、緊急 Token 刷新、社群發布、排程任務
   # ============================================================
-  celery-worker-high:
+  celery-worker:
     build: ./backend
-    container_name: kingjam_celery_high
-    command: celery -A app.celery_app worker -Q queue_high -c 2 -l info --hostname=worker-high@%h
+    container_name: kingjam_celery_worker
+    command: celery -A app.celery_app worker -Q queue_high,queue_default -c 4 -l info --hostname=worker@%h
     volumes:
       - ./backend:/app
       - ./secrets:/app/secrets:ro
@@ -116,33 +116,7 @@ services:
       - kingjam_net
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "/app/scripts/celery_healthcheck.py", "worker-high"]
-      interval: 60s
-      timeout: 30s
-      retries: 3
-      start_period: 30s
-
-  # ============================================================
-  # Celery Worker - 預設佇列
-  # 處理：社群發布、排程任務、Token 批次刷新
-  # ============================================================
-  celery-worker-default:
-    build: ./backend
-    container_name: kingjam_celery_default
-    command: celery -A app.celery_app worker -Q queue_default -c 4 -l info --hostname=worker-default@%h
-    volumes:
-      - ./backend:/app
-      - ./secrets:/app/secrets:ro
-    environment:
-      <<: *backend-env
-    depends_on:
-      - db
-      - redis
-    networks:
-      - kingjam_net
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python", "/app/scripts/celery_healthcheck.py", "worker-default"]
+      test: ["CMD", "python", "/app/scripts/celery_healthcheck.py", "worker"]
       interval: 60s
       timeout: 30s
       retries: 3

@@ -172,12 +172,11 @@ celery_app.conf.task_routes = {
 
 ## 待辦清單
 
-- [ ] Phase 1.1: 安裝 SWR
-- [ ] Phase 1.2: 建立 use-api.ts 鉤子
-- [ ] Phase 1.3: 優化 dashboard/layout.tsx
-- [ ] Phase 1.4: 優化 dashboard/page.tsx
-- [ ] Phase 2.1: 新增 /dashboard/summary API
-- [ ] Phase 2.2: 優化資料庫連接池
-- [ ] Phase 2.3: 移除硬編碼問題
-- [ ] Phase 3.1: 合併 Celery Workers
-- [ ] Phase 3.2: 評估 Video Engine 去留
+- [x] Phase 1.1: 安裝 SWR
+- [x] Phase 1.2: 建立 use-api.ts 鉤子
+- [x] Phase 1.3: 優化 dashboard/layout.tsx
+- [x] Phase 1.4: 優化 dashboard/page.tsx
+- [x] Phase 2.1: 新增 /dashboard/summary API
+- [x] Phase 2.2: DB 連接池優化 (5→10, 10→20)
+- [x] Phase 2.3: 修復 main.py 硬編碼問題 (ADMIN_EMAIL, REPAIR_CODE)
+- [x] Phase 3.1: 合併 Celery Workers (3→1 + video)

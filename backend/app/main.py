@@ -552,27 +552,27 @@ def _auto_init_db():
         """))
         db.commit()
 
-        # ── 10. 天使投資人權限自動修復 (圖缺 (Angel Status Repair) ──
-        # 無條件強制設定 - 移除條件判斷確保必定執行
-        db.execute(text("""
+        # ── 10. 天使投資人權限自動修復 (從環境變數讀取 admin email)
+        admin_email = os.getenv("ADMIN_EMAIL", "admin@kingjam.app")
+        db.execute(text(f"""
             UPDATE users 
             SET is_angel = true, 
                 investment_units = GREATEST(investment_units, 2)
-            WHERE LOWER(TRIM(email)) = 'bobo68425@gmail.com' OR is_admin = true OR id = 1;
-        """))
+            WHERE LOWER(TRIM(email)) = LOWER(TRIM(:admin_email)) OR is_admin = true OR id = 1;
+        """), {"admin_email": admin_email})
         db.commit()
         db.execute(text("""
             UPDATE users SET is_angel = true, investment_units = GREATEST(investment_units, 2)
             WHERE id = 1;
         """))
         db.commit()
-        print("[Startup] ✅ 天使投資人身份已強制設定 (bobo/admin/id=1)")
+        print("[Startup] ✅ 天使投資人身份已強制設定")
         
-        # 額外確認：如果 bobo 帳號存在但沒推薦碼，補一個
+        # 額外確認：如果 admin 帳號存在但沒推薦碼，補一個
         db.execute(text("""
             UPDATE users SET referral_code = 'angel' 
-            WHERE LOWER(TRIM(email)) = 'bobo68425@gmail.com' AND referral_code IS NULL;
-        """))
+            WHERE LOWER(TRIM(email)) = LOWER(:admin_email) AND referral_code IS NULL;
+        """), {"admin_email": admin_email})
         db.commit()
         
         db.close()
@@ -642,8 +642,11 @@ def debug_angels():
 
 @app.get("/system/force-repair")
 def public_force_repair(code: str):
-    """公用修復接口 (需密碼)"""
-    if code != "kingjam2026":
+    """公用修復接口 (需密碼從環境變數讀取)"""
+    repair_code = os.getenv("REPAIR_CODE", "kingjam2026")
+    admin_email = os.getenv("ADMIN_EMAIL", "admin@kingjam.app")
+    
+    if code != repair_code:
         raise HTTPException(status_code=403)
         
     from app.database import SessionLocal
@@ -653,10 +656,10 @@ def public_force_repair(code: str):
             UPDATE users 
             SET is_angel = true, 
                 investment_units = CASE WHEN (investment_units = 0 OR investment_units IS NULL) THEN 2 ELSE investment_units END
-            WHERE (LOWER(TRIM(email)) = 'bobo68425@gmail.com' OR is_admin = true OR id = 1);
-        """))
+            WHERE (LOWER(TRIM(email)) = LOWER(:admin_email) OR is_admin = true OR id = 1);
+        """), {"admin_email": admin_email})
         db.commit()
-        return {"success": True, "message": "Repair executed for bobo and admins"}
+        return {"success": True, "message": "Repair executed for admin and admins"}
     except Exception as e:
         db.rollback()
         return {"success": False, "error": str(e)}
