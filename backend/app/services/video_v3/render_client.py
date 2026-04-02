@@ -84,7 +84,7 @@ async def submit_render_job_local(
     quality: str = "medium",
 ) -> Dict[str, Any]:
     """
-    執行本地 FFmpeg 渲染 (回退方案)
+    執行本地 MoviePy 渲染 - 支援 crossfade 轉場，品質更高
     """
     import httpx
     import asyncio
@@ -92,12 +92,13 @@ async def submit_render_job_local(
     from pathlib import Path
     from app.services.cloud_storage import cloud_storage
 
-    logger.info(f"[RenderClient] 開始本地 FFmpeg 渲染: quality={quality}, format={output_format}")
+    logger.info(f"[RenderClient] 開始本地 MoviePy 渲染: quality={quality}, format={output_format}")
 
     # 解析 props
     scenes = props.get("scenes", [])
     music_url = props.get("music", {}).get("url")
     tts_url = props.get("tts", {}).get("url")
+    transition_duration = float(props.get("transitionDuration", 0.5))  # 轉場時長
     
     # 創建暫存資料夾
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -144,9 +145,6 @@ async def submit_render_job_local(
                     from urllib.parse import urlparse
                     try:
                         parsed = urlparse(clip_url)
-                        # R2 S3 key should be everything after the domain
-                        # e.g. /videos/user_id/2026/03/filename.mp4
-                        # 有些連結可能包含 bucket name 在 path 開頭，我們嘗試偵測並移除
                         s3_key = parsed.path.lstrip("/")
                         bucket_name = os.getenv("R2_BUCKET_NAME", "kingjam-media")
                         
@@ -174,72 +172,23 @@ async def submit_render_job_local(
                     else:
                         logger.error(f"[RenderClient] Scene {i} HTTP 下載失敗 ({resp.status_code}): {clip_url[:150]}")
                 except Exception as e:
-                    logger.error(f"[RenderClient] Scene {i} HTTP 下載異常: {e}")
+                    logger.error(f"[RenderClient] Scene {i} 下載異常: {e}")
         
         if not video_clips:
             logger.error("[RenderClient] 錯誤: 沒有成功下載任何影片片段。")
             raise Exception("No video clips available to render.")
 
-        # 2. 合併影片片段
-        concat_file = temp_path / "concat.txt"
-        with open(concat_file, "w") as f:
-            for clip in video_clips:
-                f.write(f"file '{clip}'\n")
+        # 2. 使用 MoviePy 合併影片（支援 crossfade 轉場）
+        final_video = await _merge_with_moviepy(
+            video_clips, 
+            local_tts, 
+            local_bgm, 
+            temp_path, 
+            transition_duration,
+            quality
+        )
         
-        merged_video = temp_path / "merged.mp4"
-        cmd_merge = [
-            "ffmpeg", "-y", "-f", "concat", "-safe", "0",
-            "-i", str(concat_file), "-c", "copy", str(merged_video)
-        ]
-        
-        proc_merge = await asyncio.create_subprocess_exec(*cmd_merge, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        await proc_merge.communicate()
-        
-        if not merged_video.exists():
-            raise Exception("Failed to merge video clips.")
-
-        # 3. 混合音訊
-        final_video = temp_path / "final.mp4"
-        audio_inputs = []
-        filter_complex = ""
-
-        # 第一個輸入是影片
-        audio_inputs.extend(["-i", str(merged_video)])
-        
-        if local_tts and local_bgm:
-            audio_inputs.extend(["-i", str(local_tts), "-i", str(local_bgm)])
-            filter_complex = "[1:a]volume=1.0[tts];[2:a]volume=0.3[bgm];[tts][bgm]amix=inputs=2:duration=longest[aout]"
-        elif local_tts:
-            audio_inputs.extend(["-i", str(local_tts)])
-            filter_complex = "[1:a]volume=1.0[aout]"
-        elif local_bgm:
-            audio_inputs.extend(["-i", str(local_bgm)])
-            filter_complex = "[1:a]volume=0.3[aout]"
-
-        if filter_complex:
-            cmd_mix = [
-                "ffmpeg", "-y", *audio_inputs,
-                "-filter_complex", filter_complex,
-                "-map", "0:v:0", "-map", "[aout]",
-                "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest",
-                str(final_video)
-            ]
-        else:
-            cmd_mix = [
-                "ffmpeg", "-y", *audio_inputs,
-                "-c:v", "copy", "-c:a", "aac", "-shortest",
-                str(final_video)
-            ]
-            
-        proc_mix = await asyncio.create_subprocess_exec(*cmd_mix, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        stdout, stderr = await proc_mix.communicate()
-
-        if proc_mix.returncode != 0:
-            logger.error(f"[RenderClient] 混音失敗，使用原始無聲合併影片: {stderr.decode()[:200]}")
-            import shutil
-            shutil.copy(str(merged_video), str(final_video))
-            
-        # 4. 上傳到 R2
+        # 3. 上傳到 R2
         import uuid
         job_id = f"local-render-{uuid.uuid4().hex[:8]}"
         
@@ -265,8 +214,110 @@ async def submit_render_job_local(
             "jobId": job_id,
             "status": "done",
             "videoUrl": r2_url,
-            "durationMs": 0 # Not calculated
+            "durationMs": 0
         }
+
+
+async def _merge_with_moviepy(
+    video_clips: list,
+    tts_path: Path | None,
+    bgm_path: Path | None,
+    temp_path: Path,
+    transition_duration: float = 0.5,
+    quality: str = "medium"
+) -> Path:
+    """使用 MoviePy 合併影片並添加 crossfade 轉場"""
+    import uuid
+    
+    # 在執行緒池中執行 MoviePy（因為它是同步的）
+    loop = asyncio.get_event_loop()
+    
+    def _run_moviepy():
+        from moviepy import VideoFileClip, concatenate_videoclips, CompositeAudioClip, AudioFileClip
+        import moviepy.config as mp_config
+        
+        # 設定 ImageMagick 路徑（如果需要）
+        # mp_config.IMAGEMAGICK_BINARY = "/usr/local/bin/convert"
+        
+        clips = []
+        for clip_path in video_clips:
+            clip = VideoFileClip(clip_path)
+            clips.append(clip)
+        
+        if len(clips) == 1:
+            final_clip = clips[0]
+        elif len(clips) == 2:
+            # 兩段影片：直接 crossfade
+            final_clip = concatenate_videoclips(
+                [clips[0].crossfadeout(transition_duration), 
+                 clips[1].crossfadein(transition_duration)],
+                method="compose"
+            )
+        else:
+            # 多段影片：使用 compose 方法串聯
+            processed_clips = []
+            for i, clip in enumerate(clips):
+                if i == 0:
+                    # 第一段：尾部 crossfade
+                    processed_clips.append(clip.crossfadeout(transition_duration))
+                elif i == len(clips) - 1:
+                    # 最後一段：頭部 crossfade
+                    processed_clips.append(clip.crossfadein(transition_duration))
+                else:
+                    # 中間段：雙向 crossfade
+                    processed_clips.append(clip.crossfadein(transition_duration).crossfadeout(transition_duration))
+            
+            final_clip = concatenate_videoclips(processed_clips, method="compose")
+        
+        # 添加音訊
+        audio_clips = []
+        if tts_path and tts_path.exists():
+            tts_audio = AudioFileClip(str(tts_path))
+            audio_clips.append(tts_audio)
+        
+        if bgm_path and bgm_path.exists():
+            bgm_audio = AudioFileClip(str(bgm_path))
+            bgm_audio = bgm_audio.with_volume_scaled(0.3)
+            audio_clips.append(bgm_audio)
+        
+        if audio_clips:
+            if len(audio_clips) == 1:
+                final_audio = audio_clips[0]
+            else:
+                from moviepy import CompositeAudioClip
+                final_audio = CompositeAudioClip(audio_clips)
+            final_clip = final_clip.with_audio(final_audio)
+        
+        # 輸出設定
+        output_path = temp_path / f"final_{uuid.uuid4().hex[:8]}.mp4"
+        
+        # 品質設定
+        quality_presets = {
+            "low": {"codec": "libx264", "preset": "fast", "crf": 28},
+            "medium": {"codec": "libx264", "preset": "medium", "crf": 23},
+            "high": {"codec": "libx264", "preset": "slow", "crf": 18},
+        }
+        q = quality_presets.get(quality, quality_presets["medium"])
+        
+        final_clip.write_videofile(
+            str(output_path),
+            codec=q["codec"],
+            preset=q["preset"],
+            crf=q["crf"],
+            audio_codec="aac",
+            audio_bitrate="192k",
+            logger=None  # 禁用進度輸出
+        )
+        
+        # 清理 clips
+        for clip in clips:
+            clip.close()
+        
+        return output_path
+    
+    # 在執行緒中執行 MoviePy（避免阻塞事件循環）
+    result = await loop.run_in_executor(None, _run_moviepy)
+    return result
 
 
 async def check_render_status(job_id: str) -> Dict[str, Any]:

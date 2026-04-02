@@ -180,3 +180,5 @@ celery_app.conf.task_routes = {
 - [x] Phase 2.2: DB 連接池優化 (5→10, 10→20)
 - [x] Phase 2.3: 修復 main.py 硬編碼問題 (ADMIN_EMAIL, REPAIR_CODE)
 - [x] Phase 3.1: 合併 Celery Workers (3→1 + video)
+- [x] Phase 4: 使用 MoviePy 替代 Remotion (本地 crossfade 轉場)
+- [ ] Phase 5: 停用 video-engine (Railway)
