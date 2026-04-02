@@ -341,14 +341,27 @@ Technical specs: {aspect} aspect ratio, high resolution, no text or watermarks i
                 print(f"[Design Studio AI] Model {model_name} timeout, trying next...")
                 continue
             except Exception as e:
+                error_msg = str(e).lower()
+                # 檢測是否為模型不支援圖片輸入的錯誤
+                if "does not support image" in error_msg or "cannot read" in error_msg:
+                    print(f"[Design Studio AI] Model {model_name} 不支援圖片輸入，跳過...")
+                    continue
                 print(f"[Design Studio AI] Model {model_name} failed: {str(e)}")
                 continue
         
-        raise HTTPException(status_code=500, detail="所有 AI 模型都無法生成圖片，請稍後再試")
+        raise HTTPException(status_code=500, detail="所有 AI 模型都無法生成圖片，請稍後再試或嘗試其他品質選項")
         
     except HTTPException:
         raise
     except Exception as e:
+        error_msg = str(e).lower()
+        # 提供更友善的錯誤訊息
+        if "does not support image" in error_msg or "cannot read" in error_msg:
+            print(f"[Design Studio AI] 圖片輸入不被支援: {e}")
+            raise HTTPException(
+                status_code=400, 
+                detail="抱歉，目前選取的 AI 模型不支援圖片輸入功能。請嘗試使用文字描述生成圖片，或選擇其他品質選項。"
+            )
         print(f"[Design Studio AI] Generation error: {e}")
         raise HTTPException(status_code=500, detail=f"AI 生圖失敗: {str(e)}")
 
