@@ -49,6 +49,7 @@
     "recharts": "^3.8.0",
     "remotion": "^4.0.430",
     "sonner": "^1.7.1",
+    "swr": "^2.4.1",
     "tailwind-merge": "^2.6.0",
     "uuid": "^13.0.0",
     "zustand": "^5.0.2"

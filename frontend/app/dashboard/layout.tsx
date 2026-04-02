@@ -21,6 +21,7 @@ import { Toaster } from "sonner";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import api from "@/lib/api";
 import { CreditsProvider, useCredits } from "@/lib/credits-context";
+import { useNotifications, useCredits, useReferralStats } from "@/lib/use-api";
 
 // 會員等級配置
 const TIER_CONFIG: Record<string, { label: string; color: string; bgColor: string; icon: typeof Crown }> = {
@@ -103,56 +104,57 @@ function formatNotificationTime(dateStr: string, isMounted: boolean = true): str
 function DashboardContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
-  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const prevUnreadCountRef = useRef(0);  // 追蹤上次的未讀數量
+  const prevUnreadCountRef = useRef(0);
   const { credits, setCredits, setIsSuperAdmin } = useCredits();
   
+  // SWR hooks for data fetching (auto-cached)
+  const { stats } = useReferralStats();
+  const { credits: creditData } = useCredits();
+  const { notifications, unreadCount, mutate: mutateNotifications } = useNotifications(10);
+
   // 客戶端掛載後才顯示
   useEffect(() => {
     setMounted(true);
   }, []);
-  
-  // 獲取通知列表（導覽列只顯示重要+提醒通知）
-  const fetchNotifications = async (showToast = false) => {
-    try {
-      const res = await api.get("/notifications?limit=10&navbar_only=true");
-      const newNotifications = res.data.notifications || [];
-      const newUnreadCount = res.data.unread_count || 0;
-      
-      // 如果有新通知且啟用了 toast 提示
-      if (showToast && newUnreadCount > prevUnreadCountRef.current && newNotifications.length > 0) {
-        const latestUnread = newNotifications.find((n: Notification) => !n.is_read);
-        if (latestUnread) {
-          // 使用動態導入 sonner 的 toast
-          import('sonner').then(({ toast }) => {
-            toast(latestUnread.title, {
-              description: latestUnread.message,
-              action: {
-                label: "查看",
-                onClick: () => setShowNotifications(true),
-              },
-            });
-          });
-        }
-      }
-      
-      prevUnreadCountRef.current = newUnreadCount;  // 更新 ref
-      setNotifications(newNotifications);
-      setUnreadCount(newUnreadCount);
-    } catch (error) {
-      console.error("Failed to fetch notifications:", error);
+
+  // 同步用戶資料到 Context
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      router.push("/login");
+      return;
     }
-  };
+
+    if (stats && creditData) {
+      setCredits(creditData.balance || 0);
+      setIsSuperAdmin(creditData.is_super_admin || false);
+    }
+  }, [stats, creditData, router, setCredits, setIsSuperAdmin]);
+
+  // 通知 toast 提示
+  useEffect(() => {
+    if (unreadCount > prevUnreadCountRef.current && unreadCount > 0 && mounted) {
+      const latestUnread = notifications.find((n: Notification) => !n.is_read);
+      if (latestUnread) {
+        import('sonner').then(({ toast }) => {
+          toast(latestUnread.title, {
+            description: latestUnread.message,
+            action: {
+              label: "查看",
+              onClick: () => setShowNotifications(true),
+            },
+          });
+        });
+      }
+    }
+    prevUnreadCountRef.current = unreadCount;
+  }, [unreadCount, notifications, mounted]);
   
   const markAsRead = async (id: number) => {
     try {
       await api.post(`/notifications/${id}/read`);
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
-      setUnreadCount(prev => Math.max(0, prev - 1));
+      mutateNotifications();
     } catch (error) {
       console.error("Failed to mark as read:", error);
     }
@@ -161,8 +163,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
   const markAllAsRead = async () => {
     try {
       await api.post("/notifications/read-all");
-      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-      setUnreadCount(0);
+      mutateNotifications();
     } catch (error) {
       console.error("Failed to mark all as read:", error);
     }
@@ -171,65 +172,20 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
   const removeNotification = async (id: number) => {
     try {
       await api.delete(`/notifications/${id}`);
-      const wasUnread = notifications.find(n => n.id === id && !n.is_read);
-      setNotifications(prev => prev.filter(n => n.id !== id));
-      if (wasUnread) setUnreadCount(prev => Math.max(0, prev - 1));
+      mutateNotifications();
     } catch (error) {
       console.error("Failed to delete notification:", error);
     }
   };
 
-  useEffect(() => {
-    const fetchUserInfo = async () => {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        router.push("/login");
-        return;
-      }
-
-      try {
-        // 獲取用戶資料和通知
-        const [statsRes, balanceRes] = await Promise.allSettled([
-          api.get("/referral/stats"),
-          api.get("/credits/balance"),
-        ]);
-
-        if (statsRes.status === "fulfilled" && balanceRes.status === "fulfilled") {
-          const stats = statsRes.value.data;
-          const balance = balanceRes.value.data;
-            setUserInfo({
-              email: stats.email || "",
-              full_name: stats.full_name,
-              avatar: stats.avatar,
-              tier: balance.tier || "free",
-              partner_tier: stats.partner_tier || "bronze",
-              is_super_admin: balance.is_super_admin || false,
-            });
-            // 設置點數到 Context
-            setCredits(balance.balance || 0);
-            setIsSuperAdmin(balance.is_super_admin || false);
-        }
-        
-        // 獲取通知
-        fetchNotifications(false);
-      } catch (error) {
-        console.error("Failed to fetch user info:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchUserInfo();
-    
-    // 設置通知輪詢（每 30 秒檢查一次新通知）
-    const notificationInterval = setInterval(() => {
-      fetchNotifications(true);  // 有新通知時顯示 toast
-    }, 30000);
-    
-    return () => {
-      clearInterval(notificationInterval);
-    };
-  }, [router, setCredits]);
+  const userInfo: UserInfo | null = stats ? {
+    email: stats.email || "",
+    full_name: stats.full_name,
+    avatar: stats.avatar,
+    tier: creditData?.tier || "free",
+    partner_tier: stats.partner_tier || "bronze",
+    is_super_admin: creditData?.is_super_admin || false,
+  } : null;
 
   const handleLogout = () => {
     localStorage.removeItem("token");

@@ -9,7 +9,7 @@ from sqlalchemy import text as sa_text
 import logging
 import os
 
-from app.routers import auth, social_auth, blog, social, video, video_v3, scheduler, upload, oauth, history, tasks, credits, referral, verification, users, notifications, wordpress, admin, insights, analytics, queue_monitor, brand_kit, prompts, design_studio, payment, account, campaigns, admin_notifications, assistant, phone_verification, line_webhook, line_chat, funding, angel
+from app.routers import auth, social_auth, blog, social, video, video_v3, scheduler, upload, oauth, history, tasks, credits, referral, verification, users, notifications, wordpress, admin, insights, analytics, queue_monitor, brand_kit, prompts, design_studio, payment, account, campaigns, admin_notifications, assistant, phone_verification, line_webhook, line_chat, funding, angel, dashboard
 
 logger = logging.getLogger(__name__)
 
@@ -182,6 +182,7 @@ app.include_router(phone_verification.router)
 app.include_router(line_webhook.router)
 app.include_router(line_chat.router)
 app.include_router(funding.router)
+app.include_router(dashboard.router)
 
 # 確保上傳目錄存在 - 支援 Docker 和本地開發
 if os.path.exists("/app/static"):

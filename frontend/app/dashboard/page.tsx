@@ -40,6 +40,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { zhTW } from "date-fns/locale";
+import { useUser, useCredits, useUsageStats, useRecentHistory, useUpcomingPosts, useSocialAccounts, useExpiringCredits } from "@/lib/use-api";
 
 interface UserInfo {
   id: number;
@@ -105,26 +106,27 @@ interface ExpiringCredits {
 }
 
 export default function DashboardPage() {
-  const [user, setUser] = useState<UserInfo | null>(null);
-  const [creditBalance, setCreditBalance] = useState<CreditBalance | null>(null);
-  const [usageStats, setUsageStats] = useState<UsageStats | null>(null);
-  const [recentHistory, setRecentHistory] = useState<GenerationHistoryItem[]>([]);
-  const [upcomingPosts, setUpcomingPosts] = useState<ScheduledPost[]>([]);
-  const [socialAccounts, setSocialAccounts] = useState<SocialAccount[]>([]);
-  const [expiringCredits, setExpiringCredits] = useState<ExpiringCredits | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [greeting, setGreeting] = useState("您好");  // 預設問候語，避免 hydration 錯誤
-
-  // 刪除相關狀態
+  const [greeting, setGreeting] = useState("您好");
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  // SWR hooks for data fetching (auto-cached)
+  const { user } = useUser();
+  const { credits: creditBalance } = useCredits();
+  const { usage: usageStats } = useUsageStats(30);
+  const { history: recentHistory, mutate: mutateHistory } = useRecentHistory(5);
+  const { posts: upcomingPosts } = useUpcomingPosts(5);
+  const { accounts: socialAccounts } = useSocialAccounts();
+  const { expiring: expiringCredits } = useExpiringCredits();
+
+  const loading = !creditBalance && !user;
 
   const handleDelete = async (id: number) => {
     setDeleting(true);
     try {
       await api.delete(`/history/${id}`);
-      setRecentHistory(prev => prev.filter(item => item.id !== id));
+      mutateHistory();
       toast.success("紀錄已刪除");
       setDeleteDialogOpen(false);
     } catch (e: any) {
@@ -141,37 +143,6 @@ export default function DashboardPage() {
     if (hour < 12) setGreeting("早安");
     else if (hour < 18) setGreeting("午安");
     else setGreeting("晚安");
-  }, []);
-
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        // 並行請求所有數據
-        const [userRes, creditsRes, statsRes, historyRes, postsRes, accountsRes, expiringRes] = await Promise.allSettled([
-          api.get<UserInfo>("/auth/me"),
-          api.get<CreditBalance>("/credits/balance"),
-          api.get<UsageStats>("/credits/usage-stats?days=30"),
-          api.get<{ items: GenerationHistoryItem[] }>("/history?limit=5"),
-          api.get<ScheduledPost[]>("/scheduler/posts?status=pending&limit=5"),
-          api.get<SocialAccount[]>("/scheduler/accounts"),
-          api.get<ExpiringCredits>("/credits/expiring"),
-        ]);
-
-        if (userRes.status === "fulfilled") setUser(userRes.value.data);
-        if (creditsRes.status === "fulfilled") setCreditBalance(creditsRes.value.data);
-        if (statsRes.status === "fulfilled") setUsageStats(statsRes.value.data);
-        if (historyRes.status === "fulfilled") setRecentHistory(historyRes.value.data.items || []);
-        if (postsRes.status === "fulfilled") setUpcomingPosts(Array.isArray(postsRes.value.data) ? postsRes.value.data : []);
-        if (accountsRes.status === "fulfilled") setSocialAccounts(Array.isArray(accountsRes.value.data) ? accountsRes.value.data : []);
-        if (expiringRes.status === "fulfilled") setExpiringCredits(expiringRes.value.data);
-      } catch (error) {
-        console.error("Failed to fetch dashboard data", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchDashboardData();
   }, []);
 
   // 問候語現在通過 useState + useEffect 處理，避免 hydration 錯誤
