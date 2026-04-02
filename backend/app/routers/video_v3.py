@@ -1520,9 +1520,11 @@ async def _run_sequential_scenes(
             if not rid:
                 raise ValueError("Failed to get request_id from LTX service")
             
-            # Polling 邏輯
+            # Polling 邏輯 (含重試)
             import httpx
             import os
+            from app.services.video_v3.ltx_service import LTX_MAX_RETRIES, LTX_RETRY_DELAY
+            
             LTX_INFERENCE_URL = os.getenv("LTX_INFERENCE_URL", "http://localhost:8080")
             if "run.app" in LTX_INFERENCE_URL:
                 LTX_INFERENCE_URL = "https://bobo68425--kingjam-ltx-video-api.modal.run"
@@ -1530,6 +1532,7 @@ async def _run_sequential_scenes(
             success_url = None
             max_wait = 1200  # 20 mins per scene (cold start + model load + inference)
             waited = 0
+            retry_count = 0
             
             async with httpx.AsyncClient(timeout=30.0) as client:
                 while waited < max_wait:
@@ -1542,8 +1545,38 @@ async def _run_sequential_scenes(
                                 success_url = data.get("video_url")
                                 break
                             elif status == "error":
-                                raise ValueError(f"Modal reports error: {data.get('error')}")
+                                error_msg = data.get("error", "Unknown error")
+                                # 如果是 worker 崩潰，嘗試重新提交
+                                if "Worker disappeared" in str(error_msg) and retry_count < LTX_MAX_RETRIES:
+                                    logger.warning(f"[V3 Seq] Worker disappeared, 嘗試重新提交 (嘗試 {retry_count + 1}/{LTX_MAX_RETRIES + 1})...")
+                                    retry_count += 1
+                                    # 重新提交任務
+                                    retry_res = await generate_scene_clip(
+                                        prompt=prompt,
+                                        duration=duration_sec,
+                                        aspect_ratio=request.aspect_ratio,
+                                        model_preference=request.model_preference,
+                                        reference_image_url=ref_image,
+                                        previous_video_url=current_prev_url,
+                                        audio_url=audio_url_item,
+                                        quality_prompt=q_prompt,
+                                        negative_prompt=n_prompt
+                                    )
+                                    rid = retry_res.get("request_id")
+                                    if not rid:
+                                        raise ValueError("重試失敗：無法取得新的 request_id")
+                                    # 重置計時器繼續輪詢
+                                    waited = 0
+                                    continue
+                                else:
+                                    raise ValueError(f"Modal reports error: {error_msg}")
                     except Exception as e:
+                        # 如果是連線錯誤，也嘗試重試
+                        if "connection" in str(e).lower() and retry_count < LTX_MAX_RETRIES:
+                            logger.warning(f"[V3 Seq] 連線錯誤: {e}, 等待後重試...")
+                            retry_count += 1
+                            await asyncio.sleep(LTX_RETRY_DELAY)
+                            continue
                         logger.warning(f"[V3 Seq] Poll error: {e}")
                     
                     await asyncio.sleep(5)

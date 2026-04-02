@@ -56,8 +56,25 @@ RESOLUTION_MAP = {
     },
 }
 
-# 預設品質等級
+# 預設品質等級 (降低預設值以避免 VRAM 問題)
 DEFAULT_QUALITY = "720p"
+
+# VRAM 保護：解析度對應的最大幀數
+MAX_FRAMES_BY_RESOLUTION = {
+    "576x1024": 81,    # 480p 9:16 - 3秒 @ 24fps
+    "768x1344": 121,   # 720p 9:16 - 5秒 @ 24fps
+    "1088x1920": 161,  # 1080p 9:16 - 7秒 @ 24fps
+    "1024x576": 81,    # 480p 16:9
+    "1344x768": 121,   # 720p 16:9
+    "1920x1088": 161,  # 1080p 16:9
+    "768x768": 81,     # 480p 1:1
+    "1024x1024": 121,  # 720p 1:1
+    "1408x1408": 161,  # 1080p 1:1
+}
+
+# 重試配置
+LTX_MAX_RETRIES = int(os.getenv("LTX_MAX_RETRIES", "2"))
+LTX_RETRY_DELAY = int(os.getenv("LTX_RETRY_DELAY", "5"))  # 秒
 
 
 def _resolve_resolution(aspect_ratio: str, quality: str = DEFAULT_QUALITY) -> str:
@@ -130,29 +147,41 @@ async def generate_scene_clip(
 
     logger.info(f"[LTX-2.3] Submitting: job={job_id}, model={model}, res={resolution}, dur={duration}s, steps={num_inference_steps}")
 
-    async with httpx.AsyncClient(timeout=httpx.Timeout(connect=60.0, read=30.0, write=30.0, pool=5.0)) as client:
-        resp = await client.post(endpoint, json=payload)
-        if resp.status_code != 200:
-            raise ValueError(f"LTX-2.3 submit error: HTTP {resp.status_code} - {resp.text[:300]}")
+    # 重試機制
+    last_error = None
+    for attempt in range(LTX_MAX_RETRIES + 1):
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(connect=60.0, read=30.0, write=30.0, pool=5.0)) as client:
+                resp = await client.post(endpoint, json=payload)
+                if resp.status_code != 200:
+                    raise ValueError(f"LTX-2.3 submit error: HTTP {resp.status_code} - {resp.text[:300]}")
 
-        data = resp.json()
-        task_id = data.get("task_id")
+                data = resp.json()
+                task_id = data.get("task_id")
 
-        if not task_id:
-            content_type = resp.headers.get("content-type", "")
-            if "video" in content_type or "octet-stream" in content_type:
-                video_url = await _upload_video_bytes(resp.content, job_id)
-                return {"request_id": job_id, "model": model, "status": "completed", "video_url": video_url}
-            raise ValueError(f"LTX-2.3: no task_id in response: {data}")
+                if not task_id:
+                    content_type = resp.headers.get("content-type", "")
+                    if "video" in content_type or "octet-stream" in content_type:
+                        video_url = await _upload_video_bytes(resp.content, job_id)
+                        return {"request_id": job_id, "model": model, "status": "completed", "video_url": video_url}
+                    raise ValueError(f"LTX-2.3: no task_id in response: {data}")
 
-        logger.info(f"[LTX-2.3] task_id={task_id}, returning immediately for polling.")
-
-        return {
-            "request_id": task_id,
-            "model": model,
-            "status": "pending",
-            "video_url": None,
-        }
+                logger.info(f"[LTX-2.3] task_id={task_id}, returning immediately for polling.")
+                return {
+                    "request_id": task_id,
+                    "model": model,
+                    "status": "pending",
+                    "video_url": None,
+                }
+        except Exception as e:
+            last_error = e
+            if attempt < LTX_MAX_RETRIES:
+                logger.warning(f"[LTX-2.3] 提交失敗 (嘗試 {attempt + 1}/{LTX_MAX_RETRIES + 1}): {e}, 等待 {LTX_RETRY_DELAY}s 後重試...")
+                await asyncio.sleep(LTX_RETRY_DELAY)
+            else:
+                logger.error(f"[LTX-2.3] 提交失敗，已達最大重試次數: {e}")
+    
+    raise ValueError(f"LTX-2.3 提交失敗: {last_error}")
 
 
 async def _upload_video_bytes(video_data: bytes, job_id: str) -> str:
